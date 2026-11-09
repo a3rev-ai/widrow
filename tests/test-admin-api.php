@@ -1092,6 +1092,51 @@ $request->set_body_params( array( 'wp_user_id' => 999, 'capability' => 'widrow_s
 $response = $sa->rest_update_user_role( $request );
 assert_equals( 404, $response->get_status(), 'user not found returns 404' );
 
+// ── 26a. The pre-10.0.0 names DEF sends until its own change ────────────
+echo "\n[26a] Old setting keys and capability names act on the new names\n";
+reset_test_state();
+setup_admin_user();
+update_option( 'widrow_ai_staff_ai_api_url', 'https://api.example.com' );
+
+$request = new WP_REST_Request( 'GET', '/def-core/v1/setup/setting/def_core_staff_ai_api_url' );
+$request->set_param( 'key', 'def_core_staff_ai_api_url' );
+$response = $sa->rest_get_setting( $request );
+assert_equals( 200, $response->get_status(), 'GET with the old key returns 200' );
+assert_equals( 'https://api.example.com', $response->get_data()['data']['value'], 'and reads the value stored under the new key' );
+
+$request = new WP_REST_Request( 'POST', '/def-core/v1/setup/setting/def_core_display_name' );
+$request->set_param( 'key', 'def_core_display_name' );
+$request->set_body_params( array( 'value' => 'Old Key Assistant' ) );
+$response = $sa->rest_update_setting( $request );
+$data     = $response->get_data();
+assert_equals( 200, $response->get_status(), 'POST with the old key returns 200' );
+assert_equals( 'Old Key Assistant', get_option( 'widrow_ai_display_name', '' ), 'the value lands under the new key' );
+assert_false( get_option( 'def_core_display_name', false ), 'nothing is written under the old key' );
+$fields = array_column( array_filter( $data['ui_actions'], fn( $a ) => 'update_field' === $a['action'] ), 'field' );
+assert_equals( array( 'display_name' ), array_values( $fields ), 'the drawer gets the same short key as for the new name' );
+
+$target = new WP_User( 21 );
+$_wp_test_users[21] = $target;
+$request = new WP_REST_Request( 'POST', '/def-core/v1/setup/user-role' );
+$request->set_body_params( array( 'wp_user_id' => 21, 'capability' => 'def_staff_access', 'action' => 'add' ) );
+$response = $sa->rest_update_user_role( $request );
+assert_equals( 200, $response->get_status(), 'granting an old capability name returns 200' );
+assert_true( $target->has_cap( 'widrow_staff_access' ) && ! isset( $target->caps['def_staff_access'] ), 'the new name is stored, not the old' );
+
+$target->caps['def_staff_access'] = true; // A grant left under the old name.
+$request->set_body_params( array( 'wp_user_id' => 21, 'capability' => 'def_staff_access', 'action' => 'remove' ) );
+$sa->rest_update_user_role( $request );
+assert_true( ! isset( $target->caps['widrow_staff_access'] ) && ! isset( $target->caps['def_staff_access'] ), 'a revoke clears both names, so DEF sees no grant on either' );
+
+$target->caps = array( 'def_staff_access' => true, 'widrow_staff_access' => true );
+$request->set_body_params( array( 'wp_user_id' => 21, 'capability' => 'widrow_management_access', 'action' => 'add' ) );
+$sa->rest_update_user_role( $request );
+assert_equals( array( 'widrow_management_access' => true ), $target->caps, 'granting Management clears Staff under both names' );
+
+$request->set_body_params( array( 'wp_user_id' => 21, 'capability' => 'def_core_api_key', 'action' => 'add' ) );
+$response = $sa->rest_update_user_role( $request );
+assert_equals( 400, $response->get_status(), 'an old option key is still not a capability (400)' );
+
 // ── 27. GET /setup/users ────────────────────────────────────────────────
 echo "\n[27] GET /setup/users\n";
 reset_test_state();

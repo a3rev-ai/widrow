@@ -794,7 +794,8 @@ final class Widrow_AI_Admin_API {
 	 * @since 2.0.0
 	 */
 	public function rest_get_setting( \WP_REST_Request $request ): \WP_REST_Response {
-		$key = sanitize_text_field( $request->get_param( 'key' ) );
+		// DEF names the pre-10.0.0 key until its own change; act on the new name.
+		$key = Widrow_AI_Legacy_Names::to_new( sanitize_text_field( $request->get_param( 'key' ) ) );
 
 		if ( ! isset( self::$setting_allowlist[ $key ] ) ) {
 			return $this->error_response( 'UNKNOWN_SETTING', "Setting '{$key}' is not recognized.", 400 );
@@ -838,7 +839,8 @@ final class Widrow_AI_Admin_API {
 			return $this->rate_limited_response( $rate_check['retry_after'] );
 		}
 
-		$key = sanitize_text_field( $request->get_param( 'key' ) );
+		// DEF names the pre-10.0.0 key until its own change; act on the new name.
+		$key = Widrow_AI_Legacy_Names::to_new( sanitize_text_field( $request->get_param( 'key' ) ) );
 
 		if ( ! isset( self::$setting_allowlist[ $key ] ) ) {
 			return $this->error_response( 'UNKNOWN_SETTING', "Setting '{$key}' is not recognized.", 400 );
@@ -1249,7 +1251,8 @@ final class Widrow_AI_Admin_API {
 		$body = $request->get_json_params();
 
 		$wp_user_id = isset( $body['wp_user_id'] ) ? intval( $body['wp_user_id'] ) : 0;
-		$capability = isset( $body['capability'] ) ? sanitize_text_field( $body['capability'] ) : '';
+		// DEF names the pre-10.0.0 capability until its own change; act on the new name.
+		$capability = Widrow_AI_Legacy_Names::to_new( isset( $body['capability'] ) ? sanitize_text_field( $body['capability'] ) : '' );
 		$action     = isset( $body['action'] ) ? sanitize_text_field( $body['action'] ) : '';
 
 		// Validate params.
@@ -1285,24 +1288,31 @@ final class Widrow_AI_Admin_API {
 			}
 		}
 
+		// A revoke clears the old name too: DEF grants on either name until its
+		// own change, so a grant left under the old name would survive it.
+		$revoke = static function ( string $cap ) use ( $user ): void {
+			$user->remove_cap( $cap );
+			$user->remove_cap( Widrow_AI_Legacy_Names::to_old( $cap ) );
+		};
+
 		// Staff and Management are mutually exclusive.
 		// Adding one removes the other server-side.
 		if ( $action === 'add' && 'widrow_staff_access' === $capability ) {
-			$user->remove_cap( 'widrow_management_access' );
+			$revoke( 'widrow_management_access' );
 		} elseif ( $action === 'add' && 'widrow_management_access' === $capability ) {
-			$user->remove_cap( 'widrow_staff_access' );
+			$revoke( 'widrow_staff_access' );
 		}
 
 		// Apply capability change.
 		if ( $action === 'add' ) {
 			$user->add_cap( $capability );
 		} else {
-			$user->remove_cap( $capability );
+			$revoke( $capability );
 		}
 
 		// Post-mutation guard: ensure Staff/Management exclusivity regardless of execution order.
 		if ( $user->has_cap( 'widrow_staff_access' ) && $user->has_cap( 'widrow_management_access' ) ) {
-			$user->remove_cap( 'widrow_staff_access' );
+			$revoke( 'widrow_staff_access' );
 		}
 
 		// Audit log entry.

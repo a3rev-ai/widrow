@@ -327,3 +327,5 @@ if ( ! defined( 'DAY_IN_SECONDS' ) ) {
 
 // Load encryption class — plugin-level infrastructure used by all secret-reading classes.
 require_once WIDROW_AI_PLUGIN_DIR . 'includes/class-widrow-ai-encryption.php';
+// The alias table — read by the setting and role routes for the pre-10.0.0 names.
+require_once WIDROW_AI_PLUGIN_DIR . 'includes/class-widrow-ai-legacy-names.php';
