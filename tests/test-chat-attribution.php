@@ -1,6 +1,6 @@
 <?php
 /**
- * Tests for DEF_Core_Chat_Attribution::sanitize_chat_id().
+ * Tests for Widrow_AI_Chat_Attribution::sanitize_chat_id().
  *
  * The session/order hooks need a live WooCommerce + session and are verified
  * end-to-end on the integration stack; here we cover the input-sanitization
@@ -20,7 +20,7 @@ if ( ! function_exists( 'sanitize_text_field' ) ) {
 	}
 }
 
-require_once __DIR__ . '/../includes/class-def-core-chat-attribution.php';
+require_once __DIR__ . '/../includes/class-widrow-ai-chat-attribution.php';
 
 $passed = 0;
 $failed = 0;
@@ -38,9 +38,9 @@ function assert_test( bool $condition, string $name ): void {
 	}
 }
 
-echo "=== DEF_Core_Chat_Attribution::sanitize_chat_id ===\n\n";
+echo "=== Widrow_AI_Chat_Attribution::sanitize_chat_id ===\n\n";
 
-$valid = DEF_Core_Chat_Attribution::sanitize_chat_id( 'orch-abc123_DEF' );
+$valid = Widrow_AI_Chat_Attribution::sanitize_chat_id( 'orch-abc123_DEF' );
 assert_test( 'orch-abc123_DEF' === $valid, 'preserves a valid thread id' );
 
 // Safety invariant: output is always limited to the token charset.
@@ -53,7 +53,7 @@ $dirty_inputs = array(
 );
 $all_clean = true;
 foreach ( $dirty_inputs as $in ) {
-	$out = DEF_Core_Chat_Attribution::sanitize_chat_id( $in );
+	$out = Widrow_AI_Chat_Attribution::sanitize_chat_id( $in );
 	if ( ! preg_match( '/^[A-Za-z0-9_-]*$/', $out ) ) {
 		$all_clean = false;
 	}
@@ -61,12 +61,12 @@ foreach ( $dirty_inputs as $in ) {
 assert_test( $all_clean, 'output is always limited to [A-Za-z0-9_-]' );
 
 assert_test(
-	100 === strlen( DEF_Core_Chat_Attribution::sanitize_chat_id( str_repeat( 'a', 250 ) ) ),
+	100 === strlen( Widrow_AI_Chat_Attribution::sanitize_chat_id( str_repeat( 'a', 250 ) ) ),
 	'caps length at 100'
 );
-assert_test( '12345' === DEF_Core_Chat_Attribution::sanitize_chat_id( 12345 ), 'coerces a non-string' );
-assert_test( '' === DEF_Core_Chat_Attribution::sanitize_chat_id( '' ), 'empty stays empty' );
-assert_test( '' === DEF_Core_Chat_Attribution::sanitize_chat_id( null ), 'null becomes empty' );
+assert_test( '12345' === Widrow_AI_Chat_Attribution::sanitize_chat_id( 12345 ), 'coerces a non-string' );
+assert_test( '' === Widrow_AI_Chat_Attribution::sanitize_chat_id( '' ), 'empty stays empty' );
+assert_test( '' === Widrow_AI_Chat_Attribution::sanitize_chat_id( null ), 'null becomes empty' );
 
 echo "\n$passed passed, $failed failed\n";
 exit( $failed > 0 ? 1 : 0 );

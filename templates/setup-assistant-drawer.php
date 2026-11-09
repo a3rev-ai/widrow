@@ -4,10 +4,10 @@
  *
  * Renders the right-side slide-in chat panel (the trigger button lives next
  * to the page h1 at each call site). Included by
- * DEF_Core_Admin::render_settings_page() and
- * DEF_Core_Content_Drafts_Page::render_page().
+ * Widrow_AI_Admin::render_settings_page() and
+ * Widrow_AI_Content_Drafts_Page::render_page().
  *
- * @package def-core
+ * @package widrow-ai
  * @since   2.0.0
  */
 
@@ -15,7 +15,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-if ( ! current_user_can( 'def_admin_access' ) ) {
+if ( ! current_user_can( 'widrow_admin_access' ) ) {
 	return;
 }
 ?>
@@ -27,7 +27,7 @@ if ( ! current_user_can( 'def_admin_access' ) ) {
 	style="display:none"
 	aria-hidden="true"
 	role="dialog"
-	aria-label="<?php esc_attr_e( 'Setup Assistant', 'digital-employees' ); ?>"
+	aria-label="<?php esc_attr_e( 'Setup Assistant', 'widrow-ai' ); ?>"
 >
 	<!-- Backdrop -->
 	<div class="def-sa-backdrop"></div>
@@ -36,9 +36,9 @@ if ( ! current_user_can( 'def_admin_access' ) ) {
 	<div class="def-sa-panel" role="document">
 		<!-- Header -->
 		<div class="def-sa-header">
-			<h2 class="def-sa-title"><?php esc_html_e( 'Sam - Setup Assistant', 'digital-employees' ); ?></h2>
+			<h2 class="def-sa-title"><?php esc_html_e( 'Sam - Setup Assistant', 'widrow-ai' ); ?></h2>
 			<div class="def-sa-header-actions">
-				<button type="button" class="def-sa-clear" title="<?php esc_attr_e( 'Clear conversation', 'digital-employees' ); ?>">
+				<button type="button" class="def-sa-clear" title="<?php esc_attr_e( 'Clear conversation', 'widrow-ai' ); ?>">
 					<span class="dashicons dashicons-trash"></span>
 				</button>
 				<?php
@@ -55,7 +55,7 @@ if ( ! current_user_can( 'def_admin_access' ) ) {
 				 * the phone's, which is the one that is right before any script runs.
 				 */
 				?>
-				<button type="button" class="def-sa-close" aria-label="<?php esc_attr_e( 'Close Setup Assistant', 'digital-employees' ); ?>">
+				<button type="button" class="def-sa-close" aria-label="<?php esc_attr_e( 'Close Setup Assistant', 'widrow-ai' ); ?>">
 					<span class="dashicons dashicons-no-alt def-sa-close-icon"></span>
 					<span class="dashicons dashicons-arrow-right-alt2 def-sa-collapse-icon"></span>
 				</button>
@@ -69,11 +69,11 @@ if ( ! current_user_can( 'def_admin_access' ) ) {
 		<div class="def-sa-composer">
 			<textarea
 				class="def-sa-input"
-				placeholder="<?php esc_attr_e( 'Ask about your setup...', 'digital-employees' ); ?>"
+				placeholder="<?php esc_attr_e( 'Ask about your setup...', 'widrow-ai' ); ?>"
 				rows="1"
-				aria-label="<?php esc_attr_e( 'Message', 'digital-employees' ); ?>"
+				aria-label="<?php esc_attr_e( 'Message', 'widrow-ai' ); ?>"
 			></textarea>
-			<button type="button" class="def-sa-send" aria-label="<?php esc_attr_e( 'Send message', 'digital-employees' ); ?>">
+			<button type="button" class="def-sa-send" aria-label="<?php esc_attr_e( 'Send message', 'widrow-ai' ); ?>">
 				<span class="dashicons dashicons-arrow-right-alt2"></span>
 			</button>
 		</div>

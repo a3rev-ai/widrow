@@ -19,7 +19,7 @@
  *
  * Runs standalone (no WordPress bootstrap).
  *
- * @package def-core/tests
+ * @package widrow-ai/tests
  */
 
 declare(strict_types=1);
@@ -369,18 +369,18 @@ if ( ! defined( 'WP_DEBUG' ) ) {
 	define( 'WP_DEBUG', true );
 }
 
-// rest_test_connection() resolves the backend URL via \DEF_Core::get_def_api_url().
+// rest_test_connection() resolves the backend URL via \Widrow_AI::get_def_api_url().
 // Mirror the production resolver faithfully: wp-config define wins, else the
 // stored option, else the production default. It never returns empty — that is
 // deliberate, and it is what makes the empty() guard in rest_test_connection
 // unreachable (see test [32]). (Docker-host rewrite is elided; irrelevant here.)
-if ( ! class_exists( 'DEF_Core' ) ) {
-	class DEF_Core {
+if ( ! class_exists( 'Widrow_AI' ) ) {
+	class Widrow_AI {
 		public static function get_def_api_url(): string {
 			if ( defined( 'DEF_API_URL' ) && DEF_API_URL ) {
 				return rtrim( DEF_API_URL, '/' );
 			}
-			$url = get_option( 'def_core_staff_ai_api_url', '' );
+			$url = get_option( 'widrow_ai_staff_ai_api_url', '' );
 			if ( empty( $url ) ) {
 				return 'https://api.defho.ai';
 			}
@@ -390,23 +390,23 @@ if ( ! class_exists( 'DEF_Core' ) ) {
 }
 
 // Load the class under test. Admin-API auth delegates to the shared HMAC
-// verifier (\A3Rev\DefCore\DEF_Core_HMAC_Auth, unified in v1.6.2), so it must
+// verifier (\A3Rev\WidrowAi\Widrow_AI_HMAC_Auth, unified in v1.6.2), so it must
 // be loaded too or permission_check() fatals on a missing class.
-require_once DEF_CORE_PLUGIN_DIR . 'includes/class-def-core-hmac-auth.php';
-require_once DEF_CORE_PLUGIN_DIR . 'includes/class-def-core-admin-api.php';
-// DEF_Core_Admin owns the `sanitize` callbacks in the settings map, and
+require_once WIDROW_AI_PLUGIN_DIR . 'includes/class-widrow-ai-hmac-auth.php';
+require_once WIDROW_AI_PLUGIN_DIR . 'includes/class-widrow-ai-admin-api.php';
+// Widrow_AI_Admin owns the `sanitize` callbacks in the settings map, and
 // rest_update_setting() guards them with is_callable() — so WITHOUT this load
 // every settings test in this file silently exercises the validator only, and
 // a truncation sitting in a sanitiser passes unnoticed. That is not
 // hypothetical: it happened while writing the v5.7.5 tests below, and only the
 // mutation check caught it. Loaded here, at the top, so it holds for the whole
 // file rather than just the sections after it.
-require_once DEF_CORE_PLUGIN_DIR . 'includes/class-def-core-admin.php';
+require_once WIDROW_AI_PLUGIN_DIR . 'includes/class-widrow-ai-admin.php';
 // rest_update_user_role() queues a Staff-AI roster push (D-U10), so the class
 // and the two WP-Cron functions it touches must exist here. Production loads
-// it via DEF_Core::load_dependencies(); this standalone suite has no bootstrap,
+// it via Widrow_AI::load_dependencies(); this standalone suite has no bootstrap,
 // so it loads it directly. Stubs mirror tests/test-staff-roster.php.
-require_once DEF_CORE_PLUGIN_DIR . 'includes/class-def-core-staff-roster.php';
+require_once WIDROW_AI_PLUGIN_DIR . 'includes/class-widrow-ai-staff-roster.php';
 
 global $_test_roster_cron;
 $_test_roster_cron = array();
@@ -521,10 +521,10 @@ function setup_admin_user( int $user_id = 1 ): WP_User {
 	$user                = new WP_User( $user_id );
 	$user->display_name  = 'Test Admin';
 	$user->user_email    = 'admin@test.com';
-	$user->caps          = array( 'def_admin_access' => true );
+	$user->caps          = array( 'widrow_admin_access' => true );
 
 	$_wp_test_current_user = $user;
-	$_wp_test_user_caps    = array( 'def_admin_access' );
+	$_wp_test_user_caps    = array( 'widrow_admin_access' );
 	$_wp_test_users[ $user_id ] = $user;
 
 	// Set valid nonce for Mode A.
@@ -535,7 +535,7 @@ function setup_admin_user( int $user_id = 1 ): WP_User {
 
 echo "=== Admin API Tests ===\n";
 
-$sa = new DEF_Core_Admin_API();
+$sa = new Widrow_AI_Admin_API();
 
 // ── 1. Route registration ───────────────────────────────────────────────
 echo "\n[1] REST route registration\n";
@@ -587,8 +587,8 @@ $result  = $sa->permission_check( $request );
 assert_true( is_wp_error( $result ), 'invalid nonce returns WP_Error' );
 assert_equals( 'INVALID_NONCE', $result->get_error_code(), 'error code is INVALID_NONCE' );
 
-// ── 5. Mode A: no def_admin_access ──────────────────────────────────────
-echo "\n[5] Mode A: no def_admin_access\n";
+// ── 5. Mode A: no widrow_admin_access ──────────────────────────────────────
+echo "\n[5] Mode A: no widrow_admin_access\n";
 reset_test_state();
 $_wp_test_current_user = new WP_User( 1 );
 $_wp_test_user_caps    = array(); // No capabilities.
@@ -622,12 +622,12 @@ assert_equals( 400, $data['status'], 'HTTP status is 400' );
 echo "\n[8] HMAC auth: valid signature\n";
 reset_test_state();
 $api_key = 'test_api_key_12345';
-update_option( 'def_core_api_key', $api_key );
+update_option( 'widrow_ai_api_key', $api_key );
 
 $admin       = new WP_User( 42 );
 $admin->display_name = 'HMAC Admin';
 $admin->user_email   = 'hmac@test.com';
-$admin->caps         = array( 'def_admin_access' => true );
+$admin->caps         = array( 'widrow_admin_access' => true );
 $_wp_test_users[42]  = $admin;
 
 $method    = 'GET';
@@ -650,9 +650,9 @@ assert_true( $result === true, 'valid HMAC returns true' );
 // ── 9. HMAC auth: expired timestamp ─────────────────────────────────────
 echo "\n[9] HMAC auth: expired timestamp\n";
 reset_test_state();
-update_option( 'def_core_api_key', 'test_key' );
+update_option( 'widrow_ai_api_key', 'test_key' );
 $admin = new WP_User( 42 );
-$admin->caps = array( 'def_admin_access' => true );
+$admin->caps = array( 'widrow_admin_access' => true );
 $_wp_test_users[42] = $admin;
 
 $old_ts    = (string) ( time() - 600 ); // 10 minutes ago.
@@ -673,9 +673,9 @@ assert_equals( 'HMAC_EXPIRED', $result->get_error_code(), 'error code is HMAC_EX
 // ── 10. HMAC auth: wrong signature ──────────────────────────────────────
 echo "\n[10] HMAC auth: wrong signature\n";
 reset_test_state();
-update_option( 'def_core_api_key', 'test_key' );
+update_option( 'widrow_ai_api_key', 'test_key' );
 $admin = new WP_User( 42 );
-$admin->caps = array( 'def_admin_access' => true );
+$admin->caps = array( 'widrow_admin_access' => true );
 $_wp_test_users[42] = $admin;
 
 $_SERVER['HTTP_X_DEF_SIGNATURE'] = 'totally_wrong_signature';
@@ -702,7 +702,7 @@ assert_equals( 'HMAC_MISSING_HEADERS', $result->get_error_code(), 'error code is
 echo "\n[12] HMAC auth: invalid user\n";
 reset_test_state();
 $api_key = 'test_key';
-update_option( 'def_core_api_key', $api_key );
+update_option( 'widrow_ai_api_key', $api_key );
 // No users registered.
 
 $method    = 'GET';
@@ -723,11 +723,11 @@ $result  = $sa->permission_check( $request );
 assert_true( is_wp_error( $result ), 'invalid user returns WP_Error' );
 assert_equals( 'HMAC_INVALID_USER', $result->get_error_code(), 'error code is HMAC_INVALID_USER' );
 
-// ── 13. HMAC auth: user without def_admin_access ────────────────────────
-echo "\n[13] HMAC auth: user without def_admin_access\n";
+// ── 13. HMAC auth: user without widrow_admin_access ────────────────────────
+echo "\n[13] HMAC auth: user without widrow_admin_access\n";
 reset_test_state();
 $api_key = 'test_key';
-update_option( 'def_core_api_key', $api_key );
+update_option( 'widrow_ai_api_key', $api_key );
 
 $non_admin = new WP_User( 50 );
 $non_admin->caps = array(); // No admin capability.
@@ -774,20 +774,20 @@ reset_test_state();
 setup_admin_user();
 
 // Set up all passing checkpoints.
-update_option( 'def_core_staff_ai_api_url', 'https://api.example.com' );
-update_option( 'def_core_api_key', 'key123' );
-set_transient( 'def_core_connection_test', array( 'status' => 'ok' ), 300 );
-update_option( 'def_core_escalation_customer', 'test@example.com' );
-update_option( 'def_core_display_name', 'My Bot' );
+update_option( 'widrow_ai_staff_ai_api_url', 'https://api.example.com' );
+update_option( 'widrow_ai_api_key', 'key123' );
+set_transient( 'widrow_ai_connection_test', array( 'status' => 'ok' ), 300 );
+update_option( 'widrow_ai_escalation_customer', 'test@example.com' );
+update_option( 'widrow_ai_display_name', 'My Bot' );
 // Staff user.
 $staff = new WP_User( 10 );
-$staff->caps = array( 'def_staff_access' => true );
+$staff->caps = array( 'widrow_staff_access' => true );
 $_wp_test_users[10] = $staff;
 // Management user.
 $mgmt = new WP_User( 11 );
-$mgmt->caps = array( 'def_management_access' => true );
+$mgmt->caps = array( 'widrow_management_access' => true );
 $_wp_test_users[11] = $mgmt;
-// Tools — we don't have DEF_Core_API_Registry in test, so checkpoint 8 stays false.
+// Tools — we don't have Widrow_AI_API_Registry in test, so checkpoint 8 stays false.
 // Instead, set all 7 that we CAN control.
 
 $request  = new WP_REST_Request( 'GET', '/def-core/v1/setup/status' );
@@ -802,22 +802,22 @@ assert_true( $cp['escalation']['passed'], 'escalation checkpoint passed' );
 assert_true( $cp['branding']['passed'], 'branding checkpoint passed' );
 assert_true( $cp['staff_user']['passed'], 'staff_user checkpoint passed' );
 assert_true( $cp['management_user']['passed'], 'management_user checkpoint passed' );
-// tools checkpoint depends on DEF_Core_API_Registry (not loaded in test).
+// tools checkpoint depends on Widrow_AI_API_Registry (not loaded in test).
 assert_equals( 87.5, $data['data']['completion_percentage'], '7/8 checkpoints = 87.5%' );
 
 // ── 17. GET /setup/setting — valid key ──────────────────────────────────
 echo "\n[17] GET /setup/setting — valid key\n";
 reset_test_state();
 setup_admin_user();
-update_option( 'def_core_staff_ai_api_url', 'https://api.example.com' );
+update_option( 'widrow_ai_staff_ai_api_url', 'https://api.example.com' );
 
-$request = new WP_REST_Request( 'GET', '/def-core/v1/setup/setting/def_core_staff_ai_api_url' );
-$request->set_param( 'key', 'def_core_staff_ai_api_url' );
+$request = new WP_REST_Request( 'GET', '/def-core/v1/setup/setting/widrow_ai_staff_ai_api_url' );
+$request->set_param( 'key', 'widrow_ai_staff_ai_api_url' );
 $response = $sa->rest_get_setting( $request );
 $data     = $response->get_data();
 
 assert_equals( 200, $response->get_status(), 'returns 200' );
-assert_equals( 'def_core_staff_ai_api_url', $data['data']['key'], 'key matches' );
+assert_equals( 'widrow_ai_staff_ai_api_url', $data['data']['key'], 'key matches' );
 assert_equals( 'https://api.example.com', $data['data']['value'], 'value matches' );
 
 // ── 18. GET /setup/setting — unknown key ────────────────────────────────
@@ -838,32 +838,32 @@ assert_equals( 'UNKNOWN_SETTING', $data['error']['code'], 'error code is UNKNOWN
 echo "\n[19] GET /setup/setting — API key redaction\n";
 reset_test_state();
 setup_admin_user();
-update_option( 'def_core_api_key', 'super_secret_key_12345' );
+update_option( 'widrow_ai_api_key', 'super_secret_key_12345' );
 
-$request = new WP_REST_Request( 'GET', '/def-core/v1/setup/setting/def_core_api_key' );
-$request->set_param( 'key', 'def_core_api_key' );
+$request = new WP_REST_Request( 'GET', '/def-core/v1/setup/setting/widrow_ai_api_key' );
+$request->set_param( 'key', 'widrow_ai_api_key' );
 $response = $sa->rest_get_setting( $request );
 $data     = $response->get_data();
 
 assert_equals( 200, $response->get_status(), 'returns 200' );
 assert_true( $data['data']['configured'], 'configured is true' );
 assert_false( isset( $data['data']['value'] ), 'raw value NOT returned' );
-assert_equals( 'def_core_api_key', $data['data']['key'], 'key matches' );
+assert_equals( 'widrow_ai_api_key', $data['data']['key'], 'key matches' );
 
 // ── 20. POST /setup/setting — valid update ──────────────────────────────
 echo "\n[20] POST /setup/setting — valid update\n";
 reset_test_state();
 setup_admin_user();
 
-$request = new WP_REST_Request( 'POST', '/def-core/v1/setup/setting/def_core_display_name' );
-$request->set_param( 'key', 'def_core_display_name' );
+$request = new WP_REST_Request( 'POST', '/def-core/v1/setup/setting/widrow_ai_display_name' );
+$request->set_param( 'key', 'widrow_ai_display_name' );
 $request->set_body_params( array( 'value' => 'My Assistant' ) );
 $response = $sa->rest_update_setting( $request );
 $data     = $response->get_data();
 
 assert_equals( 200, $response->get_status(), 'returns 200' );
 assert_true( $data['data']['saved'], 'saved is true' );
-assert_equals( 'My Assistant', get_option( 'def_core_display_name', '' ), 'value persisted' );
+assert_equals( 'My Assistant', get_option( 'widrow_ai_display_name', '' ), 'value persisted' );
 
 // Verify UI action.
 assert_true( count( $data['ui_actions'] ) > 0, 'ui_actions present' );
@@ -875,8 +875,8 @@ echo "\n[21] POST /setup/setting — validation error (display_mode)\n";
 reset_test_state();
 setup_admin_user();
 
-$request = new WP_REST_Request( 'POST', '/def-core/v1/setup/setting/def_core_chat_display_mode' );
-$request->set_param( 'key', 'def_core_chat_display_mode' );
+$request = new WP_REST_Request( 'POST', '/def-core/v1/setup/setting/widrow_ai_chat_display_mode' );
+$request->set_param( 'key', 'widrow_ai_chat_display_mode' );
 $request->set_body_params( array( 'value' => 'fullscreen' ) );
 $response = $sa->rest_update_setting( $request );
 $data     = $response->get_data();
@@ -903,8 +903,8 @@ echo "\n[22] POST /setup/setting — drawer width out of range\n";
 reset_test_state();
 setup_admin_user();
 
-$request = new WP_REST_Request( 'POST', '/def-core/v1/setup/setting/def_core_chat_drawer_width' );
-$request->set_param( 'key', 'def_core_chat_drawer_width' );
+$request = new WP_REST_Request( 'POST', '/def-core/v1/setup/setting/widrow_ai_chat_drawer_width' );
+$request->set_param( 'key', 'widrow_ai_chat_drawer_width' );
 $request->set_body_params( array( 'value' => 800 ) );
 $response = $sa->rest_update_setting( $request );
 assert_equals( 400, $response->get_status(), 'width 800 rejected' );
@@ -922,8 +922,8 @@ echo "\n[22a] POST /setup/setting — spotlight width out of range\n";
 reset_test_state();
 setup_admin_user();
 
-$request = new WP_REST_Request( 'POST', '/def-core/v1/setup/setting/def_core_chat_spotlight_width' );
-$request->set_param( 'key', 'def_core_chat_spotlight_width' );
+$request = new WP_REST_Request( 'POST', '/def-core/v1/setup/setting/widrow_ai_chat_spotlight_width' );
+$request->set_param( 'key', 'widrow_ai_chat_spotlight_width' );
 $request->set_body_params( array( 'value' => 599 ) );
 $response = $sa->rest_update_setting( $request );
 assert_equals( 400, $response->get_status(), 'spotlight width 599 (below min) rejected' );
@@ -949,8 +949,8 @@ echo "\n[22b] POST /setup/setting — spotlight height out of range\n";
 reset_test_state();
 setup_admin_user();
 
-$request = new WP_REST_Request( 'POST', '/def-core/v1/setup/setting/def_core_chat_spotlight_height' );
-$request->set_param( 'key', 'def_core_chat_spotlight_height' );
+$request = new WP_REST_Request( 'POST', '/def-core/v1/setup/setting/widrow_ai_chat_spotlight_height' );
+$request->set_param( 'key', 'widrow_ai_chat_spotlight_height' );
 $request->set_body_params( array( 'value' => 499 ) );
 $response = $sa->rest_update_setting( $request );
 assert_equals( 400, $response->get_status(), 'spotlight height 499 (below min) rejected' );
@@ -976,9 +976,9 @@ echo "\n[23] POST /setup/setting — URL validation (readonly)\n";
 reset_test_state();
 setup_admin_user();
 
-// def_core_staff_ai_api_url is now readonly (pushed from DEFHO), so writes return 403.
-$request = new WP_REST_Request( 'POST', '/def-core/v1/setup/setting/def_core_staff_ai_api_url' );
-$request->set_param( 'key', 'def_core_staff_ai_api_url' );
+// widrow_ai_staff_ai_api_url is now readonly (pushed from DEFHO), so writes return 403.
+$request = new WP_REST_Request( 'POST', '/def-core/v1/setup/setting/widrow_ai_staff_ai_api_url' );
+$request->set_param( 'key', 'widrow_ai_staff_ai_api_url' );
 $request->set_body_params( array( 'value' => 'https://api.example.com' ) );
 $response = $sa->rest_update_setting( $request );
 assert_equals( 403, $response->get_status(), 'readonly URL setting rejected with 403' );
@@ -998,24 +998,24 @@ $_wp_test_users[20]   = $target;
 $request = new WP_REST_Request( 'POST', '/def-core/v1/setup/user-role' );
 $request->set_body_params( array(
 	'wp_user_id' => 20,
-	'capability' => 'def_staff_access',
+	'capability' => 'widrow_staff_access',
 	'action'     => 'add',
 ) );
 $response = $sa->rest_update_user_role( $request );
 $data     = $response->get_data();
 assert_equals( 200, $response->get_status(), 'add role returns 200' );
 assert_true( $data['data']['applied'], 'applied is true' );
-assert_true( $target->has_cap( 'def_staff_access' ), 'user now has def_staff_access' );
+assert_true( $target->has_cap( 'widrow_staff_access' ), 'user now has widrow_staff_access' );
 
 // Remove staff capability.
 $request->set_body_params( array(
 	'wp_user_id' => 20,
-	'capability' => 'def_staff_access',
+	'capability' => 'widrow_staff_access',
 	'action'     => 'remove',
 ) );
 $response = $sa->rest_update_user_role( $request );
 assert_equals( 200, $response->get_status(), 'remove role returns 200' );
-assert_false( $target->has_cap( 'def_staff_access' ), 'user no longer has def_staff_access' );
+assert_false( $target->has_cap( 'widrow_staff_access' ), 'user no longer has widrow_staff_access' );
 
 // D-U10: this path writes the same caps the User Access grid does, so it owes
 // DEF the same roster push. Sam granting Staff access during onboarding is
@@ -1023,7 +1023,7 @@ assert_false( $target->has_cap( 'def_staff_access' ), 'user no longer has def_st
 $_test_roster_cron = array();
 $request->set_body_params( array(
 	'wp_user_id' => 20,
-	'capability' => 'def_staff_access',
+	'capability' => 'widrow_staff_access',
 	'action'     => 'add',
 ) );
 $response = $sa->rest_update_user_role( $request );
@@ -1033,7 +1033,7 @@ assert_equals( 1, count( $_test_roster_cron ), 'a REST cap grant queues a roster
 $_test_roster_cron = array();
 $request->set_body_params( array(
 	'wp_user_id' => 20,
-	'capability' => 'def_staff_access',
+	'capability' => 'widrow_staff_access',
 	'action'     => 'remove',
 ) );
 $sa->rest_update_user_role( $request );
@@ -1045,12 +1045,12 @@ $_test_roster_cron                     = array();
 $GLOBALS['_test_roster_cron_fails']    = true;
 $request->set_body_params( array(
 	'wp_user_id' => 20,
-	'capability' => 'def_staff_access',
+	'capability' => 'widrow_staff_access',
 	'action'     => 'add',
 ) );
 $response = $sa->rest_update_user_role( $request );
 assert_equals( 200, $response->get_status(), 'a push that cannot even be queued does not break the response' );
-assert_true( $target->has_cap( 'def_staff_access' ), 'and the capability change still persisted' );
+assert_true( $target->has_cap( 'widrow_staff_access' ), 'and the capability change still persisted' );
 $GLOBALS['_test_roster_cron_fails'] = false;
 
 // ── 25. User role: lockout prevention ───────────────────────────────────
@@ -1062,7 +1062,7 @@ setup_admin_user();
 $request = new WP_REST_Request( 'POST', '/def-core/v1/setup/user-role' );
 $request->set_body_params( array(
 	'wp_user_id' => 1,
-	'capability' => 'def_admin_access',
+	'capability' => 'widrow_admin_access',
 	'action'     => 'remove',
 ) );
 $response = $sa->rest_update_user_role( $request );
@@ -1083,14 +1083,59 @@ $response = $sa->rest_update_user_role( $request );
 assert_equals( 400, $response->get_status(), 'invalid capability returns 400' );
 
 // Invalid action.
-$request->set_body_params( array( 'wp_user_id' => 1, 'capability' => 'def_staff_access', 'action' => 'toggle' ) );
+$request->set_body_params( array( 'wp_user_id' => 1, 'capability' => 'widrow_staff_access', 'action' => 'toggle' ) );
 $response = $sa->rest_update_user_role( $request );
 assert_equals( 400, $response->get_status(), 'invalid action returns 400' );
 
 // User not found.
-$request->set_body_params( array( 'wp_user_id' => 999, 'capability' => 'def_staff_access', 'action' => 'add' ) );
+$request->set_body_params( array( 'wp_user_id' => 999, 'capability' => 'widrow_staff_access', 'action' => 'add' ) );
 $response = $sa->rest_update_user_role( $request );
 assert_equals( 404, $response->get_status(), 'user not found returns 404' );
+
+// ── 26a. The pre-10.0.0 names DEF sends until its own change ────────────
+echo "\n[26a] Old setting keys and capability names act on the new names\n";
+reset_test_state();
+setup_admin_user();
+update_option( 'widrow_ai_staff_ai_api_url', 'https://api.example.com' );
+
+$request = new WP_REST_Request( 'GET', '/def-core/v1/setup/setting/def_core_staff_ai_api_url' );
+$request->set_param( 'key', 'def_core_staff_ai_api_url' );
+$response = $sa->rest_get_setting( $request );
+assert_equals( 200, $response->get_status(), 'GET with the old key returns 200' );
+assert_equals( 'https://api.example.com', $response->get_data()['data']['value'], 'and reads the value stored under the new key' );
+
+$request = new WP_REST_Request( 'POST', '/def-core/v1/setup/setting/def_core_display_name' );
+$request->set_param( 'key', 'def_core_display_name' );
+$request->set_body_params( array( 'value' => 'Old Key Assistant' ) );
+$response = $sa->rest_update_setting( $request );
+$data     = $response->get_data();
+assert_equals( 200, $response->get_status(), 'POST with the old key returns 200' );
+assert_equals( 'Old Key Assistant', get_option( 'widrow_ai_display_name', '' ), 'the value lands under the new key' );
+assert_false( get_option( 'def_core_display_name', false ), 'nothing is written under the old key' );
+$fields = array_column( array_filter( $data['ui_actions'], fn( $a ) => 'update_field' === $a['action'] ), 'field' );
+assert_equals( array( 'display_name' ), array_values( $fields ), 'the drawer gets the same short key as for the new name' );
+
+$target = new WP_User( 21 );
+$_wp_test_users[21] = $target;
+$request = new WP_REST_Request( 'POST', '/def-core/v1/setup/user-role' );
+$request->set_body_params( array( 'wp_user_id' => 21, 'capability' => 'def_staff_access', 'action' => 'add' ) );
+$response = $sa->rest_update_user_role( $request );
+assert_equals( 200, $response->get_status(), 'granting an old capability name returns 200' );
+assert_true( $target->has_cap( 'widrow_staff_access' ) && ! isset( $target->caps['def_staff_access'] ), 'the new name is stored, not the old' );
+
+$target->caps['def_staff_access'] = true; // A grant left under the old name.
+$request->set_body_params( array( 'wp_user_id' => 21, 'capability' => 'def_staff_access', 'action' => 'remove' ) );
+$sa->rest_update_user_role( $request );
+assert_true( ! isset( $target->caps['widrow_staff_access'] ) && ! isset( $target->caps['def_staff_access'] ), 'a revoke clears both names, so DEF sees no grant on either' );
+
+$target->caps = array( 'def_staff_access' => true, 'widrow_staff_access' => true );
+$request->set_body_params( array( 'wp_user_id' => 21, 'capability' => 'widrow_management_access', 'action' => 'add' ) );
+$sa->rest_update_user_role( $request );
+assert_equals( array( 'widrow_management_access' => true ), $target->caps, 'granting Management clears Staff under both names' );
+
+$request->set_body_params( array( 'wp_user_id' => 21, 'capability' => 'def_core_api_key', 'action' => 'add' ) );
+$response = $sa->rest_update_user_role( $request );
+assert_equals( 400, $response->get_status(), 'an old option key is still not a capability (400)' );
 
 // ── 27. GET /setup/users ────────────────────────────────────────────────
 echo "\n[27] GET /setup/users\n";
@@ -1100,13 +1145,13 @@ setup_admin_user();
 $staff = new WP_User( 10 );
 $staff->display_name = 'Staff';
 $staff->user_email   = 'staff@test.com';
-$staff->caps         = array( 'def_staff_access' => true );
+$staff->caps         = array( 'widrow_staff_access' => true );
 $_wp_test_users[10]  = $staff;
 
 $mgmt = new WP_User( 11 );
 $mgmt->display_name = 'Manager';
 $mgmt->user_email   = 'mgmt@test.com';
-$mgmt->caps         = array( 'def_management_access' => true, 'def_staff_access' => true );
+$mgmt->caps         = array( 'widrow_management_access' => true, 'widrow_staff_access' => true );
 $_wp_test_users[11]  = $mgmt;
 
 $request  = new WP_REST_Request( 'GET', '/def-core/v1/setup/users' );
@@ -1120,8 +1165,8 @@ assert_true( count( $data['data']['users'] ) >= 2, 'at least 2 DEF users returne
 echo "\n[31] GET /setup/test-connection — success\n";
 reset_test_state();
 setup_admin_user();
-update_option( 'def_core_staff_ai_api_url', 'https://api.example.com' );
-update_option( 'def_core_api_key', 'key123' );
+update_option( 'widrow_ai_staff_ai_api_url', 'https://api.example.com' );
+update_option( 'widrow_ai_api_key', 'key123' );
 
 $_wp_test_remote_responses[] = array(
 	'response' => array( 'code' => 200 ),
@@ -1156,16 +1201,16 @@ setup_admin_user();
 
 // Simulate 30 writes (should all succeed).
 for ( $i = 0; $i < 30; $i++ ) {
-	$request = new WP_REST_Request( 'POST', '/def-core/v1/setup/setting/def_core_display_name' );
-	$request->set_param( 'key', 'def_core_display_name' );
+	$request = new WP_REST_Request( 'POST', '/def-core/v1/setup/setting/widrow_ai_display_name' );
+	$request->set_param( 'key', 'widrow_ai_display_name' );
 	$request->set_body_params( array( 'value' => "Name $i" ) );
 	$response = $sa->rest_update_setting( $request );
 }
 assert_equals( 200, $response->get_status(), '30th write succeeds' );
 
 // 31st write should be rate limited.
-$request = new WP_REST_Request( 'POST', '/def-core/v1/setup/setting/def_core_display_name' );
-$request->set_param( 'key', 'def_core_display_name' );
+$request = new WP_REST_Request( 'POST', '/def-core/v1/setup/setting/widrow_ai_display_name' );
+$request->set_param( 'key', 'widrow_ai_display_name' );
 $request->set_body_params( array( 'value' => 'Name 31' ) );
 $response = $sa->rest_update_setting( $request );
 $data     = $response->get_data();
@@ -1177,8 +1222,8 @@ $headers = $response->get_headers();
 assert_true( isset( $headers['Retry-After'] ), 'Retry-After HTTP header set' );
 
 // Read is NOT rate limited (different endpoint, no rate check).
-$request = new WP_REST_Request( 'GET', '/def-core/v1/setup/setting/def_core_display_name' );
-$request->set_param( 'key', 'def_core_display_name' );
+$request = new WP_REST_Request( 'GET', '/def-core/v1/setup/setting/widrow_ai_display_name' );
+$request->set_param( 'key', 'widrow_ai_display_name' );
 $response = $sa->rest_get_setting( $request );
 assert_equals( 200, $response->get_status(), 'read still works when rate limited' );
 
@@ -1187,39 +1232,39 @@ echo "\n[36] Audit log: entry creation\n";
 reset_test_state();
 setup_admin_user();
 
-$request = new WP_REST_Request( 'POST', '/def-core/v1/setup/setting/def_core_display_name' );
-$request->set_param( 'key', 'def_core_display_name' );
+$request = new WP_REST_Request( 'POST', '/def-core/v1/setup/setting/widrow_ai_display_name' );
+$request->set_param( 'key', 'widrow_ai_display_name' );
 $request->set_body_params( array( 'value' => 'New Bot Name' ) );
 $sa->rest_update_setting( $request );
 
-$log = get_option( 'def_core_setup_audit_log', array() );
+$log = get_option( 'widrow_ai_setup_audit_log', array() );
 assert_true( count( $log ) > 0, 'audit log has entries' );
 
 $last_entry = end( $log );
 assert_equals( 'update_setting', $last_entry['action'], 'action is update_setting' );
-assert_equals( 'def_core_display_name', $last_entry['setting_key'], 'setting_key matches' );
+assert_equals( 'widrow_ai_display_name', $last_entry['setting_key'], 'setting_key matches' );
 assert_equals( 1, $last_entry['acting_wp_user_id'], 'acting user ID is correct' );
 assert_true( isset( $last_entry['timestamp'] ), 'timestamp present' );
 
 // ── 37. Connection secret: api_key is readonly (DEFHO-managed) ───────────
-// Previously this asserted that updating def_core_api_key produced a redacted
+// Previously this asserted that updating widrow_ai_api_key produced a redacted
 // audit entry. The key became readonly (managed by DEFHO, like the URL in
 // test [23]), so the update is now rejected with 403 before any audit write —
 // the redact branch in write_audit_log is unreachable via this endpoint. Test
 // the contract that actually holds: the write is refused and nothing is logged.
-echo "\n[37] def_core_api_key is readonly — update rejected, no audit entry\n";
+echo "\n[37] widrow_ai_api_key is readonly — update rejected, no audit entry\n";
 reset_test_state();
 setup_admin_user();
 
-$request = new WP_REST_Request( 'POST', '/def-core/v1/setup/setting/def_core_api_key' );
-$request->set_param( 'key', 'def_core_api_key' );
+$request = new WP_REST_Request( 'POST', '/def-core/v1/setup/setting/widrow_ai_api_key' );
+$request->set_param( 'key', 'widrow_ai_api_key' );
 $request->set_body_params( array( 'value' => 'super_secret_key' ) );
 $response = $sa->rest_update_setting( $request );
 
 assert_equals( 403, $response->get_status(), 'readonly api_key rejected with 403' );
 assert_equals( 'READONLY_SETTING', $response->get_data()['error']['code'], 'readonly error code' );
 
-$log            = get_option( 'def_core_setup_audit_log', array() );
+$log            = get_option( 'widrow_ai_setup_audit_log', array() );
 $update_entries = array_filter( (array) $log, static function ( $e ) {
 	return ( $e['action'] ?? '' ) === 'update_setting';
 } );
@@ -1240,15 +1285,15 @@ for ( $i = 0; $i < 100; $i++ ) {
 		'action'            => 'test_entry_' . $i,
 	);
 }
-update_option( 'def_core_setup_audit_log', $pre_log, false );
+update_option( 'widrow_ai_setup_audit_log', $pre_log, false );
 
 // One more write to trigger rotation.
-$request = new WP_REST_Request( 'POST', '/def-core/v1/setup/setting/def_core_display_name' );
-$request->set_param( 'key', 'def_core_display_name' );
+$request = new WP_REST_Request( 'POST', '/def-core/v1/setup/setting/widrow_ai_display_name' );
+$request->set_param( 'key', 'widrow_ai_display_name' );
 $request->set_body_params( array( 'value' => 'After FIFO' ) );
 $sa->rest_update_setting( $request );
 
-$log = get_option( 'def_core_setup_audit_log', array() );
+$log = get_option( 'widrow_ai_setup_audit_log', array() );
 assert_equals( 100, count( $log ), 'log stays at 100 entries' );
 $newest = end( $log );
 assert_equals( 'update_setting', $newest['action'], 'newest entry is the latest write' );
@@ -1259,23 +1304,23 @@ assert_equals( 'test_entry_1', $oldest['action'], 'oldest entry (entry_0) was ev
 // The allowlist grows per feature (welcome chips, hero images, button styling,
 // compliance text, …), so we no longer pin an exact count — that assertion only
 // rots. Instead assert the core settings are present and the connection secrets
-// stay readonly. NOTE: def_core_escalation_staff_ai is a *structured*
+// stay readonly. NOTE: widrow_ai_escalation_staff_ai is a *structured*
 // (allowed_recipients) option managed via the recipient picker, not a scalar
 // Setup-Assistant setting, so it is intentionally NOT in this allowlist.
 echo "\n[39] Setting allowlist coverage\n";
-$allowlist = DEF_Core_Admin_API::get_setting_allowlist();
+$allowlist = Widrow_AI_Admin_API::get_setting_allowlist();
 
 $expected_keys = array(
-	'def_core_staff_ai_api_url',
-	'def_core_api_key',
-	'def_core_display_name',
-	'def_core_logo_id',
-	'def_core_escalation_customer',
-	'def_core_escalation_setup_assistant',
-	'def_core_chat_display_mode',
-	'def_core_chat_drawer_width',
-	'def_core_chat_spotlight_width',
-	'def_core_chat_spotlight_height',
+	'widrow_ai_staff_ai_api_url',
+	'widrow_ai_api_key',
+	'widrow_ai_display_name',
+	'widrow_ai_logo_id',
+	'widrow_ai_escalation_customer',
+	'widrow_ai_escalation_setup_assistant',
+	'widrow_ai_chat_display_mode',
+	'widrow_ai_chat_drawer_width',
+	'widrow_ai_chat_spotlight_width',
+	'widrow_ai_chat_spotlight_height',
 );
 foreach ( $expected_keys as $key ) {
 	assert_true( isset( $allowlist[ $key ] ), "allowlist contains $key" );
@@ -1283,8 +1328,8 @@ foreach ( $expected_keys as $key ) {
 assert_true( count( $allowlist ) >= count( $expected_keys ), 'allowlist covers at least the core settings' );
 
 // Connection secrets are DEFHO-managed and must stay readonly (see test [23]/[37]).
-assert_true( ! empty( $allowlist['def_core_api_key']['readonly'] ), 'def_core_api_key is readonly' );
-assert_true( ! empty( $allowlist['def_core_staff_ai_api_url']['readonly'] ), 'def_core_staff_ai_api_url is readonly' );
+assert_true( ! empty( $allowlist['widrow_ai_api_key']['readonly'] ), 'widrow_ai_api_key is readonly' );
+assert_true( ! empty( $allowlist['widrow_ai_staff_ai_api_url']['readonly'] ), 'widrow_ai_staff_ai_api_url is readonly' );
 
 // ── 40. Response envelope structure ─────────────────────────────────────
 echo "\n[40] Response envelope structure\n";
@@ -1292,8 +1337,8 @@ reset_test_state();
 setup_admin_user();
 
 // Success envelope.
-$request = new WP_REST_Request( 'GET', '/def-core/v1/setup/setting/def_core_display_name' );
-$request->set_param( 'key', 'def_core_display_name' );
+$request = new WP_REST_Request( 'GET', '/def-core/v1/setup/setting/widrow_ai_display_name' );
+$request->set_param( 'key', 'widrow_ai_display_name' );
 $response = $sa->rest_get_setting( $request );
 $data     = $response->get_data();
 
@@ -1320,8 +1365,8 @@ reset_test_state();
 setup_admin_user();
 
 // Valid email.
-$request = new WP_REST_Request( 'POST', '/def-core/v1/setup/setting/def_core_escalation_customer' );
-$request->set_param( 'key', 'def_core_escalation_customer' );
+$request = new WP_REST_Request( 'POST', '/def-core/v1/setup/setting/widrow_ai_escalation_customer' );
+$request->set_param( 'key', 'widrow_ai_escalation_customer' );
 $request->set_body_params( array( 'value' => 'test@example.com' ) );
 $response = $sa->rest_update_setting( $request );
 assert_equals( 200, $response->get_status(), 'valid email accepted' );
@@ -1343,14 +1388,14 @@ setup_admin_user();
 
 $contact_form_keys = array( 'title', 'desc', 'business_fields', 'pref_enabled', 'pref_options', 'ack_enabled', 'ack_subject', 'ack_body' );
 foreach ( $contact_form_keys as $suffix ) {
-	$key     = "def_core_chat_escalation_$suffix";
+	$key     = "widrow_ai_chat_escalation_$suffix";
 	$request = new WP_REST_Request( 'GET', "/def-core/v1/setup/setting/$key" );
 	$request->set_param( 'key', $key );
 	assert_equals( 200, $sa->rest_get_setting( $request )->get_status(), "$key is readable" );
 }
 
 // Unset reads as what the form actually does, not blank.
-$key     = 'def_core_chat_escalation_business_fields';
+$key     = 'widrow_ai_chat_escalation_business_fields';
 $request = new WP_REST_Request( 'GET', "/def-core/v1/setup/setting/$key" );
 $request->set_param( 'key', $key );
 assert_equals( 'hidden', $sa->rest_get_setting( $request )->get_data()['data']['value'], 'unset business fields read as hidden' );
@@ -1364,18 +1409,18 @@ assert_equals( 400, $sa->rest_update_setting( $request )->get_status(), 'busines
 assert_equals( 'required', get_option( $key ), 'a rejected mode leaves the saved value' );
 
 // A switch that was never saved reads as off, in the form the bridge accepts.
-$key     = 'def_core_chat_escalation_ack_enabled';
+$key     = 'widrow_ai_chat_escalation_ack_enabled';
 $request = new WP_REST_Request( 'GET', "/def-core/v1/setup/setting/$key" );
 $request->set_param( 'key', $key );
 assert_equals( '0', $sa->rest_get_setting( $request )->get_data()['data']['value'], 'unset switch reads as 0' );
 
 // The harness stubs WordPress's sanitisers, so assert the wiring, not the stub.
-$allowlist = DEF_Core_Admin_API::get_setting_allowlist();
+$allowlist = Widrow_AI_Admin_API::get_setting_allowlist();
 foreach ( array( 'title', 'desc', 'ack_subject' ) as $suffix ) {
-	assert_equals( 'sanitize_text_field', $allowlist[ "def_core_chat_escalation_$suffix" ]['sanitize'], "$suffix is single-line text" );
+	assert_equals( 'sanitize_text_field', $allowlist[ "widrow_ai_chat_escalation_$suffix" ]['sanitize'], "$suffix is single-line text" );
 }
 foreach ( array( 'pref_options', 'ack_body' ) as $suffix ) {
-	assert_equals( 'sanitize_textarea_field', $allowlist[ "def_core_chat_escalation_$suffix" ]['sanitize'], "$suffix is multi-line text" );
+	assert_equals( 'sanitize_textarea_field', $allowlist[ "widrow_ai_chat_escalation_$suffix" ]['sanitize'], "$suffix is multi-line text" );
 }
 
 // ── 41c. Logo, icon and button settings ─────────────────────────────────
@@ -1397,44 +1442,44 @@ $write = function ( $key, $value ) use ( $sa ) {
 
 // Unset reads as what the site actually does, not blank.
 foreach ( array(
-	'def_core_logo_show_staff_ai'      => '1',
-	'def_core_logo_show_customer_chat' => '1',
-	'def_core_chat_show_floating'      => '1',
-	'def_core_chat_ai_notice'          => '0',
-	'def_core_logo_max_height'         => '40',
-	'def_core_chat_button_position'    => 'right',
+	'widrow_ai_logo_show_staff_ai'      => '1',
+	'widrow_ai_logo_show_customer_chat' => '1',
+	'widrow_ai_chat_show_floating'      => '1',
+	'widrow_ai_chat_ai_notice'          => '0',
+	'widrow_ai_logo_max_height'         => '40',
+	'widrow_ai_chat_button_position'    => 'right',
 ) as $key => $unset ) {
 	assert_equals( $unset, $read( $key )->get_data()['data']['value'], "unset $key reads as $unset" );
 }
-foreach ( array( 'def_core_app_icon_id', 'def_core_chat_button_icon_id', 'def_core_chat_loading_mark_id', 'def_core_chat_privacy_url' ) as $key ) {
+foreach ( array( 'widrow_ai_app_icon_id', 'widrow_ai_chat_button_icon_id', 'widrow_ai_chat_loading_mark_id', 'widrow_ai_chat_privacy_url' ) as $key ) {
 	assert_equals( 200, $read( $key )->get_status(), "$key is readable" );
 }
 
 // A value the save would quietly change is refused, so the assistant can't report one it didn't store.
-assert_equals( 200, $write( 'def_core_logo_max_height', '60' ), 'logo height in range saves' );
-assert_equals( 400, $write( 'def_core_logo_max_height', '200' ), 'logo height out of range is refused' );
-assert_equals( 60, get_option( 'def_core_logo_max_height' ), 'logo height is stored as a whole number' );
+assert_equals( 200, $write( 'widrow_ai_logo_max_height', '60' ), 'logo height in range saves' );
+assert_equals( 400, $write( 'widrow_ai_logo_max_height', '200' ), 'logo height out of range is refused' );
+assert_equals( 60, get_option( 'widrow_ai_logo_max_height' ), 'logo height is stored as a whole number' );
 foreach ( array( 'tall', '60.5', ' 60', '+60', '6e1', '0060' ) as $bad ) {
-	assert_equals( 400, $write( 'def_core_logo_max_height', $bad ), "logo height refuses '$bad'" );
+	assert_equals( 400, $write( 'widrow_ai_logo_max_height', $bad ), "logo height refuses '$bad'" );
 }
 // A file name must not read as 0, which clears the image and reports success.
-update_option( 'def_core_app_icon_id', 7 );
-assert_equals( 400, $write( 'def_core_app_icon_id', 'logo.png' ), 'an image ID must be a number' );
-assert_equals( 7, get_option( 'def_core_app_icon_id' ), 'a refused image ID leaves the saved one' );
-assert_equals( 200, $write( 'def_core_app_icon_id', '' ), 'an image can still be cleared' );
-assert_equals( 200, $write( 'def_core_chat_button_position', 'left' ), 'button position takes left' );
-assert_equals( 400, $write( 'def_core_chat_button_position', 'top' ), 'button position refuses anything else' );
-assert_equals( 200, $write( 'def_core_chat_privacy_url', '/terms/' ), 'legal link takes a path' );
-assert_equals( 200, $write( 'def_core_chat_privacy_url', '' ), 'legal link can be cleared' );
-assert_equals( 400, $write( 'def_core_chat_privacy_url', 'javascript:alert(1)' ), 'legal link refuses what the save would drop' );
+update_option( 'widrow_ai_app_icon_id', 7 );
+assert_equals( 400, $write( 'widrow_ai_app_icon_id', 'logo.png' ), 'an image ID must be a number' );
+assert_equals( 7, get_option( 'widrow_ai_app_icon_id' ), 'a refused image ID leaves the saved one' );
+assert_equals( 200, $write( 'widrow_ai_app_icon_id', '' ), 'an image can still be cleared' );
+assert_equals( 200, $write( 'widrow_ai_chat_button_position', 'left' ), 'button position takes left' );
+assert_equals( 400, $write( 'widrow_ai_chat_button_position', 'top' ), 'button position refuses anything else' );
+assert_equals( 200, $write( 'widrow_ai_chat_privacy_url', '/terms/' ), 'legal link takes a path' );
+assert_equals( 200, $write( 'widrow_ai_chat_privacy_url', '' ), 'legal link can be cleared' );
+assert_equals( 400, $write( 'widrow_ai_chat_privacy_url', 'javascript:alert(1)' ), 'legal link refuses what the save would drop' );
 
 // ── 42. Logo ID validation ──────────────────────────────────────────────
 echo "\n[42] Logo ID validation\n";
 reset_test_state();
 setup_admin_user();
 
-$request = new WP_REST_Request( 'POST', '/def-core/v1/setup/setting/def_core_logo_id' );
-$request->set_param( 'key', 'def_core_logo_id' );
+$request = new WP_REST_Request( 'POST', '/def-core/v1/setup/setting/widrow_ai_logo_id' );
+$request->set_param( 'key', 'widrow_ai_logo_id' );
 
 // Valid image ID.
 $request->set_body_params( array( 'value' => 5 ) );
@@ -1458,8 +1503,8 @@ echo "\n[43] Display name has no length bound\n";
 reset_test_state();
 setup_admin_user();
 
-$request = new WP_REST_Request( 'POST', '/def-core/v1/setup/setting/def_core_display_name' );
-$request->set_param( 'key', 'def_core_display_name' );
+$request = new WP_REST_Request( 'POST', '/def-core/v1/setup/setting/widrow_ai_display_name' );
+$request->set_param( 'key', 'widrow_ai_display_name' );
 $request->set_body_params( array( 'value' => str_repeat( 'a', 101 ) ) );
 $response = $sa->rest_update_setting( $request );
 assert_equals( 200, $response->get_status(), '101 chars accepted — the former bound is gone' );
@@ -1473,8 +1518,8 @@ echo "\n[44] Missing value in POST setting\n";
 reset_test_state();
 setup_admin_user();
 
-$request = new WP_REST_Request( 'POST', '/def-core/v1/setup/setting/def_core_display_name' );
-$request->set_param( 'key', 'def_core_display_name' );
+$request = new WP_REST_Request( 'POST', '/def-core/v1/setup/setting/widrow_ai_display_name' );
+$request->set_param( 'key', 'widrow_ai_display_name' );
 $request->set_body_params( array() ); // No 'value' field.
 $response = $sa->rest_update_setting( $request );
 $data     = $response->get_data();
@@ -1485,16 +1530,16 @@ assert_equals( 'MISSING_VALUE', $data['error']['code'], 'error code is MISSING_V
 echo "\n[45] HMAC canonical route used in signature\n";
 reset_test_state();
 $api_key = 'canonical_test_key';
-update_option( 'def_core_api_key', $api_key );
+update_option( 'widrow_ai_api_key', $api_key );
 
 $admin = new WP_User( 42 );
 $admin->display_name = 'Admin';
-$admin->caps = array( 'def_admin_access' => true );
+$admin->caps = array( 'widrow_admin_access' => true );
 $_wp_test_users[42] = $admin;
 
 // Use a route with a URL parameter.
 $method    = 'GET';
-$path      = '/def-core/v1/setup/setting/def_core_display_name';
+$path      = '/def-core/v1/setup/setting/widrow_ai_display_name';
 $timestamp = (string) time();
 $user_id   = '42';
 $body_hash = hash( 'sha256', '' );
@@ -1535,8 +1580,8 @@ assert_true( $data['success'], 'success is true' );
 assert_true( $data['data']['seen'], 'seen is true after marking' );
 
 // Verify user meta was set.
-$meta = get_user_meta( 1, 'def_sa_drawer_seen', true );
-assert_equals( '1', $meta, 'user meta def_sa_drawer_seen is "1"' );
+$meta = get_user_meta( 1, 'widrow_sa_drawer_seen', true );
+assert_equals( '1', $meta, 'user meta widrow_sa_drawer_seen is "1"' );
 
 // ── 48. GET /setup/seen — already seen ──────────────────────────────────
 echo "\n[48] GET /setup/seen — already seen\n";
@@ -1556,36 +1601,36 @@ $result  = $sa->permission_check( $request );
 assert_true( is_wp_error( $result ), 'returns WP_Error without auth' );
 assert_equals( 'UNAUTHORIZED', $result->get_error_code(), 'error code is UNAUTHORIZED' );
 
-// ── 50. def_core_log_level via setup endpoint ───────────────────────────
-echo "\n[50] def_core_log_level GET/POST via setup endpoint\n";
+// ── 50. widrow_ai_log_level via setup endpoint ───────────────────────────
+echo "\n[50] widrow_ai_log_level GET/POST via setup endpoint\n";
 reset_test_state();
 setup_admin_user();
 
 // In the allowlist (so the endpoint no longer returns UNKNOWN_SETTING).
-$allowlist = DEF_Core_Admin_API::get_setting_allowlist();
-assert_true( isset( $allowlist['def_core_log_level'] ), 'allowlist contains def_core_log_level' );
+$allowlist = Widrow_AI_Admin_API::get_setting_allowlist();
+assert_true( isset( $allowlist['widrow_ai_log_level'] ), 'allowlist contains widrow_ai_log_level' );
 
 // GET returns the stored value.
-update_option( 'def_core_log_level', 'warning' );
-$request = new WP_REST_Request( 'GET', '/def-core/v1/setup/setting/def_core_log_level' );
-$request->set_param( 'key', 'def_core_log_level' );
+update_option( 'widrow_ai_log_level', 'warning' );
+$request = new WP_REST_Request( 'GET', '/def-core/v1/setup/setting/widrow_ai_log_level' );
+$request->set_param( 'key', 'widrow_ai_log_level' );
 $response = $sa->rest_get_setting( $request );
 assert_equals( 200, $response->get_status(), 'GET log level returns 200' );
 assert_equals( 'warning', $response->get_data()['data']['value'], 'GET returns stored level' );
 
 // POST accepts each of the four valid levels.
 foreach ( array( 'debug', 'info', 'warning', 'error' ) as $level ) {
-	$request = new WP_REST_Request( 'POST', '/def-core/v1/setup/setting/def_core_log_level' );
-	$request->set_param( 'key', 'def_core_log_level' );
+	$request = new WP_REST_Request( 'POST', '/def-core/v1/setup/setting/widrow_ai_log_level' );
+	$request->set_param( 'key', 'widrow_ai_log_level' );
 	$request->set_body_params( array( 'value' => $level ) );
 	$response = $sa->rest_update_setting( $request );
 	assert_equals( 200, $response->get_status(), "POST log level '$level' accepted" );
-	assert_equals( $level, get_option( 'def_core_log_level', '' ), "level '$level' persisted" );
+	assert_equals( $level, get_option( 'widrow_ai_log_level', '' ), "level '$level' persisted" );
 }
 
 // POST rejects an invalid level.
-$request = new WP_REST_Request( 'POST', '/def-core/v1/setup/setting/def_core_log_level' );
-$request->set_param( 'key', 'def_core_log_level' );
+$request = new WP_REST_Request( 'POST', '/def-core/v1/setup/setting/widrow_ai_log_level' );
+$request->set_param( 'key', 'widrow_ai_log_level' );
 $request->set_body_params( array( 'value' => 'verbose' ) );
 $response = $sa->rest_update_setting( $request );
 assert_equals( 400, $response->get_status(), 'invalid log level rejected' );
@@ -1606,7 +1651,7 @@ reset_test_state();
 setup_admin_user();
 
 assert_true(
-	is_callable( array( 'DEF_Core_Admin', 'sanitize_compliance_text' ) ),
+	is_callable( array( 'Widrow_AI_Admin', 'sanitize_compliance_text' ) ),
 	'the sanitiser is loaded — otherwise rest_update_setting skips it and this section proves nothing'
 );
 
@@ -1616,8 +1661,8 @@ $long_notice = 'This site uses an AI assistant. ' . str_repeat(
 	12
 ); // ~1,600 chars
 
-$request = new WP_REST_Request( 'POST', '/def-core/v1/setup/setting/def_core_chat_compliance_text' );
-$request->set_param( 'key', 'def_core_chat_compliance_text' );
+$request = new WP_REST_Request( 'POST', '/def-core/v1/setup/setting/widrow_ai_chat_compliance_text' );
+$request->set_param( 'key', 'widrow_ai_chat_compliance_text' );
 $request->set_body_params( array( 'value' => $long_notice ) );
 $response = $sa->rest_update_setting( $request );
 
@@ -1629,12 +1674,12 @@ $expected = trim( $long_notice );
 assert_equals( 200, $response->get_status(), 'a 1,600-char legal notice is accepted' );
 assert_equals(
 	$expected,
-	get_option( 'def_core_chat_compliance_text', '' ),
+	get_option( 'widrow_ai_chat_compliance_text', '' ),
 	'compliance text round-trips character-for-character — not cut at 500'
 );
 assert_equals(
 	mb_strlen( $expected ),
-	mb_strlen( (string) get_option( 'def_core_chat_compliance_text', '' ) ),
+	mb_strlen( (string) get_option( 'widrow_ai_chat_compliance_text', '' ) ),
 	'stored length equals submitted length'
 );
 
@@ -1647,12 +1692,12 @@ setup_admin_user();
 // validator, form maxlength, drawer max_length), so the same payloads must
 // now save and round-trip character-for-character — the inverted pin.
 $former_bounds = array(
-	'def_core_display_name'              => 101,
-	'def_core_chat_greeting_bubble_text' => 201,
-	'def_core_chat_button_label'         => 31,
-	'def_core_chat_welcome_chip_1'       => 81,
-	'def_core_chat_welcome_chip_1_intro' => 1001,
-	'def_core_chat_privacy_link_label'   => 51,
+	'widrow_ai_display_name'              => 101,
+	'widrow_ai_chat_greeting_bubble_text' => 201,
+	'widrow_ai_chat_button_label'         => 31,
+	'widrow_ai_chat_welcome_chip_1'       => 81,
+	'widrow_ai_chat_welcome_chip_1_intro' => 1001,
+	'widrow_ai_chat_privacy_link_label'   => 51,
 );
 
 foreach ( $former_bounds as $key => $just_over ) {
@@ -1668,25 +1713,25 @@ foreach ( $former_bounds as $key => $just_over ) {
 }
 
 // And a far-past probe on one representative field: no hidden higher bound.
-$request = new WP_REST_Request( 'POST', '/def-core/v1/setup/setting/def_core_chat_welcome_chip_1' );
-$request->set_param( 'key', 'def_core_chat_welcome_chip_1' );
+$request = new WP_REST_Request( 'POST', '/def-core/v1/setup/setting/widrow_ai_chat_welcome_chip_1' );
+$request->set_param( 'key', 'widrow_ai_chat_welcome_chip_1' );
 $request->set_body_params( array( 'value' => str_repeat( 'y', 5000 ) ) );
 $response = $sa->rest_update_setting( $request );
 assert_equals( 200, $response->get_status(), 'a 5,000-char chip label is accepted — no hidden higher bound' );
-assert_equals( 5000, mb_strlen( (string) get_option( 'def_core_chat_welcome_chip_1', '' ) ), 'and stored whole' );
+assert_equals( 5000, mb_strlen( (string) get_option( 'widrow_ai_chat_welcome_chip_1', '' ) ), 'and stored whole' );
 
 // The bounds must count CHARACTERS, not bytes. validate_display_name used
 // strlen() until 2026-08-08, so a 40-character Japanese name (120 bytes) was
 // refused with a message claiming it exceeded 100 characters. The ASCII cases
 // above cannot catch that — bytes and characters are the same number there.
 $mb_name = str_repeat( '漢', 80 ); // 80 characters, 240 bytes — under the 100 bound
-$request = new WP_REST_Request( 'POST', '/def-core/v1/setup/setting/def_core_display_name' );
-$request->set_param( 'key', 'def_core_display_name' );
+$request = new WP_REST_Request( 'POST', '/def-core/v1/setup/setting/widrow_ai_display_name' );
+$request->set_param( 'key', 'widrow_ai_display_name' );
 $request->set_body_params( array( 'value' => $mb_name ) );
 $response = $sa->rest_update_setting( $request );
 
 assert_equals( 200, $response->get_status(), 'an 80-character multibyte name is accepted (bounds count chars, not bytes)' );
-assert_equals( $mb_name, get_option( 'def_core_display_name', '' ), 'and is stored whole' );
+assert_equals( $mb_name, get_option( 'widrow_ai_display_name', '' ), 'and is stored whole' );
 
 echo "\n[53] No sanitiser shortens its input — asserted one by one\n";
 // Belt-and-braces below the REST layer: called directly, none of these may cut.
@@ -1706,11 +1751,11 @@ $sanitisers = array(
 );
 
 foreach ( $sanitisers as $method => $length ) {
-	$output = DEF_Core_Admin::$method( str_repeat( 'a', $length ) );
+	$output = Widrow_AI_Admin::$method( str_repeat( 'a', $length ) );
 	assert_equals(
 		$length,
 		mb_strlen( $output ),
-		"DEF_Core_Admin::$method() returns its input whole (no truncation)"
+		"Widrow_AI_Admin::$method() returns its input whole (no truncation)"
 	);
 }
 
@@ -1719,7 +1764,7 @@ foreach ( $sanitisers as $method => $length ) {
 $mb_name = str_repeat( '漢', 80 ); // 80 characters, 240 bytes
 assert_equals(
 	80,
-	mb_strlen( DEF_Core_Admin::sanitize_display_name( $mb_name ) ),
+	mb_strlen( Widrow_AI_Admin::sanitize_display_name( $mb_name ) ),
 	'a multibyte display name survives whole, not severed mid-character'
 );
 
@@ -1750,17 +1795,17 @@ $GLOBALS['_doing_it_wrong_calls'] = array();
 
 // (a) Configured sanitiser vanishes → the write is refused on the caller's
 // existing VALIDATION_ERROR contract, and nothing reaches the option.
-$allowlist_prop = new ReflectionProperty( 'DEF_Core_Admin_API', 'setting_allowlist' );
+$allowlist_prop = new ReflectionProperty( 'Widrow_AI_Admin_API', 'setting_allowlist' );
 $allowlist_prop->setAccessible( true );
 $allowlist_backup = $allowlist_prop->getValue();
 
 $broken = $allowlist_backup;
-$broken['def_core_chat_welcome_chip_1']['sanitize'] = array( 'DEF_Core_Admin', 'sanitize_method_that_vanished' );
+$broken['widrow_ai_chat_welcome_chip_1']['sanitize'] = array( 'Widrow_AI_Admin', 'sanitize_method_that_vanished' );
 $allowlist_prop->setValue( null, $broken );
 
-update_option( 'def_core_chat_welcome_chip_1', 'previous value' );
-$request = new WP_REST_Request( 'POST', '/def-core/v1/setup/setting/def_core_chat_welcome_chip_1' );
-$request->set_param( 'key', 'def_core_chat_welcome_chip_1' );
+update_option( 'widrow_ai_chat_welcome_chip_1', 'previous value' );
+$request = new WP_REST_Request( 'POST', '/def-core/v1/setup/setting/widrow_ai_chat_welcome_chip_1' );
+$request->set_param( 'key', 'widrow_ai_chat_welcome_chip_1' );
 $request->set_body_params( array( 'value' => 'in-bounds label' ) );
 $response = $sa->rest_update_setting( $request );
 
@@ -1769,19 +1814,19 @@ $allowlist_prop->setValue( null, $allowlist_backup ); // restore before assertin
 assert_equals( 400, $response->get_status(), 'vanished sanitiser: the write is refused, not silently unsanitised' );
 $body = $response->get_data();
 assert_equals( 'VALIDATION_ERROR', $body['error']['code'] ?? '', 'refusal speaks the existing VALIDATION_ERROR contract, not a new shape' );
-assert_equals( 'previous value', get_option( 'def_core_chat_welcome_chip_1', '' ), 'nothing was written' );
+assert_equals( 'previous value', get_option( 'widrow_ai_chat_welcome_chip_1', '' ), 'nothing was written' );
 assert_true( count( $GLOBALS['_doing_it_wrong_calls'] ) === 1, '_doing_it_wrong() fired once for the developer' );
 
-// (b) No sanitiser configured stays a legitimate skip: def_core_display_name
+// (b) No sanitiser configured stays a legitimate skip: widrow_ai_display_name
 // has no `sanitize` key in the allowlist, and its save must keep working.
-$entry = $allowlist_backup['def_core_display_name'];
-assert_true( ! isset( $entry['sanitize'] ), 'precondition: def_core_display_name really has no sanitiser configured' );
-$request = new WP_REST_Request( 'POST', '/def-core/v1/setup/setting/def_core_display_name' );
-$request->set_param( 'key', 'def_core_display_name' );
+$entry = $allowlist_backup['widrow_ai_display_name'];
+assert_true( ! isset( $entry['sanitize'] ), 'precondition: widrow_ai_display_name really has no sanitiser configured' );
+$request = new WP_REST_Request( 'POST', '/def-core/v1/setup/setting/widrow_ai_display_name' );
+$request->set_param( 'key', 'widrow_ai_display_name' );
 $request->set_body_params( array( 'value' => 'Plain Name' ) );
 $response = $sa->rest_update_setting( $request );
 assert_equals( 200, $response->get_status(), 'no-sanitiser-configured still saves — the split did not over-refuse' );
-assert_equals( 'Plain Name', get_option( 'def_core_display_name', '' ), 'and the value is stored' );
+assert_equals( 'Plain Name', get_option( 'widrow_ai_display_name', '' ), 'and the value is stored' );
 
 // ── Summary ─────────────────────────────────────────────────────────────
 echo "\n$pass passed, $fail failed\n";

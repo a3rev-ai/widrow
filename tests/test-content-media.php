@@ -2,11 +2,11 @@
 /**
  * Content Agent Wave 2 (images) — media sideload/delete bridge tests.
  *
- * Verifies the def-core half of image handling:
+ * Verifies the widrow-ai half of image handling:
  *  - POST /content/media (rest_sideload) decodes + validates hostile bytes
  *    (strict base64, finfo sniff vs the claimed mime, png/jpeg/webp allowlist —
  *    never SVG, 10MB cap, traversal-safe filename with a forced extension),
- *    sideloads UNATTACHED, sets the alt + the `_def_created` scope stamp, and
+ *    sideloads UNATTACHED, sets the alt + the `_widrow_created` scope stamp, and
  *    returns {attachment_id, url}.
  *  - The upload_files capability is enforced (no write without it).
  *  - POST /content/media/{id}/delete (rest_delete) refuses with a uniform 404
@@ -21,7 +21,7 @@
  *
  * Runs standalone (no WordPress bootstrap).
  *
- * @package def-core/tests
+ * @package widrow-ai/tests
  */
 
 declare(strict_types=1);
@@ -84,7 +84,7 @@ if ( ! function_exists( 'current_user_can' ) ) {
 	function current_user_can( $cap, ...$a ) {
 		if ( 'upload_files' === $cap ) { return (bool) $GLOBALS['t_can_upload']; }
 		if ( 'delete_post' === $cap ) { return (bool) $GLOBALS['t_can_delete']; }
-		return true; // def_staff_access etc.
+		return true; // widrow_staff_access etc.
 	}
 }
 if ( ! function_exists( 'wp_set_current_user' ) ) {
@@ -103,7 +103,7 @@ if ( ! function_exists( 'get_post' ) ) {
 }
 if ( ! function_exists( 'get_post_meta' ) ) {
 	function get_post_meta( $id, $key, $single = false ) {
-		if ( '_def_created' === $key ) {
+		if ( '_widrow_created' === $key ) {
 			return ! empty( $GLOBALS['t_attachments'][ (int) $id ]['def_created'] ) ? 1 : '';
 		}
 		return '';
@@ -184,7 +184,7 @@ if ( ! function_exists( 'add_image_size' ) ) {
 	}
 }
 
-require_once DEF_CORE_PLUGIN_DIR . 'includes/class-def-core-media.php';
+require_once WIDROW_AI_PLUGIN_DIR . 'includes/class-widrow-ai-media.php';
 
 $_SERVER['HTTP_X_DEF_USER'] = '5';
 
@@ -225,7 +225,7 @@ function sideload_request( array $overrides = array() ): WP_REST_Request {
 echo "[1] sideload accepts a real PNG\n";
 $GLOBALS['t_sideloads']   = array();
 $GLOBALS['t_meta_writes'] = array();
-$resp = DEF_Core_Media::rest_sideload( sideload_request() );
+$resp = Widrow_AI_Media::rest_sideload( sideload_request() );
 assert_true( $resp instanceof WP_REST_Response, 'returns WP_REST_Response' );
 $data = $resp->get_data();
 assert_same( 777, $data['attachment_id'] ?? null, 'returns attachment_id' );
@@ -236,13 +236,13 @@ assert_same( strlen( tiny_png() ), $GLOBALS['t_sideloads'][0]['bytes'], 'temp fi
 $writes = array();
 foreach ( $GLOBALS['t_meta_writes'] as $w ) { $writes[ $w['key'] ] = $w; }
 assert_same( 'A cat on a mat', $writes['_wp_attachment_image_alt']['value'] ?? null, 'alt text set' );
-assert_same( 1, $writes['_def_created']['value'] ?? null, '_def_created scope stamp set' );
-assert_same( 777, $writes['_def_created']['id'] ?? null, 'stamp on the new attachment' );
+assert_same( 1, $writes['_widrow_created']['value'] ?? null, '_widrow_created scope stamp set' );
+assert_same( 777, $writes['_widrow_created']['id'] ?? null, 'stamp on the new attachment' );
 
 // ── 2. Filename is traversal-safe with a forced extension ───────────────
 echo "[2] filename sanitized + extension forced\n";
 $GLOBALS['t_sideloads'] = array();
-DEF_Core_Media::rest_sideload( sideload_request( array( 'filename' => '../../evil dir/payload.php' ) ) );
+Widrow_AI_Media::rest_sideload( sideload_request( array( 'filename' => '../../evil dir/payload.php' ) ) );
 $name = $GLOBALS['t_sideloads'][0]['name'] ?? '';
 assert_true( false === strpos( $name, '/' ) && false === strpos( $name, '\\' ), 'no path separators survive' );
 assert_true( (bool) preg_match( '/\.png$/', $name ), 'extension forced to the validated type (.png)' );
@@ -250,13 +250,13 @@ assert_true( '.png' !== $name && '' !== $name, 'non-empty basename' );
 
 // Empty filename falls back to a default base.
 $GLOBALS['t_sideloads'] = array();
-DEF_Core_Media::rest_sideload( sideload_request( array( 'filename' => '' ) ) );
+Widrow_AI_Media::rest_sideload( sideload_request( array( 'filename' => '' ) ) );
 assert_same( 'def-image.png', $GLOBALS['t_sideloads'][0]['name'] ?? '', 'empty filename → def-image.png' );
 
 // ── 3. SVG (and any non-allowlisted mime) rejected up front ─────────────
 echo "[3] svg / unknown mime rejected\n";
 $GLOBALS['t_sideloads'] = array();
-$data = DEF_Core_Media::rest_sideload( sideload_request( array(
+$data = Widrow_AI_Media::rest_sideload( sideload_request( array(
 	'mime'      => 'image/svg+xml',
 	'image_b64' => base64_encode( '<svg xmlns="http://www.w3.org/2000/svg"></svg>' ),
 ) ) )->get_data();
@@ -266,11 +266,11 @@ assert_same( array(), $GLOBALS['t_sideloads'], 'no sideload for svg' );
 // ── 4. Bytes must match the declared mime (real finfo sniff) ────────────
 echo "[4] byte/mime mismatch rejected\n";
 $GLOBALS['t_sideloads'] = array();
-$data = DEF_Core_Media::rest_sideload( sideload_request( array(
+$data = Widrow_AI_Media::rest_sideload( sideload_request( array(
 	'image_b64' => base64_encode( '<?php echo "owned"; ?>' ), // claims image/png
 ) ) )->get_data();
 assert_same( 'invalid', $data['status'] ?? null, 'php-script bytes claiming png → invalid' );
-$data = DEF_Core_Media::rest_sideload( sideload_request( array(
+$data = Widrow_AI_Media::rest_sideload( sideload_request( array(
 	'mime' => 'image/jpeg', // real PNG bytes claiming jpeg
 ) ) )->get_data();
 assert_same( 'invalid', $data['status'] ?? null, 'png bytes claiming jpeg → invalid' );
@@ -279,9 +279,9 @@ assert_same( array(), $GLOBALS['t_sideloads'], 'no sideload on mismatch' );
 // ── 5. Broken base64 and oversize payloads rejected ─────────────────────
 echo "[5] bad base64 / oversize rejected\n";
 $GLOBALS['t_sideloads'] = array();
-$data = DEF_Core_Media::rest_sideload( sideload_request( array( 'image_b64' => '!!!not-base64!!!' ) ) )->get_data();
+$data = Widrow_AI_Media::rest_sideload( sideload_request( array( 'image_b64' => '!!!not-base64!!!' ) ) )->get_data();
 assert_same( 'invalid', $data['status'] ?? null, 'invalid base64 → invalid' );
-$data = DEF_Core_Media::rest_sideload( sideload_request( array(
+$data = Widrow_AI_Media::rest_sideload( sideload_request( array(
 	'image_b64' => base64_encode( str_repeat( 'A', 10485761 ) ), // 10MB + 1
 ) ) )->get_data();
 assert_same( 'invalid', $data['status'] ?? null, '>10MB → invalid' );
@@ -291,7 +291,7 @@ assert_same( array(), $GLOBALS['t_sideloads'], 'no sideload for rejected payload
 echo "[6] sideload requires upload_files\n";
 $GLOBALS['t_can_upload'] = false;
 $GLOBALS['t_sideloads']  = array();
-$resp = DEF_Core_Media::rest_sideload( sideload_request() );
+$resp = Widrow_AI_Media::rest_sideload( sideload_request() );
 assert_true( is_wp_error( $resp ), 'returns WP_Error without upload_files' );
 assert_same( 'rest_forbidden', $resp->get_error_code(), 'error code rest_forbidden' );
 assert_same( 403, $resp->get_error_data()['status'], 'HTTP 403' );
@@ -301,7 +301,7 @@ $GLOBALS['t_can_upload'] = true;
 // ── 7. Sideload failure surfaces as a soft error ────────────────────────
 echo "[7] sideload failure surfaces\n";
 $GLOBALS['t_sideload_error'] = true;
-$data = DEF_Core_Media::rest_sideload( sideload_request() )->get_data();
+$data = Widrow_AI_Media::rest_sideload( sideload_request() )->get_data();
 assert_same( 'sideload_failed', $data['status'] ?? null, 'media_handle_sideload error → sideload_failed' );
 $GLOBALS['t_sideload_error'] = false;
 
@@ -310,7 +310,7 @@ echo "[8] delete removes an eligible attachment\n";
 $GLOBALS['t_deletes'] = array();
 $req = new WP_REST_Request( 'POST', '' );
 $req->set_param( 'id', '50' );
-$data = DEF_Core_Media::rest_delete( $req )->get_data();
+$data = Widrow_AI_Media::rest_delete( $req )->get_data();
 assert_same( 'deleted', $data['status'] ?? null, 'status=deleted' );
 assert_same( 50, $data['attachment_id'] ?? null, 'echoes the attachment id' );
 assert_same( array( array( 'id' => 50, 'force' => true ) ), $GLOBALS['t_deletes'], 'wp_delete_attachment(50, true) called' );
@@ -326,7 +326,7 @@ foreach ( array(
 	$GLOBALS['t_deletes'] = array();
 	$req = new WP_REST_Request( 'POST', '' );
 	$req->set_param( 'id', $id );
-	$resp = DEF_Core_Media::rest_delete( $req );
+	$resp = Widrow_AI_Media::rest_delete( $req );
 	assert_true( is_wp_error( $resp ), "WP_Error for: $why" );
 	assert_same( 'not_found', $resp->get_error_code(), "uniform not_found for: $why" );
 	assert_same( 404, $resp->get_error_data()['status'], "HTTP 404 for: $why" );
@@ -339,7 +339,7 @@ $GLOBALS['t_can_delete'] = false;
 $GLOBALS['t_deletes']    = array();
 $req = new WP_REST_Request( 'POST', '' );
 $req->set_param( 'id', '50' );
-$resp = DEF_Core_Media::rest_delete( $req );
+$resp = Widrow_AI_Media::rest_delete( $req );
 assert_true( is_wp_error( $resp ), 'returns WP_Error without delete_post' );
 assert_same( 'rest_forbidden', $resp->get_error_code(), 'error code rest_forbidden' );
 assert_same( array(), $GLOBALS['t_deletes'], 'nothing deleted without capability' );
@@ -347,7 +347,7 @@ $GLOBALS['t_can_delete'] = true;
 
 // ── 11. def-social exact-crop size registration ─────────────────────────
 echo "[11] def-social 1200×630 crop registered\n";
-DEF_Core_Media::register_social_image_size();
+Widrow_AI_Media::register_social_image_size();
 assert_same(
 	array( 'w' => 1200, 'h' => 630, 'crop' => true ),
 	$GLOBALS['t_image_sizes']['def-social'] ?? null,
@@ -357,7 +357,7 @@ assert_same(
 // ── 12. Oversize payload rejected BEFORE decoding (pre-decode guard) ────
 echo "[12] oversize base64 rejected before decode\n";
 $GLOBALS['t_sideloads'] = array();
-$data = DEF_Core_Media::rest_sideload( sideload_request( array(
+$data = Widrow_AI_Media::rest_sideload( sideload_request( array(
 	// Over the pre-decode ceiling (MAX_BYTES*4/3 + 1024 ≈ 13.3MB of b64) AND
 	// not valid base64 ('!') — if the length guard fires first, as it must,
 	// the reason is the size cap, never the decoder.
@@ -373,7 +373,7 @@ stream_wrapper_register( 'defpartial', 'DEF_Test_Partial_Stream' );
 $GLOBALS['t_tempnam_override'] = 'defpartial://tmp-image';
 $GLOBALS['t_sideloads']        = array();
 set_error_handler( function () { return true; } ); // mute the short-write notice
-$data = DEF_Core_Media::rest_sideload( sideload_request() )->get_data();
+$data = Widrow_AI_Media::rest_sideload( sideload_request() )->get_data();
 restore_error_handler();
 $GLOBALS['t_tempnam_override'] = null;
 assert_same( 'sideload_failed', $data['status'] ?? null, 'short write → sideload_failed' );

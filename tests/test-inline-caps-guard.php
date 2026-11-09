@@ -1,6 +1,6 @@
 <?php
 /**
- * The INLINE caps guard — def-core port of DEF's test_inline_caps_guard.py,
+ * The INLINE caps guard — widrow-ai port of DEF's test_inline_caps_guard.py,
  * plus the CURLOPT streaming pin.
  *
  * The named-constant gate (slice B) scans `private const` declarations. This
@@ -31,7 +31,7 @@
  *
  * Runs standalone (no WordPress bootstrap).
  *
- * @package def-core/tests
+ * @package widrow-ai/tests
  */
 
 declare(strict_types=1);
@@ -104,44 +104,44 @@ const BASELINE = array(
 	// every real IANA zone name fits. Classified at introduction (S4b card).
 	// Second occurrence (Phase 3, v6.0.0): the task creator's identical
 	// door-check on the identical column type.
-	'includes/class-def-core-staff-ai.php::if ( ! is_string( $timezone ) || \'\' === $timezone || strlen( $timezone ) > 64 ) {' => 2,
+	'includes/class-widrow-ai-staff-ai.php::if ( ! is_string( $timezone ) || \'\' === $timezone || strlen( $timezone ) > 64 ) {' => 2,
 	// Door-check for DEF's String(64) model column (P3-C, v6.2.0), mirrored
 	// from the DEF task route it proxies: REFUSES visibly (400, field named),
 	// never truncates; every registered model id fits, and DEF stays the
 	// authority on which ids exist — this bounds the shape only.
-	'includes/class-def-core-staff-ai.php::if ( ! is_string( $model ) || strlen( $model ) > 64 ) {' => 1,
+	'includes/class-widrow-ai-staff-ai.php::if ( ! is_string( $model ) || strlen( $model ) > 64 ) {' => 1,
 	// Door-check for DEF's String(64) triage-binding column (Phase 4a,
 	// v6.3.0), same class as the model/timezone entries: REFUSES visibly,
 	// never truncates; every aggregator account id fits, and OWNERSHIP is
 	// DEF's fail-closed run-time check — this bounds the shape only.
-	'includes/class-def-core-staff-ai.php::if ( ! is_string( $account ) || strlen( $account ) > 64 ) {' => 1,
-	'includes/class-def-core-admin-api.php::$error_msg = sanitize_text_field( substr( $response->get_error_message(), 0, 200 ) );' => 1,
-	'includes/class-def-core-admin.php::$error_msg = sanitize_text_field( substr( $response->get_error_message(), 0, 200 ) );' => 1,
-	'includes/class-def-core-admin.php::if ( count( $results ) >= 10 ) {' => 1,
-	'includes/class-def-core-admin.php::if ( mb_strlen( $value ) > 2048 ) {' => 1,
-	'includes/class-def-core-export.php::$context[\'sql\'] = substr( $query->request, 0, 2000 );' => 1,
-	'includes/class-def-core-knowledge-export.php::if ( is_string( $value ) && strlen( $value ) > 500 ) {' => 1,
-	'includes/class-def-core-logger.php::$request_id = substr( (string) $context[\'request_id\'], 0, 36 );' => 1,
-	'includes/class-def-core-logger.php::\'source\'     => substr( $source, 0, 20 ),' => 1,
-	'includes/class-def-core-logs-page.php::$context_display = esc_html( mb_substr( $row->context, 0, 200 ) );' => 1,
-	'includes/class-def-core-logs-page.php::$v = mb_substr( (string) $v, 0, 120 ) . ( mb_strlen( (string) $v ) > 120 ? \'...\' : \'\' );' => 1,
-	'includes/class-def-core-page-context.php::return (string) mb_substr( $text, 0, 200 );' => 1,
-	'includes/class-def-core-page-context.php::return substr( $text, 0, 200 );' => 1,
-	'includes/class-def-core-page-context.php::return substr( $value, 0, 100 );' => 1,
-	'includes/class-def-core-page-context.php::return substr( (string) $value, 0, 16 );' => 1,
-	'includes/class-def-core-site-tools.php::$truncated = array_slice( $data, 0, 10 );' => 1,
-	'includes/class-def-core-staff-ai.php::$error_msg .= \' (HTTP \' . intval( $status_code ) . \': \' . esc_html( substr( $error_body, 0, 200 ) ) . \')\';' => 1,
-	'includes/class-def-core-staff-ai.php::if ( mb_strlen( $notes ) > 2000 ) {' => 1,
-	'includes/class-def-core-staff-ai.php::if (count($events) >= 100) {' => 1,
+	'includes/class-widrow-ai-staff-ai.php::if ( ! is_string( $account ) || strlen( $account ) > 64 ) {' => 1,
+	'includes/class-widrow-ai-admin-api.php::$error_msg = sanitize_text_field( substr( $response->get_error_message(), 0, 200 ) );' => 1,
+	'includes/class-widrow-ai-admin.php::$error_msg = sanitize_text_field( substr( $response->get_error_message(), 0, 200 ) );' => 1,
+	'includes/class-widrow-ai-admin.php::if ( count( $results ) >= 10 ) {' => 1,
+	'includes/class-widrow-ai-admin.php::if ( mb_strlen( $value ) > 2048 ) {' => 1,
+	'includes/class-widrow-ai-export.php::$context[\'sql\'] = substr( $query->request, 0, 2000 );' => 1,
+	'includes/class-widrow-ai-knowledge-export.php::if ( is_string( $value ) && strlen( $value ) > 500 ) {' => 1,
+	'includes/class-widrow-ai-logger.php::$request_id = substr( (string) $context[\'request_id\'], 0, 36 );' => 1,
+	'includes/class-widrow-ai-logger.php::\'source\'     => substr( $source, 0, 20 ),' => 1,
+	'includes/class-widrow-ai-logs-page.php::$context_display = esc_html( mb_substr( $row->context, 0, 200 ) );' => 1,
+	'includes/class-widrow-ai-logs-page.php::$v = mb_substr( (string) $v, 0, 120 ) . ( mb_strlen( (string) $v ) > 120 ? \'...\' : \'\' );' => 1,
+	'includes/class-widrow-ai-page-context.php::return (string) mb_substr( $text, 0, 200 );' => 1,
+	'includes/class-widrow-ai-page-context.php::return substr( $text, 0, 200 );' => 1,
+	'includes/class-widrow-ai-page-context.php::return substr( $value, 0, 100 );' => 1,
+	'includes/class-widrow-ai-page-context.php::return substr( (string) $value, 0, 16 );' => 1,
+	'includes/class-widrow-ai-site-tools.php::$truncated = array_slice( $data, 0, 10 );' => 1,
+	'includes/class-widrow-ai-staff-ai.php::$error_msg .= \' (HTTP \' . intval( $status_code ) . \': \' . esc_html( substr( $error_body, 0, 200 ) ) . \')\';' => 1,
+	'includes/class-widrow-ai-staff-ai.php::if ( mb_strlen( $notes ) > 2000 ) {' => 1,
+	'includes/class-widrow-ai-staff-ai.php::if (count($events) >= 100) {' => 1,
 	// Roster push (7.0.0): mirrors DEF's _ROSTER_NAME_MAX, which it enforces
 	// ALL-OR-NOTHING — one name over 200 chars 422s the WHOLE roster and DEF
 	// writes nothing, so absent this bound a single long profile nickname
 	// (wp_users.display_name is varchar(250)) permanently kills every push for
 	// the tenant. REPORTS the cut with the user id; the name is evidence, never
 	// an identifier — `sub` is what DEF keys on, and it is never touched.
-	'includes/class-def-core-staff-roster.php::if ( mb_strlen( $display_name ) > 200 ) {' => 1,
-	'includes/class-def-core-staff-roster.php::$display_name = mb_substr( $display_name, 0, 200 );' => 1,
-	'includes/class-def-core-tools.php::&& strlen( $cart_token ) <= 4096' => 1,
+	'includes/class-widrow-ai-staff-roster.php::if ( mb_strlen( $display_name ) > 200 ) {' => 1,
+	'includes/class-widrow-ai-staff-roster.php::$display_name = mb_substr( $display_name, 0, 200 );' => 1,
+	'includes/class-widrow-ai-tools.php::&& strlen( $cart_token ) <= 4096' => 1,
 );
 
 // ── [1] A NEW inline cap fails at the moment it is written ───────────────────
@@ -187,10 +187,10 @@ echo "\n[3] Named inverted pins for the two that reached production (PR #271)\n"
 $compliance_cut = array();
 $display_cut    = array();
 foreach ( $found as $key => $n ) {
-	if ( strpos( $key, 'class-def-core-admin.php' ) !== false && preg_match( '/(?:mb_)?substr\s*\(\s*\$value\s*,\s*0\s*,\s*500/', $key ) ) {
+	if ( strpos( $key, 'class-widrow-ai-admin.php' ) !== false && preg_match( '/(?:mb_)?substr\s*\(\s*\$value\s*,\s*0\s*,\s*500/', $key ) ) {
 		$compliance_cut[] = $key;
 	}
-	if ( strpos( $key, 'class-def-core-admin.php' ) !== false && preg_match( '/substr\s*\(\s*\$value\s*,\s*0\s*,\s*100/', $key ) ) {
+	if ( strpos( $key, 'class-widrow-ai-admin.php' ) !== false && preg_match( '/substr\s*\(\s*\$value\s*,\s*0\s*,\s*100/', $key ) ) {
 		$display_cut[] = $key;
 	}
 }
@@ -214,7 +214,7 @@ echo "\n[4] CURLOPT streaming pin — the watchdog shape is load-bearing\n";
 // infinite (streaming), exactly two finite 30s (request + download), exactly
 // one 4s (page render — must not block the page on a DEF hiccup), and the
 // total must reconcile, so a NEW curl call site cannot ride in unclassified.
-$tools_src = file_get_contents( dirname( __DIR__ ) . '/includes/class-def-core-tools.php' );
+$tools_src = file_get_contents( dirname( __DIR__ ) . '/includes/class-widrow-ai-tools.php' );
 
 // The census and the 0-block anchor run on COMMENT-STRIPPED source — a
 // commented-out `CURLOPT_TIMEOUT => 30,` must not inflate the count or

@@ -6,7 +6,7 @@
  *
  * Usage: php tests/test-staff-ai-console-export.php
  *
- * @package def-core/tests
+ * @package widrow-ai/tests
  */
 
 declare(strict_types=1);

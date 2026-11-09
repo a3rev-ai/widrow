@@ -7,7 +7,7 @@
  * lock pins <body> and scrolls the page back on close, and with the keyboard up over
  * the pinned page the panel still fits and <html> paints the strip under it.
  *
- * Runs the SHIPPED loader (assets/js/def-core-customer-chat-loader.js), whole, in
+ * Runs the SHIPPED loader (assets/js/widrow-ai-customer-chat-loader.js), whole, in
  * a jsdom page, and drives it through real events: focus, click, keydown.
  *
  * What it holds:
@@ -25,7 +25,7 @@
  *  - Page scroll is locked on the element the viewport takes its overflow from,
  *    and closing puts back exactly the inline style that was there — unless the
  *    page cleared our lock while the chat was open, when it is left alone (#38).
- *  - Over the SHIPPED chat module (def-core-customer-chat.js, run in the same
+ *  - Over the SHIPPED chat module (widrow-ai-customer-chat.js, run in the same
  *    page): every icon-only header control is named, and reopening focuses the
  *    module's own composer — the class the loader looks for is the one it builds.
  *    The message list stays role="log" and is a named Tab stop (tabindex="0",
@@ -96,7 +96,7 @@ async function boot(opts) {
   if (opts.storage) {
     for (const k of Object.keys(opts.storage)) w.localStorage.setItem(k, opts.storage[k]);
   }
-  w.DEFCore = Object.assign({
+  w.WidrowAI = Object.assign({
     showFloatingButton: '1',
     chatDisplayMode: 'modal',
     chatModuleUrl: '', // the module never loads here unless a check builds its composer
@@ -344,7 +344,7 @@ function tag(el) {
   h.w.fetch = () => new Promise(() => {}); // requests stay pending; nothing here needs an answer
   h.trigger.click();
   h.w.eval(extract.customerChatSource());
-  h.w.DEFCustomerChat.init(h.root, h.w.DEFCore);
+  h.w.DEFCustomerChat.init(h.root, h.w.WidrowAI);
   // The menu's items sit in the header too, but carry their words as text.
   const nameOf = b => (b.getAttribute('aria-label') || b.textContent).trim();
   const allHeader = Array.from(h.root.querySelectorAll('.def-cc-header button'));
@@ -505,7 +505,7 @@ function tag(el) {
     h.w.fetch = () => new Promise(() => {});
     h.trigger.click();
     h.w.eval(extract.customerChatSource());
-    h.w.DEFCustomerChat.init(h.root, h.w.DEFCore);
+    h.w.DEFCustomerChat.init(h.root, h.w.WidrowAI);
     const list = h.root.querySelector('.def-cc-messages');
     // Up through the shadow root to the host and on to <html>.
     const chain = [];
@@ -554,7 +554,7 @@ function tag(el) {
     f.w.fetch = () => new Promise(() => {});
     f.trigger.click();
     f.w.eval(extract.customerChatSource());
-    f.w.DEFCustomerChat.init(f.root, f.w.DEFCore);
+    f.w.DEFCustomerChat.init(f.root, f.w.WidrowAI);
     await sleep(250); // past the module's 200ms first-load focus
     return f;
   }
@@ -589,8 +589,8 @@ function tag(el) {
   const spot = extract.ruleBody(loaderPhone, '.def-cc-shell--spotlight') || '';
   const phoneMedia = f => fs.readFileSync(path.join(extract.REPO, 'assets/css', f), 'utf8')
     .match(/@media[^{]*max-width: 480px[^{]*/g) || [];
-  const moduleMedia = phoneMedia('def-core-customer-chat.css');
-  const cardsMedia = phoneMedia('def-core-product-cards.css');
+  const moduleMedia = phoneMedia('widrow-ai-customer-chat.css');
+  const cardsMedia = phoneMedia('widrow-ai-product-cards.css');
   check(44, 'the stylesheets agree: the loader\'s phone block, both of the chat stylesheet\'s and the product cards\' 44px button floor include a phone held sideways, and spotlight on a phone is 100dvh tall, following Safari\'s bar as it shrinks (100vh kept for a browser without dvh)',
     loaderPhone.startsWith(PHONE) && /height: 100vh; height: 100dvh;/.test(spot) &&
     moduleMedia.length === 2 && cardsMedia.length === 1 && moduleMedia.concat(cardsMedia).every(m => m.trim() === PHONE),

@@ -8,12 +8,12 @@
  * - export_terms(): term-row shape {object_type, source_id, title, permalink,
  *   object_count} + pagination (orphan term count=0 included).
  *
- * The product/item path mirrors DEF_Core_Export (proven) and relies on
+ * The product/item path mirrors Widrow_AI_Export (proven) and relies on
  * WooCommerce; it's covered by integration rather than heavy WC stubbing here.
  *
  * Runs standalone with WP stubs:  php tests/test-search-export.php
  *
- * @package def-core/tests
+ * @package widrow-ai/tests
  */
 
 declare(strict_types=1);
@@ -74,8 +74,8 @@ if ( ! class_exists( 'WP_REST_Response' ) ) {
 	}
 }
 
-require_once __DIR__ . '/../includes/class-def-core-export.php';
-require_once __DIR__ . '/../includes/class-def-core-search-export.php';
+require_once __DIR__ . '/../includes/class-widrow-ai-export.php';
+require_once __DIR__ . '/../includes/class-widrow-ai-search-export.php';
 
 // ── Test runner ──────────────────────────────────────────────────────────
 
@@ -95,7 +95,7 @@ function assert_test( bool $cond, string $name ): void {
 	}
 }
 
-$ref = new ReflectionClass( 'DEF_Core_Search_Export' );
+$ref = new ReflectionClass( 'Widrow_AI_Search_Export' );
 function _method( ReflectionClass $ref, string $name ): ReflectionMethod {
 	$m = $ref->getMethod( $name );
 	$m->setAccessible( true );

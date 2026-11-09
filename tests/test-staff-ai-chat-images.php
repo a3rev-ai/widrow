@@ -22,7 +22,7 @@
  * Runs standalone (no WordPress bootstrap), the test-staff-ai-download-auth.php
  * harness pattern.
  *
- * @package def-core/tests
+ * @package widrow-ai/tests
  */
 
 declare(strict_types=1);
@@ -30,11 +30,11 @@ declare(strict_types=1);
 if ( ! defined( 'ABSPATH' ) ) {
 	define( 'ABSPATH', dirname( __DIR__ ) . '/' );
 }
-if ( ! defined( 'DEF_CORE_PLUGIN_DIR' ) ) {
-	define( 'DEF_CORE_PLUGIN_DIR', dirname( __DIR__ ) . '/' );
+if ( ! defined( 'WIDROW_AI_PLUGIN_DIR' ) ) {
+	define( 'WIDROW_AI_PLUGIN_DIR', dirname( __DIR__ ) . '/' );
 }
-if ( ! defined( 'DEF_CORE_VERSION' ) ) {
-	define( 'DEF_CORE_VERSION', '8.0.0' );
+if ( ! defined( 'WIDROW_AI_VERSION' ) ) {
+	define( 'WIDROW_AI_VERSION', '8.0.0' );
 }
 
 require_once __DIR__ . '/wp-stubs.php';
@@ -211,16 +211,16 @@ if ( ! function_exists( 'wp_remote_retrieve_header' ) ) {
 		return is_array( $response ) ? (string) ( $response['headers'][ $header ] ?? '' ) : '';
 	}
 }
-if ( ! class_exists( 'DEF_Core' ) ) {
-	class DEF_Core {
+if ( ! class_exists( 'Widrow_AI' ) ) {
+	class Widrow_AI {
 		public static function get_def_api_url_internal(): ?string {
-			$url = get_option( 'def_core_staff_ai_api_url', '' );
+			$url = get_option( 'widrow_ai_staff_ai_api_url', '' );
 			return ! empty( $url ) ? rtrim( $url, '/' ) : null;
 		}
 	}
 }
-if ( ! class_exists( 'DEF_Core_Tools' ) ) {
-	class DEF_Core_Tools {
+if ( ! class_exists( 'Widrow_AI_Tools' ) ) {
+	class Widrow_AI_Tools {
 		public static function get_user_def_capabilities( $user ): array {
 			global $_wp_test_user_caps;
 			return $_wp_test_user_caps;
@@ -228,10 +228,10 @@ if ( ! class_exists( 'DEF_Core_Tools' ) ) {
 	}
 }
 
-require_once dirname( __DIR__ ) . '/includes/class-def-core-staff-ai.php';
+require_once dirname( __DIR__ ) . '/includes/class-widrow-ai-staff-ai.php';
 
-update_option( 'def_core_staff_ai_api_url', 'http://backend:8000' );
-update_option( 'def_core_api_key', 'test-api-key-images' );
+update_option( 'widrow_ai_staff_ai_api_url', 'http://backend:8000' );
+update_option( 'widrow_ai_api_key', 'test-api-key-images' );
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -250,7 +250,7 @@ function check( bool $cond, string $label ): void {
 }
 
 function call_private( string $method, ...$args ) {
-	$m = new ReflectionMethod( 'DEF_Core_Staff_AI', $method );
+	$m = new ReflectionMethod( 'Widrow_AI_Staff_AI', $method );
 	$m->setAccessible( true );
 	return $m->invoke( null, ...$args );
 }
@@ -287,9 +287,9 @@ echo "The init proxy and the companion declaration\n";
 
 function init_body_sent( array $json ): array {
 	global $_wp_test_remote_calls, $_wp_test_remote_responses;
-	reset_state( true, array( 'def_staff_access' ) );
+	reset_state( true, array( 'widrow_staff_access' ) );
 	$_wp_test_remote_responses[] = ok_json( array( 'file_id' => 'upload_1', 'upload_url' => 'https://blob/o' ) );
-	DEF_Core_Staff_AI::rest_upload_init( new WP_REST_Request( array(), $json ) );
+	Widrow_AI_Staff_AI::rest_upload_init( new WP_REST_Request( array(), $json ) );
 	return json_decode( $_wp_test_remote_calls[0]['args']['body'] ?? '{}', true );
 }
 
@@ -315,7 +315,7 @@ check( ( $sent['thumbnail']['size_bytes'] ?? 0 ) === 400000, 'the bound is the s
 
 echo "\nThe history mapper\n";
 
-reset_state( true, array( 'def_staff_access' ) );
+reset_state( true, array( 'widrow_staff_access' ) );
 $_wp_test_remote_responses[] = ok_json( array( 'messages' => array(
 	array(
 		'role' => 'user', 'content' => 'here', 'timestamp' => '2026-09-14T08:00:00Z',
@@ -329,7 +329,7 @@ $_wp_test_remote_responses[] = ok_json( array( 'messages' => array(
 	),
 	array( 'role' => 'assistant', 'content' => 'ok', 'timestamp' => '2026-09-14T08:00:01Z' ),
 ) ) );
-$resp = DEF_Core_Staff_AI::rest_load_conversation( new WP_REST_Request( array( 'id' => 'staff-1' ) ) );
+$resp = Widrow_AI_Staff_AI::rest_load_conversation( new WP_REST_Request( array( 'id' => 'staff-1' ) ) );
 $msgs = $resp instanceof WP_REST_Response ? ( $resp->data['messages'] ?? array() ) : array();
 check( count( $msgs ) === 2, 'both turns come back' );
 check( ( $msgs[0]['attachments'] ?? null ) === array(
@@ -339,23 +339,23 @@ check( ( $msgs[0]['attachments'] ?? null ) === array(
 check( ( $msgs[1]['attachments'] ?? null ) === array(), 'a turn without attachments carries an empty list' );
 
 // 8.7.14: the console polls a turn it could not re-attach to until DEF says it is done.
-reset_state( true, array( 'def_staff_access' ) );
+reset_state( true, array( 'widrow_staff_access' ) );
 $_wp_test_remote_responses[] = ok_json( array( 'messages' => array(
 	array( 'role' => 'user', 'content' => 'build the sheet' ),
 	array( 'role' => 'assistant', 'content' => '', 'is_complete' => false ),
 ) ) );
-$resp = DEF_Core_Staff_AI::rest_load_conversation( new WP_REST_Request( array( 'id' => 'staff-1' ) ) );
+$resp = Widrow_AI_Staff_AI::rest_load_conversation( new WP_REST_Request( array( 'id' => 'staff-1' ) ) );
 $msgs = $resp instanceof WP_REST_Response ? ( $resp->data['messages'] ?? array() ) : array();
 check( ( $msgs[1]['is_complete'] ?? null ) === false, 'a reply DEF says is still being written carries is_complete false' );
 check( ! array_key_exists( 'is_complete', $msgs[0] ?? array() ), 'a message DEF says nothing about carries no is_complete (the console then reads a reply with words as done)' );
 
 // W82: a reply the person stopped keeps its "Stopped" note when the console renders the thread.
-reset_state( true, array( 'def_staff_access' ) );
+reset_state( true, array( 'widrow_staff_access' ) );
 $_wp_test_remote_responses[] = ok_json( array( 'messages' => array(
 	array( 'role' => 'assistant', 'content' => 'Half a', 'stopped' => true ),
 	array( 'role' => 'assistant', 'content' => 'All of it.' ),
 ) ) );
-$resp = DEF_Core_Staff_AI::rest_load_conversation( new WP_REST_Request( array( 'id' => 'staff-1' ) ) );
+$resp = Widrow_AI_Staff_AI::rest_load_conversation( new WP_REST_Request( array( 'id' => 'staff-1' ) ) );
 $msgs = $resp instanceof WP_REST_Response ? ( $resp->data['messages'] ?? array() ) : array();
 check( ( $msgs[0]['stopped'] ?? null ) === true && ( $msgs[1]['stopped'] ?? null ) === false,
 	'a stopped reply carries stopped; a finished one carries false' );
@@ -364,7 +364,7 @@ check( ( $msgs[0]['stopped'] ?? null ) === true && ( $msgs[1]['stopped'] ?? null
 
 echo "\nThe attachment proxy\n";
 
-reset_state( true, array( 'def_staff_access' ) );
+reset_state( true, array( 'widrow_staff_access' ) );
 $e = invoke_attachment();
 check( count( $GLOBALS['_wp_test_remote_calls'] ) === 1, 'exactly one backend call made' );
 $call    = $GLOBALS['_wp_test_remote_calls'][0];
@@ -372,11 +372,11 @@ $headers = $call['args']['headers'] ?? array();
 check( $call['url'] === 'http://backend:8000/api/staff_ai/uploads/upload_0123abcd/content?thread_id=staff-1a2b3c4d5e6f7a8b&variant=thumbnail',
 	'DEF\'s read-back route, with the console\'s thread and the variant' );
 check( ( $headers['X-DEF-API-Key'] ?? '' ) === 'test-api-key-images' && ( $headers['X-DEF-User'] ?? '' ) === '7'
-	&& strpos( $headers['X-DEF-User-Capabilities'] ?? '', 'def_staff_access' ) !== false, 'the BFF header set rides the request' );
+	&& strpos( $headers['X-DEF-User-Capabilities'] ?? '', 'widrow_staff_access' ) !== false, 'the BFF header set rides the request' );
 check( ! isset( $headers['Authorization'] ), 'no Authorization/JWT header' );
 check( $e !== null && strpos( $e->getMessage(), 'test-api-key-images' ) === false, 'the API key never appears in the error surface' );
 
-reset_state( true, array( 'def_staff_access' ), array( 'staff_ai_attachment' => 'upload_0123abcd', 'staff_ai_thread' => 'staff-1a2b3c4d5e6f7a8b' ) );
+reset_state( true, array( 'widrow_staff_access' ), array( 'staff_ai_attachment' => 'upload_0123abcd', 'staff_ai_thread' => 'staff-1a2b3c4d5e6f7a8b' ) );
 invoke_attachment();
 check( substr( $GLOBALS['_wp_test_remote_calls'][0]['url'], -16 ) === 'variant=original', 'no variant in the address → the original' );
 
@@ -388,15 +388,15 @@ reset_state( true, array() );
 $e = invoke_attachment();
 check( $e !== null && $e->status === 403 && count( $GLOBALS['_wp_test_remote_calls'] ) === 0, 'no staff capability → 403, no backend call' );
 
-reset_state( true, array( 'def_staff_access' ), array( 'staff_ai_attachment' => '../etc/passwd', 'staff_ai_thread' => 'staff-1' ) );
+reset_state( true, array( 'widrow_staff_access' ), array( 'staff_ai_attachment' => '../etc/passwd', 'staff_ai_thread' => 'staff-1' ) );
 $e = invoke_attachment();
 check( $e !== null && $e->status === 400 && count( $GLOBALS['_wp_test_remote_calls'] ) === 0, 'a file id that is not an id → 400 before anything' );
 
-reset_state( true, array( 'def_staff_access' ), array( 'staff_ai_attachment' => 'upload_1', 'staff_ai_thread' => 'staff 1/../x' ) );
+reset_state( true, array( 'widrow_staff_access' ), array( 'staff_ai_attachment' => 'upload_1', 'staff_ai_thread' => 'staff 1/../x' ) );
 $e = invoke_attachment();
 check( $e !== null && $e->status === 400 && count( $GLOBALS['_wp_test_remote_calls'] ) === 0, 'a thread that is not an id → 400 before anything' );
 
-reset_state( true, array( 'def_staff_access' ) );
+reset_state( true, array( 'widrow_staff_access' ) );
 $GLOBALS['_wp_test_remote_responses'][] = array( 'response' => array( 'code' => 404 ), 'body' => '{"detail":"Upload not found"}', 'headers' => array() );
 $e = invoke_attachment();
 check( $e !== null && $e->status === 404 && strpos( $e->getMessage(), 'Upload not found' ) === false, 'DEF\'s 404 (not this reader\'s, in this thread) stands; its body does not travel' );
@@ -417,15 +417,15 @@ check( in_array( 'Content-Disposition: attachment; filename="qX: y.pdf"', $lines
 echo "\nThe rewrite flush\n";
 
 $GLOBALS['_wp_test_flushes'] = 0;
-DEF_Core_Staff_AI::maybe_flush_rewrite_rules();
-check( $GLOBALS['_wp_test_flushes'] === 1 && get_option( 'def_core_rewrite_version' ) === '8.0.0', 'a version not yet flushed flushes once and stamps the version' );
-DEF_Core_Staff_AI::maybe_flush_rewrite_rules();
+Widrow_AI_Staff_AI::maybe_flush_rewrite_rules();
+check( $GLOBALS['_wp_test_flushes'] === 1 && get_option( 'widrow_ai_rewrite_version' ) === '8.0.0', 'a version not yet flushed flushes once and stamps the version' );
+Widrow_AI_Staff_AI::maybe_flush_rewrite_rules();
 check( $GLOBALS['_wp_test_flushes'] === 1, 'the same version never flushes again' );
-update_option( 'def_core_rewrite_version', '7.9.19' );
-DEF_Core_Staff_AI::maybe_flush_rewrite_rules();
+update_option( 'widrow_ai_rewrite_version', '7.9.19' );
+Widrow_AI_Staff_AI::maybe_flush_rewrite_rules();
 check( $GLOBALS['_wp_test_flushes'] === 2, 'an update (the stamp is the old version) flushes once more' );
 
-$vars = DEF_Core_Staff_AI::add_query_vars( array() );
+$vars = Widrow_AI_Staff_AI::add_query_vars( array() );
 check( in_array( 'staff_ai_attachment', $vars, true ) && in_array( 'staff_ai_thread', $vars, true ) && in_array( 'staff_ai_variant', $vars, true ), 'the three query vars the rewrite fills are registered' );
 
 // ── Summary ──────────────────────────────────────────────────────────────

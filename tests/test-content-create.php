@@ -2,7 +2,7 @@
 /**
  * Content Agent "Create New" (Engine 2, Wave 1) — create-post bridge tests.
  *
- * Verifies the def-core half of on-demand create:
+ * Verifies the widrow-ai half of on-demand create:
  *  - semantic_to_blocks() serializes authored semantic JSON to core Gutenberg
  *    block structures (paragraph / heading / list / image placeholder).
  *  - POST /content/create-post (rest_create_post) inserts a DRAFT post
@@ -16,7 +16,7 @@
  *
  * Runs standalone (no WordPress bootstrap).
  *
- * @package def-core/tests
+ * @package widrow-ai/tests
  */
 
 declare(strict_types=1);
@@ -70,7 +70,7 @@ $GLOBALS['t_current_user'] = 0;
 if ( ! function_exists( 'current_user_can' ) ) {
 	function current_user_can( $cap, ...$a ) {
 		if ( 'edit_posts' === $cap ) { return (bool) $GLOBALS['t_can_create']; }
-		return true; // def_staff_access etc.
+		return true; // widrow_staff_access etc.
 	}
 }
 if ( ! function_exists( 'wp_set_current_user' ) ) {
@@ -148,7 +148,7 @@ if ( ! function_exists( 'get_post' ) ) {
 }
 if ( ! function_exists( 'get_post_meta' ) ) {
 	function get_post_meta( $id, $key, $single = false ) {
-		if ( '_def_created' === $key ) {
+		if ( '_widrow_created' === $key ) {
 			return ! empty( $GLOBALS['t_attachments'][ (int) $id ]['def_created'] ) ? 1 : '';
 		}
 		return '';
@@ -181,10 +181,10 @@ if ( ! function_exists( 'esc_url' ) ) {
 	function esc_url( $u ) { return (string) $u; }
 }
 
-require_once DEF_CORE_PLUGIN_DIR . 'includes/class-def-core-knowledge-exclusion.php'; // META_KEY for the fail-closed default
-require_once DEF_CORE_PLUGIN_DIR . 'includes/class-def-core-seo-meta.php';
-require_once DEF_CORE_PLUGIN_DIR . 'includes/class-def-core-blocks.php';
-require_once DEF_CORE_PLUGIN_DIR . 'includes/class-def-core-media.php';
+require_once WIDROW_AI_PLUGIN_DIR . 'includes/class-widrow-ai-knowledge-exclusion.php'; // META_KEY for the fail-closed default
+require_once WIDROW_AI_PLUGIN_DIR . 'includes/class-widrow-ai-seo-meta.php';
+require_once WIDROW_AI_PLUGIN_DIR . 'includes/class-widrow-ai-blocks.php';
+require_once WIDROW_AI_PLUGIN_DIR . 'includes/class-widrow-ai-media.php';
 
 $_SERVER['HTTP_X_DEF_USER'] = '5';
 
@@ -213,7 +213,7 @@ function priv_static( string $class, string $method, array $args ) {
 
 // ── 1. semantic_to_blocks serializes the supported node types ───────────
 echo "[1] semantic JSON → core block structures\n";
-$blocks = priv_static( 'DEF_Core_Blocks', 'semantic_to_blocks', array( array(
+$blocks = priv_static( 'Widrow_AI_Blocks', 'semantic_to_blocks', array( array(
 	array( 'type' => 'heading', 'level' => 2, 'text' => 'Hello' ),
 	array( 'type' => 'paragraph', 'text' => 'World' ),
 	array( 'type' => 'list', 'ordered' => false, 'items' => array( 'a', 'b' ) ),
@@ -236,7 +236,7 @@ assert_same( 'core/paragraph', $blocks[3]['blockName'], 'image placeholder → v
 assert_true( false !== strpos( $blocks[3]['innerHTML'], 'Image: cat' ), 'image alt carried into placeholder' );
 
 // Heading level clamps and non-2 carries the level attr.
-$h3 = priv_static( 'DEF_Core_Blocks', 'semantic_to_blocks', array( array(
+$h3 = priv_static( 'Widrow_AI_Blocks', 'semantic_to_blocks', array( array(
 	array( 'type' => 'heading', 'level' => 9, 'text' => 'X' ), // out of range → 2
 	array( 'type' => 'heading', 'level' => 3, 'text' => 'Y' ),
 ) ) );
@@ -258,7 +258,7 @@ $req->set_json( array(
 	'meta_description'    => 'A meta description.',
 	'seo_title'           => 'My SEO Title',
 ) );
-$resp = DEF_Core_Blocks::rest_create_post( $req );
+$resp = Widrow_AI_Blocks::rest_create_post( $req );
 $data = $resp->get_data();
 assert_same( 'created', $data['status'], 'returns status=created' );
 assert_same( 123, $data['post_id'], 'returns post_id' );
@@ -273,13 +273,13 @@ $meta_keys = array_map( static function ( $w ) { return $w['key']; }, $GLOBALS['
 assert_true( in_array( '_yoast_wpseo_metadesc', $meta_keys, true ), 'meta description written (yoast)' );
 assert_true( in_array( '_yoast_wpseo_title', $meta_keys, true ), 'seo title written (yoast)' );
 assert_true( in_array( '_yoast_wpseo_focuskw', $meta_keys, true ), 'focus keyphrase written (create sets it)' );
-assert_true( in_array( '_def_content_optimized_at', $meta_keys, true ), 'optimized stamp written' );
+assert_true( in_array( '_widrow_content_optimized_at', $meta_keys, true ), 'optimized stamp written' );
 
 // Fail-closed Company-Knowledge default (Engine 2.5 safeguard): the created
 // draft is born EXCLUDED — the existing editor-checkbox meta, set truthy.
 $exclusion = null;
 foreach ( $GLOBALS['t_meta_writes'] as $w ) {
-	if ( DEF_Core_Knowledge_Exclusion::META_KEY === $w['key'] ) { $exclusion = $w; }
+	if ( Widrow_AI_Knowledge_Exclusion::META_KEY === $w['key'] ) { $exclusion = $w; }
 }
 assert_true( null !== $exclusion, 'knowledge-exclusion meta written on create (fail-closed)' );
 assert_same( true, $exclusion['value'] ?? null, 'exclusion meta set truthy — born excluded' );
@@ -291,7 +291,7 @@ $GLOBALS['t_can_create'] = false;
 $GLOBALS['t_inserts']    = array();
 $req = new WP_REST_Request( 'POST', '' );
 $req->set_json( array( 'title' => 'Nope', 'content' => array() ) );
-$resp = DEF_Core_Blocks::rest_create_post( $req );
+$resp = Widrow_AI_Blocks::rest_create_post( $req );
 assert_true( is_wp_error( $resp ), 'returns WP_Error without capability' );
 assert_same( 'rest_forbidden', $resp->get_error_code(), 'error code rest_forbidden' );
 assert_same( 403, $resp->get_error_data()['status'], 'HTTP 403' );
@@ -303,7 +303,7 @@ $GLOBALS['t_can_create'] = true;
 $GLOBALS['t_inserts']    = array();
 $req = new WP_REST_Request( 'POST', '' );
 $req->set_json( array( 'content' => array( array( 'type' => 'paragraph', 'text' => 'x' ) ) ) );
-$data = DEF_Core_Blocks::rest_create_post( $req )->get_data();
+$data = Widrow_AI_Blocks::rest_create_post( $req )->get_data();
 assert_same( 'invalid', $data['status'], 'returns status=invalid' );
 assert_same( array(), $GLOBALS['t_inserts'], 'no insert when title missing' );
 
@@ -313,7 +313,7 @@ $GLOBALS['t_attachments'] = array(
 	10 => array( 'post_type' => 'attachment', 'post_parent' => 0, 'def_created' => true ),
 	11 => array( 'post_type' => 'attachment', 'post_parent' => 0, 'def_created' => false ),
 );
-$blocks = priv_static( 'DEF_Core_Blocks', 'semantic_to_blocks', array( array(
+$blocks = priv_static( 'Widrow_AI_Blocks', 'semantic_to_blocks', array( array(
 	array( 'type' => 'image', 'attachment_id' => 10, 'alt' => 'A "quoted" cat' ),
 	array( 'type' => 'image', 'attachment_id' => 11, 'alt' => 'not def-created' ),
 	array( 'type' => 'image', 'attachment_id' => 99, 'alt' => 'missing' ),
@@ -351,7 +351,7 @@ $req->set_json( array(
 	),
 	'featured_media' => 20,
 ) );
-$data = DEF_Core_Blocks::rest_create_post( $req )->get_data();
+$data = Widrow_AI_Blocks::rest_create_post( $req )->get_data();
 assert_same( 'created', $data['status'], 'created' );
 assert_same( array( array( 'post' => 123, 'att' => 20 ) ), $GLOBALS['t_thumbnails'], 'set_post_thumbnail(new post, featured)' );
 $writes = array();
@@ -368,7 +368,7 @@ assert_same( 123, $adopted[21] ?? null, 'body attachment adopted (post_parent �
 // def-social rendition missing → social meta falls back to the full-size URL.
 $GLOBALS['t_meta_writes']     = array();
 $GLOBALS['t_has_social_size'] = false;
-$data = DEF_Core_Blocks::rest_create_post( $req )->get_data();
+$data = Widrow_AI_Blocks::rest_create_post( $req )->get_data();
 $writes = array();
 foreach ( $GLOBALS['t_meta_writes'] as $w ) { $writes[ $w['key'] ] = $w['value']; }
 assert_same( 'https://site.test/uploads/img-20-full.png', $writes['_yoast_wpseo_opengraph-image'] ?? null, 'missing rendition → full-size URL fallback' );
@@ -388,7 +388,7 @@ $req->set_json( array(
 	'content'        => array( array( 'type' => 'paragraph', 'text' => 'Body' ) ),
 	'featured_media' => 30,
 ) );
-$data = DEF_Core_Blocks::rest_create_post( $req )->get_data();
+$data = Widrow_AI_Blocks::rest_create_post( $req )->get_data();
 assert_same( 'created', $data['status'], 'still created' );
 assert_same( array(), $GLOBALS['t_thumbnails'], 'no thumbnail for a non-DEF attachment' );
 $keys = array_map( static function ( $w ) { return $w['key']; }, $GLOBALS['t_meta_writes'] );

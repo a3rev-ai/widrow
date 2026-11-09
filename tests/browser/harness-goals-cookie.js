@@ -20,7 +20,7 @@ const COOKIE_FN = extract.slice('setChatRefCookie',
 const PAGE_FN = extract.slice('reportPageReached',
 	l => l.startsWith('\tfunction reportPageReached() {'),
 	l => l.includes('─── Init'),
-	['goals/page'], 'CC_LOADER', path.join(extract.REPO, 'assets/js/def-core-customer-chat-loader.js'));
+	['goals/page'], 'CC_LOADER', path.join(extract.REPO, 'assets/js/widrow-ai-customer-chat-loader.js'));
 
 const REF = 'orch-0123456789abcdef';
 

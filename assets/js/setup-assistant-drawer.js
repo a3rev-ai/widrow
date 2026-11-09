@@ -2,11 +2,11 @@
  * Digital Employee Framework - Setup Assistant Drawer
  *
  * Right-side slide-in chat panel for the Setup Assistant.
- * Communicates with the DEF backend via def-core REST proxy.
+ * Communicates with the DEF backend via widrow-ai REST proxy.
  * Handles: chat, thread persistence, ui_actions, dirty field tracking,
  * first-visit auto-open, and WCAG accessibility.
  *
- * @package def-core
+ * @package widrow-ai
  * @since   2.0.0
  */
 (function () {
@@ -28,56 +28,56 @@
 	];
 
 	var FIELD_MAP = {
-		'api_url':                    { id: 'def_core_staff_ai_api_url',   max_length: 2000 },
-		'api_key':                    { id: 'def_core_api_key',            max_length: 256 },
-		'display_name':               { id: 'def_core_display_name' },
-		'chat_hero_image_id':         { id: 'def_core_chat_hero_image_id', max_length: 10 },
-		'chat_hero_image_mobile_id':  { id: 'def_core_chat_hero_image_mobile_id', max_length: 10 },
-		'chat_drawer_width':          { id: 'def_core_chat_drawer_width',  max_length: 5 },
-		'chat_spotlight_width':       { id: 'def_core_chat_spotlight_width',  max_length: 5 },
-		'chat_spotlight_height':      { id: 'def_core_chat_spotlight_height', max_length: 5 },
-		'chat_opening_message':       { id: 'def_core_chat_opening_message' },
-		'chat_welcome_chip_1':        { id: 'def_core_chat_welcome_chip_1' },
-		'chat_welcome_chip_1_intro':  { id: 'def_core_chat_welcome_chip_1_intro' },
-		'chat_welcome_chip_2':        { id: 'def_core_chat_welcome_chip_2' },
-		'chat_welcome_chip_2_intro':  { id: 'def_core_chat_welcome_chip_2_intro' },
-		'chat_welcome_chip_3':        { id: 'def_core_chat_welcome_chip_3' },
-		'chat_welcome_chip_3_intro':  { id: 'def_core_chat_welcome_chip_3_intro' },
+		'api_url':                    { id: 'widrow_ai_staff_ai_api_url',   max_length: 2000 },
+		'api_key':                    { id: 'widrow_ai_api_key',            max_length: 256 },
+		'display_name':               { id: 'widrow_ai_display_name' },
+		'chat_hero_image_id':         { id: 'widrow_ai_chat_hero_image_id', max_length: 10 },
+		'chat_hero_image_mobile_id':  { id: 'widrow_ai_chat_hero_image_mobile_id', max_length: 10 },
+		'chat_drawer_width':          { id: 'widrow_ai_chat_drawer_width',  max_length: 5 },
+		'chat_spotlight_width':       { id: 'widrow_ai_chat_spotlight_width',  max_length: 5 },
+		'chat_spotlight_height':      { id: 'widrow_ai_chat_spotlight_height', max_length: 5 },
+		'chat_opening_message':       { id: 'widrow_ai_chat_opening_message' },
+		'chat_welcome_chip_1':        { id: 'widrow_ai_chat_welcome_chip_1' },
+		'chat_welcome_chip_1_intro':  { id: 'widrow_ai_chat_welcome_chip_1_intro' },
+		'chat_welcome_chip_2':        { id: 'widrow_ai_chat_welcome_chip_2' },
+		'chat_welcome_chip_2_intro':  { id: 'widrow_ai_chat_welcome_chip_2_intro' },
+		'chat_welcome_chip_3':        { id: 'widrow_ai_chat_welcome_chip_3' },
+		'chat_welcome_chip_3_intro':  { id: 'widrow_ai_chat_welcome_chip_3_intro' },
 		// No max_length on free-text content fields (5.7.11): the server
 		// stopped bounding them — a client-side slice here would be the last
 		// silent truncation left standing. See the slice warning below.
-		'chat_compliance_text':       { id: 'def_core_chat_compliance_text' },
-		'chat_privacy_link_label':    { id: 'def_core_chat_privacy_link_label' },
-		'chat_button_color':          { id: 'def_core_chat_button_color',  max_length: 7, type: 'color' },
-		'chat_button_hover_color':    { id: 'def_core_chat_button_hover_color', max_length: 7, type: 'color' },
-		'allowed_origins':            { id: 'def_core_allowed_origins',    max_length: 2000 },
+		'chat_compliance_text':       { id: 'widrow_ai_chat_compliance_text' },
+		'chat_privacy_link_label':    { id: 'widrow_ai_chat_privacy_link_label' },
+		'chat_button_color':          { id: 'widrow_ai_chat_button_color',  max_length: 7, type: 'color' },
+		'chat_button_hover_color':    { id: 'widrow_ai_chat_button_hover_color', max_length: 7, type: 'color' },
+		'allowed_origins':            { id: 'widrow_ai_allowed_origins',    max_length: 2000 },
 		'escalation_customer':        { id: 'escalation_customer',         max_length: 320 },
 		'escalation_setup_assistant': { id: 'escalation_setup_assistant',  max_length: 320 },
-		'chat_escalation_title':     { id: 'def_core_chat_escalation_title' },
-		'chat_escalation_desc':      { id: 'def_core_chat_escalation_desc' },
-		'chat_escalation_business_fields':{ id: 'def_core_chat_escalation_business_fields' },
-		'chat_escalation_pref_enabled':{ id: 'def_core_chat_escalation_pref_enabled', type: 'checkbox' },
-		'chat_escalation_pref_options':{ id: 'def_core_chat_escalation_pref_options' },
-		'chat_escalation_ack_enabled':{ id: 'def_core_chat_escalation_ack_enabled', type: 'checkbox' },
-		'chat_escalation_ack_subject':{ id: 'def_core_chat_escalation_ack_subject' },
-		'chat_escalation_ack_body':  { id: 'def_core_chat_escalation_ack_body' },
-		'app_icon_id': { id: 'def_core_app_icon_id' },
-		'logo_max_height': { id: 'def_core_logo_max_height' },
-		'chat_button_icon_id': { id: 'def_core_chat_button_icon_id' },
-		'chat_loading_mark_id': { id: 'def_core_chat_loading_mark_id' },
-		'chat_privacy_url': { id: 'def_core_chat_privacy_url' },
-		'logo_show_staff_ai': { id: 'def_core_logo_show_staff_ai', type: 'checkbox' },
-		'logo_show_customer_chat': { id: 'def_core_logo_show_customer_chat', type: 'checkbox' },
-		'chat_show_floating': { id: 'def_core_chat_show_floating', type: 'checkbox' },
-		'chat_ai_notice': { id: 'def_core_chat_ai_notice', type: 'checkbox' },
-		'chat_button_position': { type: 'radio', name: 'def_core_chat_button_position' },
-		'chat_display_mode':          { type: 'radio', name: 'def_core_chat_display_mode', max_length: 10 },
-		'chat_button_icon':           { type: 'radio', name: 'def_core_chat_button_icon', max_length: 10 },
+		'chat_escalation_title':     { id: 'widrow_ai_chat_escalation_title' },
+		'chat_escalation_desc':      { id: 'widrow_ai_chat_escalation_desc' },
+		'chat_escalation_business_fields':{ id: 'widrow_ai_chat_escalation_business_fields' },
+		'chat_escalation_pref_enabled':{ id: 'widrow_ai_chat_escalation_pref_enabled', type: 'checkbox' },
+		'chat_escalation_pref_options':{ id: 'widrow_ai_chat_escalation_pref_options' },
+		'chat_escalation_ack_enabled':{ id: 'widrow_ai_chat_escalation_ack_enabled', type: 'checkbox' },
+		'chat_escalation_ack_subject':{ id: 'widrow_ai_chat_escalation_ack_subject' },
+		'chat_escalation_ack_body':  { id: 'widrow_ai_chat_escalation_ack_body' },
+		'app_icon_id': { id: 'widrow_ai_app_icon_id' },
+		'logo_max_height': { id: 'widrow_ai_logo_max_height' },
+		'chat_button_icon_id': { id: 'widrow_ai_chat_button_icon_id' },
+		'chat_loading_mark_id': { id: 'widrow_ai_chat_loading_mark_id' },
+		'chat_privacy_url': { id: 'widrow_ai_chat_privacy_url' },
+		'logo_show_staff_ai': { id: 'widrow_ai_logo_show_staff_ai', type: 'checkbox' },
+		'logo_show_customer_chat': { id: 'widrow_ai_logo_show_customer_chat', type: 'checkbox' },
+		'chat_show_floating': { id: 'widrow_ai_chat_show_floating', type: 'checkbox' },
+		'chat_ai_notice': { id: 'widrow_ai_chat_ai_notice', type: 'checkbox' },
+		'chat_button_position': { type: 'radio', name: 'widrow_ai_chat_button_position' },
+		'chat_display_mode':          { type: 'radio', name: 'widrow_ai_chat_display_mode', max_length: 10 },
+		'chat_button_icon':           { type: 'radio', name: 'widrow_ai_chat_button_icon', max_length: 10 },
 		// max_length removed 5.7.11 (ten-bounds deletion): with the REST bound
 		// gone this slice was the field's ONLY remaining cut — silent, with no
 		// refusing partner. Found by the #277 panel; the entry sits after the
 		// radio fields, apart from the content block, which is how it was missed.
-		'chat_button_label':          { id: 'def_core_chat_button_label' }
+		'chat_button_label':          { id: 'widrow_ai_chat_button_label' }
 	};
 
 	var TOOL_STATUS_LABELS = {
@@ -103,10 +103,10 @@
 	};
 
 	// Secret fields: never send raw values in dirty context.
-	var SECRET_FIELDS = ['def_core_api_key'];
+	var SECRET_FIELDS = ['widrow_ai_api_key'];
 
 	// Namespace localStorage keys per site to avoid cross-install collisions.
-	var LS_PREFIX     = 'def_sa_' + (config.restUrl || '').replace(/[^a-z0-9]/gi, '').slice(0, 32) + '_';
+	var LS_PREFIX     = 'widrow_sa_' + (config.restUrl || '').replace(/[^a-z0-9]/gi, '').slice(0, 32) + '_';
 	var LS_SEEN_KEY   = LS_PREFIX + 'seen';
 
 	// ── S4: the desktop column collapses to a rail ────────────────────────
@@ -539,7 +539,7 @@
 		};
 	};
 
-	// The two desktop labels are localized in class-def-core-admin.php; the
+	// The two desktop labels are localized in class-widrow-ai-admin.php; the
 	// English is the fallback for a page that somehow ships without the config,
 	// not the shipped string. `phone` is not localized here at all — it is the
 	// label the TEMPLATE rendered, captured in init() before anything overwrites
@@ -608,7 +608,7 @@
 
 	// ─── Chat ────────────────────────────────────────────────────
 
-	// KEEP IN SYNC: def-core-customer-chat.js, staff-ai.js, setup-assistant-drawer.js
+	// KEEP IN SYNC: widrow-ai-customer-chat.js, staff-ai.js, setup-assistant-drawer.js
 	function classifySuggestionOutcome(sentText, suggestion) {
 		if (!suggestion) return { outcome: null, score: null };
 		var normalize = function(s) {
@@ -1518,7 +1518,7 @@
 
 			// Color inputs: update the preview span directly and force swatch repaint.
 			if (fieldConfig.type === 'color') {
-				var valueSpan = el.parentElement && el.parentElement.querySelector('.def-core-color-value');
+				var valueSpan = el.parentElement && el.parentElement.querySelector('.widrow-ai-color-value');
 				if (valueSpan) {
 					valueSpan.textContent = value;
 				}
@@ -1557,7 +1557,7 @@
 		var caps = action.capabilities || {};
 		if (!userId) return;
 
-		var tbody = document.getElementById('def-core-roles-tbody');
+		var tbody = document.getElementById('widrow-ai-roles-tbody');
 		if (!tbody) return;
 
 		var row = tbody.querySelector('tr[data-user-id="' + userId + '"]');
@@ -1578,7 +1578,7 @@
 			}
 			// Announced from an input that was actually written, not from
 			// whichever checkbox happens to be first in the row — the listener
-			// on the other side only acts on a .def-core-role-cb.
+			// on the other side only acts on a .widrow-ai-role-cb.
 			if (written) {
 				written.dispatchEvent(new Event('change', { bubbles: true }));
 			}
@@ -1597,16 +1597,16 @@
 
 		// Flash highlight on the updated row so the change is visible.
 		if (row) {
-			row.classList.remove('def-core-row-flash');
+			row.classList.remove('widrow-ai-row-flash');
 			void row.offsetWidth; // force reflow to restart animation
-			row.classList.add('def-core-row-flash');
+			row.classList.add('widrow-ai-row-flash');
 		}
 	};
 
 	// ─── Dirty Field Tracking ────────────────────────────────────
 
 	SetupAssistantDrawer.prototype.captureSettingsSnapshot = function () {
-		var wrap = document.querySelector('.def-core-wrap');
+		var wrap = document.querySelector('.widrow-ai-wrap');
 		if (!wrap) {
 			return;
 		}
@@ -1634,7 +1634,7 @@
 	};
 
 	SetupAssistantDrawer.prototype.trackDirtyFields = function () {
-		var wrap = document.querySelector('.def-core-wrap');
+		var wrap = document.querySelector('.widrow-ai-wrap');
 		if (!wrap) {
 			return;
 		}

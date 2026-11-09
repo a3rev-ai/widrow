@@ -17,7 +17,7 @@
  * Runs standalone (no WordPress bootstrap), same harness pattern as
  * test-staff-ai-download-auth.php.
  *
- * @package def-core/tests
+ * @package widrow-ai/tests
  */
 
 declare(strict_types=1);
@@ -39,8 +39,8 @@ $_wp_test_mail_calls       = array();
 if ( ! defined( 'MB_IN_BYTES' ) ) {
 	define( 'MB_IN_BYTES', 1048576 );
 }
-if ( ! defined( 'DEF_CORE_API_NAME_SPACE' ) ) {
-	define( 'DEF_CORE_API_NAME_SPACE', 'a3-ai/v1' );
+if ( ! defined( 'WIDROW_AI_API_NAME_SPACE' ) ) {
+	define( 'WIDROW_AI_API_NAME_SPACE', 'a3-ai/v1' );
 }
 
 if ( ! class_exists( 'WP_Error' ) ) {
@@ -188,35 +188,35 @@ if ( ! class_exists( 'WP_REST_Response' ) ) {
 	}
 }
 
-if ( ! class_exists( 'DEF_Core' ) ) {
-	class DEF_Core {
+if ( ! class_exists( 'Widrow_AI' ) ) {
+	class Widrow_AI {
 		public static function get_def_api_url_internal(): ?string {
-			$url = get_option( 'def_core_staff_ai_api_url', '' );
+			$url = get_option( 'widrow_ai_staff_ai_api_url', '' );
 			return ! empty( $url ) ? rtrim( $url, '/' ) : null;
 		}
 	}
 }
-if ( ! class_exists( 'DEF_Core_Tools' ) ) {
-	class DEF_Core_Tools {
+if ( ! class_exists( 'Widrow_AI_Tools' ) ) {
+	class Widrow_AI_Tools {
 		public static function get_user_def_capabilities( $user ): array {
 			global $_wp_test_user_caps;
 			return $_wp_test_user_caps;
 		}
 	}
 }
-if ( ! class_exists( 'DEF_Core_Encryption' ) ) {
-	class DEF_Core_Encryption {
+if ( ! class_exists( 'Widrow_AI_Encryption' ) ) {
+	class Widrow_AI_Encryption {
 		public static function get_secret( string $key ) {
 			return get_option( $key, '' );
 		}
 	}
 }
 
-require_once dirname( __DIR__ ) . '/includes/class-def-core-staff-ai.php';
-require_once dirname( __DIR__ ) . '/includes/class-def-core-escalation.php';
+require_once dirname( __DIR__ ) . '/includes/class-widrow-ai-staff-ai.php';
+require_once dirname( __DIR__ ) . '/includes/class-widrow-ai-escalation.php';
 
-update_option( 'def_core_staff_ai_api_url', 'http://backend:8000' );
-update_option( 'def_core_api_key', 'test-api-key-share' );
+update_option( 'widrow_ai_staff_ai_api_url', 'http://backend:8000' );
+update_option( 'widrow_ai_api_key', 'test-api-key-share' );
 update_option( 'admin_email', 'admin@example.com' );
 
 // ── Helpers ──────────────────────────────────────────────────────────────
@@ -288,7 +288,7 @@ $base_share_body = array(
 
 echo "Invalid document id refuses before any backend call\n";
 reset_state();
-$resp = DEF_Core_Staff_AI::rest_share_send( share_request( $base_share_body + array( 'document_ids' => array( '../etc/passwd' ) ) ) );
+$resp = Widrow_AI_Staff_AI::rest_share_send( share_request( $base_share_body + array( 'document_ids' => array( '../etc/passwd' ) ) ) );
 check( 400 === $resp->get_status(), 'status 400' );
 check( 0 === count( $GLOBALS['_wp_test_remote_calls'] ), 'no backend call made' );
 check( 0 === count( $GLOBALS['_wp_test_mail_calls'] ), 'no mail sent' );
@@ -299,14 +299,14 @@ $ids = array();
 for ( $i = 0; $i < 11; $i++ ) {
 	$ids[] = 'doc-' . $i;
 }
-$resp = DEF_Core_Staff_AI::rest_share_send( share_request( $base_share_body + array( 'document_ids' => $ids ) ) );
+$resp = Widrow_AI_Staff_AI::rest_share_send( share_request( $base_share_body + array( 'document_ids' => $ids ) ) );
 check( 400 === $resp->get_status(), 'status 400' );
 check( 0 === count( $GLOBALS['_wp_test_remote_calls'] ), 'no backend call made' );
 
 echo "Unknown id is a plain 404, nothing sent\n";
 reset_state();
 $GLOBALS['_wp_test_remote_responses'][] = documents_list_response( array( $doc_report ) );
-$resp = DEF_Core_Staff_AI::rest_share_send( share_request( $base_share_body + array( 'document_ids' => array( 'doc-not-mine' ) ) ) );
+$resp = Widrow_AI_Staff_AI::rest_share_send( share_request( $base_share_body + array( 'document_ids' => array( 'doc-not-mine' ) ) ) );
 check( 404 === $resp->get_status(), 'status 404' );
 check( 'Document not found.' === ( $resp->get_data()['message'] ?? '' ), 'plain copy, no oracle' );
 check( 1 === count( $GLOBALS['_wp_test_remote_calls'] ), 'only the list was fetched' );
@@ -315,9 +315,9 @@ check( 0 === count( $GLOBALS['_wp_test_mail_calls'] ), 'no mail sent' );
 echo "Over the total size cap refuses politely, no file fetches\n";
 reset_state();
 $big = $doc_report;
-$big['size_bytes'] = DEF_Core_Staff_AI::SHARE_MAX_ATTACHMENT_BYTES + 1;
+$big['size_bytes'] = Widrow_AI_Staff_AI::SHARE_MAX_ATTACHMENT_BYTES + 1;
 $GLOBALS['_wp_test_remote_responses'][] = documents_list_response( array( $big ) );
-$resp = DEF_Core_Staff_AI::rest_share_send( share_request( $base_share_body + array( 'document_ids' => array( 'doc-report-1' ) ) ) );
+$resp = Widrow_AI_Staff_AI::rest_share_send( share_request( $base_share_body + array( 'document_ids' => array( 'doc-report-1' ) ) ) );
 check( 400 === $resp->get_status(), 'status 400' );
 check( false !== strpos( (string) ( $resp->get_data()['message'] ?? '' ), 'Nothing was sent' ), 'polite refusal copy' );
 check( 1 === count( $GLOBALS['_wp_test_remote_calls'] ), 'no file fetch after the list' );
@@ -328,7 +328,7 @@ reset_state();
 $GLOBALS['_wp_test_remote_responses'][] = documents_list_response( array( $doc_report, $doc_plan ) );
 $GLOBALS['_wp_test_remote_responses'][] = file_response( '# Q3 body' );
 $GLOBALS['_wp_test_remote_responses'][] = file_response( 'plan-bytes' );
-$resp = DEF_Core_Staff_AI::rest_share_send( share_request( $base_share_body + array( 'document_ids' => array( 'doc-report-1', 'doc-plan-2' ) ) ) );
+$resp = Widrow_AI_Staff_AI::rest_share_send( share_request( $base_share_body + array( 'document_ids' => array( 'doc-report-1', 'doc-plan-2' ) ) ) );
 check( 200 === $resp->get_status(), 'status 200' );
 check( 'sent' === ( $resp->get_data()['status'] ?? '' ), 'reported sent' );
 check( 1 === count( $GLOBALS['_wp_test_mail_calls'] ), 'exactly one mail' );
@@ -365,7 +365,7 @@ echo "Injected escalation fields are still stripped alongside document_ids\n";
 reset_state();
 $GLOBALS['_wp_test_remote_responses'][] = documents_list_response( array( $doc_report ) );
 $GLOBALS['_wp_test_remote_responses'][] = file_response( 'bytes' );
-$resp = DEF_Core_Staff_AI::rest_share_send( share_request( $base_share_body + array(
+$resp = Widrow_AI_Staff_AI::rest_share_send( share_request( $base_share_body + array(
 	'document_ids' => array( 'doc-report-1' ),
 	'bcc'          => array( 'exfil@evil.example' ),
 	'send_copy_to_user' => true,
@@ -393,7 +393,7 @@ $report_b = array(
 $GLOBALS['_wp_test_remote_responses'][] = documents_list_response( array( $report_a, $report_b ) );
 $GLOBALS['_wp_test_remote_responses'][] = file_response( 'body-a' );
 $GLOBALS['_wp_test_remote_responses'][] = file_response( 'body-b' );
-$resp = DEF_Core_Staff_AI::rest_share_send( share_request( $base_share_body + array( 'document_ids' => array( 'doc-same-a', 'doc-same-b' ) ) ) );
+$resp = Widrow_AI_Staff_AI::rest_share_send( share_request( $base_share_body + array( 'document_ids' => array( 'doc-same-a', 'doc-same-b' ) ) ) );
 check( 200 === $resp->get_status(), 'status 200' );
 $mail = $GLOBALS['_wp_test_mail_calls'][0] ?? array( 'attachments' => array(), 'existed' => array() );
 check( 2 === count( $mail['attachments'] ), 'two attachments' );
@@ -404,10 +404,10 @@ check( ! in_array( false, $mail['existed'], true ), 'both files existed at send 
 echo "A duplicated id counts once against the cap and attaches once\n";
 reset_state();
 $half_cap = $doc_report;
-$half_cap['size_bytes'] = (int) ( DEF_Core_Staff_AI::SHARE_MAX_ATTACHMENT_BYTES / 2 ) + 100;
+$half_cap['size_bytes'] = (int) ( Widrow_AI_Staff_AI::SHARE_MAX_ATTACHMENT_BYTES / 2 ) + 100;
 $GLOBALS['_wp_test_remote_responses'][] = documents_list_response( array( $half_cap ) );
 $GLOBALS['_wp_test_remote_responses'][] = file_response( 'once' );
-$resp = DEF_Core_Staff_AI::rest_share_send( share_request( $base_share_body + array( 'document_ids' => array( 'doc-report-1', 'doc-report-1' ) ) ) );
+$resp = Widrow_AI_Staff_AI::rest_share_send( share_request( $base_share_body + array( 'document_ids' => array( 'doc-report-1', 'doc-report-1' ) ) ) );
 check( 200 === $resp->get_status(), 'not double-counted into a false 400' );
 check( 1 === count( $GLOBALS['_wp_test_mail_calls'][0]['attachments'] ?? array() ), 'attached exactly once' );
 
@@ -416,14 +416,14 @@ reset_state();
 $GLOBALS['_wp_test_remote_responses'][] = documents_list_response( array( $doc_report, $doc_plan ) );
 $GLOBALS['_wp_test_remote_responses'][] = file_response( 'first-doc-bytes' );
 $GLOBALS['_wp_test_remote_responses'][] = array( 'response' => array( 'code' => 404 ), 'body' => 'nope' );
-$resp = DEF_Core_Staff_AI::rest_share_send( share_request( $base_share_body + array( 'document_ids' => array( 'doc-report-1', 'doc-plan-2' ) ) ) );
+$resp = Widrow_AI_Staff_AI::rest_share_send( share_request( $base_share_body + array( 'document_ids' => array( 'doc-report-1', 'doc-plan-2' ) ) ) );
 check( 502 === $resp->get_status(), 'status 502' );
 check( false !== strpos( (string) ( $resp->get_data()['message'] ?? '' ), 'Nothing was sent' ), 'polite refusal copy' );
 check( 0 === count( $GLOBALS['_wp_test_mail_calls'] ), 'wp_mail never called' );
 
 echo "Share without document_ids is untouched (regression)\n";
 reset_state();
-$resp = DEF_Core_Staff_AI::rest_share_send( share_request( $base_share_body ) );
+$resp = Widrow_AI_Staff_AI::rest_share_send( share_request( $base_share_body ) );
 check( 200 === $resp->get_status(), 'status 200' );
 check( 0 === count( $GLOBALS['_wp_test_remote_calls'] ), 'no backend calls at all' );
 check( 1 === count( $GLOBALS['_wp_test_mail_calls'] ), 'mail sent' );

@@ -22,7 +22,7 @@
  *
  * Runs standalone (no WordPress bootstrap).
  *
- * @package def-core/tests
+ * @package widrow-ai/tests
  */
 
 declare(strict_types=1);
@@ -135,16 +135,16 @@ if ( ! function_exists( 'sanitize_key' ) ) {
 		return preg_replace( '/[^a-z0-9_\-]/', '', strtolower( (string) $key ) );
 	}
 }
-if ( ! class_exists( 'DEF_Core' ) ) {
-	class DEF_Core {
+if ( ! class_exists( 'Widrow_AI' ) ) {
+	class Widrow_AI {
 		public static function get_def_api_url_internal(): ?string { return 'https://def-api.test'; }
 	}
 }
 // Capability resolver used by backend_request's proxy headers.
-if ( ! class_exists( 'DEF_Core_Tools' ) ) {
-	class DEF_Core_Tools {
+if ( ! class_exists( 'Widrow_AI_Tools' ) ) {
+	class Widrow_AI_Tools {
 		public static function get_user_def_capabilities( $user ): array {
-			return array( 'def_staff_access' );
+			return array( 'widrow_staff_access' );
 		}
 	}
 }
@@ -234,12 +234,12 @@ if ( ! function_exists( 'get_post_type_object' ) ) {
 	}
 }
 
-require_once DEF_CORE_PLUGIN_DIR . 'includes/class-def-core-staff-ai.php';
+require_once WIDROW_AI_PLUGIN_DIR . 'includes/class-widrow-ai-staff-ai.php';
 
 // Authenticated staff user + configured API key (backend_request preconditions).
 $_wp_test_current_user     = new WP_User( 5 );
-$_wp_test_user_caps        = array( 'def_staff_access' );
-\DEF_Core_Encryption::set_secret( 'def_core_api_key', 'test-api-key' );
+$_wp_test_user_caps        = array( 'widrow_staff_access' );
+\Widrow_AI_Encryption::set_secret( 'widrow_ai_api_key', 'test-api-key' );
 
 // ── Tiny assertion harness ──────────────────────────────────────────────
 
@@ -278,7 +278,7 @@ function req_json( array $body, array $params = array() ): WP_REST_Request {
 
 // ── 1. Route registration ───────────────────────────────────────────────
 echo "[1] curation routes registered with permission callbacks\n";
-DEF_Core_Staff_AI::register_rest_routes();
+Widrow_AI_Staff_AI::register_rest_routes();
 
 $id_pat = '(?P<id>[a-zA-Z0-9_-]+)';
 $dual   = array(
@@ -316,7 +316,7 @@ foreach ( $single as $route => $method ) {
 // ── 2. Nomination forwards every accepted field faithfully ──────────────
 echo "[2] POST /targets — field-faithful passthrough\n";
 http_reset( 200, array( 'id' => 't-1', 'title' => 'Quotes & Orders' ) );
-$resp = DEF_Core_Staff_AI::rest_create_content_target( req_json( array(
+$resp = Widrow_AI_Staff_AI::rest_create_content_target( req_json( array(
 	'item_type'      => 'page',
 	'item_id'        => '42',
 	'source_route'   => 'pages',
@@ -345,7 +345,7 @@ assert_same( 't-1', $resp->get_data()['id'] ?? null, 'DEF response passed back t
 
 // Numeric item_id (int over JSON) is accepted as digits.
 http_reset();
-$resp = DEF_Core_Staff_AI::rest_create_content_target( req_json( array(
+$resp = Widrow_AI_Staff_AI::rest_create_content_target( req_json( array(
 	'item_type' => 'post', 'item_id' => 42, 'title' => 'T', 'url' => 'https://site.test/t/',
 ) ) );
 assert_true( $resp instanceof WP_REST_Response, 'integer item_id accepted' );
@@ -364,24 +364,24 @@ $bad_cases = array(
 );
 foreach ( $bad_cases as $label => $body ) {
 	http_reset();
-	$resp = DEF_Core_Staff_AI::rest_create_content_target( req_json( $body ) );
+	$resp = Widrow_AI_Staff_AI::rest_create_content_target( req_json( $body ) );
 	assert_true( is_wp_error( $resp ), "$label → WP_Error" );
 	assert_same( 400, $resp->get_error_data()['status'] ?? null, "$label → 400" );
 	assert_same( array(), $GLOBALS['_t_http_log'], "$label → no backend call" );
 }
 
-// reference_urls: no def-core count cap (5.7.11) — six URLs are FORWARDED;
+// reference_urls: no widrow-ai count cap (5.7.11) — six URLs are FORWARDED;
 // DEF owns any per-target bound. Invalid entries are still rejected explicitly.
 http_reset();
 $six  = array_map( static function ( $i ) { return "https://docs.test/$i"; }, range( 1, 6 ) );
-$resp = DEF_Core_Staff_AI::rest_create_content_target( req_json( array(
+$resp = Widrow_AI_Staff_AI::rest_create_content_target( req_json( array(
 	'item_type' => 'page', 'item_id' => '1', 'title' => 'T', 'url' => 'https://x.test/',
 	'reference_urls' => $six,
 ) ) );
-assert_true( ! is_wp_error( $resp ), '6 reference URLs pass def-core (count cap deleted)' );
+assert_true( ! is_wp_error( $resp ), '6 reference URLs pass widrow-ai (count cap deleted)' );
 assert_true( ! empty( $GLOBALS['_t_http_log'] ), '6 URLs are forwarded to the backend — the deletion moved the decision, not lost it' );
 http_reset();
-$resp = DEF_Core_Staff_AI::rest_create_content_target( req_json( array(
+$resp = Widrow_AI_Staff_AI::rest_create_content_target( req_json( array(
 	'item_type' => 'page', 'item_id' => '1', 'title' => 'T', 'url' => 'https://x.test/',
 	'reference_urls' => array( 'ftp://files.test/doc' ),
 ) ) );
@@ -391,23 +391,23 @@ assert_same( array(), $GLOBALS['_t_http_log'], 'invalid reference_urls → no ba
 // ── 4. PATCH /targets/{id} — true PATCH semantics ───────────────────────
 echo "[4] PATCH target — forwards only the provided keys, via HTTP PATCH\n";
 http_reset( 200, array( 'id' => 't-1', 'status' => 'paused' ) );
-$resp = DEF_Core_Staff_AI::rest_update_content_target( req_json( array( 'status' => 'paused' ), array( 'id' => 't-1' ) ) );
+$resp = Widrow_AI_Staff_AI::rest_update_content_target( req_json( array( 'status' => 'paused' ), array( 'id' => 't-1' ) ) );
 $call = http_one();
 assert_same( 'PATCH', $call['method'] ?? null, 'HTTP method is PATCH' );
 assert_same( 'https://def-api.test/api/staff-ai/content/targets/t-1', $call['url'] ?? null, 'target URL carries the id' );
 assert_same( array( 'status' => 'paused' ), json_decode( $call['args']['body'] ?? '', true ), 'body contains ONLY status' );
 
 http_reset();
-$resp = DEF_Core_Staff_AI::rest_update_content_target( req_json( array( 'status' => 'archived' ), array( 'id' => 't-1' ) ) );
+$resp = Widrow_AI_Staff_AI::rest_update_content_target( req_json( array( 'status' => 'archived' ), array( 'id' => 't-1' ) ) );
 assert_true( is_wp_error( $resp ), 'unknown status → WP_Error' );
 http_reset();
-$resp = DEF_Core_Staff_AI::rest_update_content_target( req_json( array(), array( 'id' => 't-1' ) ) );
+$resp = Widrow_AI_Staff_AI::rest_update_content_target( req_json( array(), array( 'id' => 't-1' ) ) );
 assert_true( is_wp_error( $resp ), 'empty PATCH → WP_Error (nothing to update)' );
 assert_same( array(), $GLOBALS['_t_http_log'], 'invalid PATCH → no backend call' );
 
 // reference_urls replace rides PATCH too (the Clusters tab's Save).
 http_reset( 200, array( 'id' => 't-1' ) );
-DEF_Core_Staff_AI::rest_update_content_target( req_json( array( 'reference_urls' => array( 'https://docs.test/a' ) ), array( 'id' => 't-1' ) ) );
+Widrow_AI_Staff_AI::rest_update_content_target( req_json( array( 'reference_urls' => array( 'https://docs.test/a' ) ), array( 'id' => 't-1' ) ) );
 assert_same(
 	array( 'reference_urls' => array( 'https://docs.test/a' ) ),
 	json_decode( http_one()['args']['body'] ?? '', true ),
@@ -417,7 +417,7 @@ assert_same(
 // ── 5. DELETE /targets/{id} ─────────────────────────────────────────────
 echo "[5] DELETE target — HTTP DELETE to the DEF route\n";
 http_reset( 200, array( 'status' => 'deleted' ) );
-$resp = DEF_Core_Staff_AI::rest_delete_content_target( req_json( array(), array( 'id' => 't-9' ) ) );
+$resp = Widrow_AI_Staff_AI::rest_delete_content_target( req_json( array(), array( 'id' => 't-9' ) ) );
 $call = http_one();
 assert_same( 'DELETE', $call['method'] ?? null, 'HTTP method is DELETE' );
 assert_same( 'https://def-api.test/api/staff-ai/content/targets/t-9', $call['url'] ?? null, 'delete URL' );
@@ -440,7 +440,7 @@ http_reset( 200, array( 'keyphrases' => array(
 		'staged_change_id' => null, 'post_id' => null, 'created_at' => '2026-06-11T00:00:01Z',
 	),
 ) ) );
-$resp = DEF_Core_Staff_AI::rest_list_target_keyphrases( req_json( array(), array( 'id' => 't-1' ) ) );
+$resp = Widrow_AI_Staff_AI::rest_list_target_keyphrases( req_json( array(), array( 'id' => 't-1' ) ) );
 $rows = $resp->get_data()['keyphrases'];
 assert_same( 2, count( $rows ), 'both rows returned' );
 assert_same( 'gap vs competitor docs', $rows[0]['rationale'], 'rationale passed through (no dropped fields)' );
@@ -455,7 +455,7 @@ assert_same( 'proposed', $rows[1]['status'], 'second row intact' );
 // ── 7. Keyphrase add / edit / approve / dismiss / derive proxies ────────
 echo "[7] keyphrase actions — bodies and verbs hit the right DEF routes\n";
 http_reset( 200, array( 'id' => 'k3' ) );
-DEF_Core_Staff_AI::rest_add_target_keyphrase( req_json(
+Widrow_AI_Staff_AI::rest_add_target_keyphrase( req_json(
 	array( 'phrase' => 'quote follow up email', 'intent_type' => 'use_case' ),
 	array( 'id' => 't-1' )
 ) );
@@ -469,32 +469,32 @@ assert_same(
 );
 
 http_reset();
-$resp = DEF_Core_Staff_AI::rest_add_target_keyphrase( req_json( array( 'phrase' => 'x' ), array( 'id' => 't-1' ) ) );
+$resp = Widrow_AI_Staff_AI::rest_add_target_keyphrase( req_json( array( 'phrase' => 'x' ), array( 'id' => 't-1' ) ) );
 assert_true( is_wp_error( $resp ), 'add without intent_type → WP_Error' );
 assert_same( array(), $GLOBALS['_t_http_log'], 'invalid add → no backend call' );
 
 http_reset( 200, array( 'id' => 'k1' ) );
-DEF_Core_Staff_AI::rest_update_keyphrase( req_json( array( 'phrase' => 'edited phrase' ), array( 'id' => 'k1' ) ) );
+Widrow_AI_Staff_AI::rest_update_keyphrase( req_json( array( 'phrase' => 'edited phrase' ), array( 'id' => 'k1' ) ) );
 $call = http_one();
 assert_same( 'PATCH', $call['method'] ?? null, 'keyphrase edit is PATCH' );
 assert_same( 'https://def-api.test/api/staff-ai/content/keyphrases/k1', $call['url'] ?? null, 'keyphrase URL' );
 assert_same( array( 'phrase' => 'edited phrase' ), json_decode( $call['args']['body'] ?? '', true ), 'edit body has only phrase' );
 
 http_reset();
-$resp = DEF_Core_Staff_AI::rest_update_keyphrase( req_json( array(), array( 'id' => 'k1' ) ) );
+$resp = Widrow_AI_Staff_AI::rest_update_keyphrase( req_json( array(), array( 'id' => 'k1' ) ) );
 assert_true( is_wp_error( $resp ), 'empty keyphrase PATCH → WP_Error' );
 
 foreach ( array( 'approve', 'dismiss' ) as $action ) {
 	http_reset( 200, array( 'id' => 'k1', 'status' => $action === 'approve' ? 'approved' : 'dismissed' ) );
 	$method = 'rest_' . $action . '_keyphrase';
-	DEF_Core_Staff_AI::$method( req_json( array(), array( 'id' => 'k1' ) ) );
+	Widrow_AI_Staff_AI::$method( req_json( array(), array( 'id' => 'k1' ) ) );
 	$call = http_one();
 	assert_same( 'POST', $call['method'] ?? null, "$action is POST" );
 	assert_same( "https://def-api.test/api/staff-ai/content/keyphrases/k1/$action", $call['url'] ?? null, "$action URL" );
 }
 
 http_reset( 200, array( 'status' => 'accepted' ) );
-$resp = DEF_Core_Staff_AI::rest_derive_content_target( req_json( array(), array( 'id' => 't-1' ) ) );
+$resp = Widrow_AI_Staff_AI::rest_derive_content_target( req_json( array(), array( 'id' => 't-1' ) ) );
 $call = http_one();
 assert_same( 'https://def-api.test/api/staff-ai/content/targets/t-1/derive', $call['url'] ?? null, 'derive URL' );
 assert_same( 'accepted', $resp->get_data()['status'] ?? null, 'derive ack passed through' );
@@ -505,7 +505,7 @@ http_reset( 200, array(
 	'dismissed'        => 7,
 	'keyphrase_counts' => array( 'proposed' => 0, 'approved' => 5, 'in_review' => 1, 'written' => 2, 'dismissed' => 11 ),
 ) );
-$resp = DEF_Core_Staff_AI::rest_dismiss_remaining_keyphrases( req_json( array(), array( 'id' => 't-1' ) ) );
+$resp = Widrow_AI_Staff_AI::rest_dismiss_remaining_keyphrases( req_json( array(), array( 'id' => 't-1' ) ) );
 $call = http_one();
 assert_true( null !== $call, 'dismiss-remaining: exactly one backend call' );
 assert_same( 'POST', $call['method'] ?? null, 'dismiss-remaining is POST' );
@@ -523,32 +523,32 @@ assert_same(
 
 // Backend errors surface as errors (not silently swallowed).
 http_reset( 404, array( 'detail' => 'target not found' ) );
-$resp = DEF_Core_Staff_AI::rest_dismiss_remaining_keyphrases( req_json( array(), array( 'id' => 't-x' ) ) );
+$resp = Widrow_AI_Staff_AI::rest_dismiss_remaining_keyphrases( req_json( array(), array( 'id' => 't-x' ) ) );
 assert_true( is_wp_error( $resp ), 'dismiss-remaining backend 404 → WP_Error' );
 assert_same( 404, $resp->get_error_data()['status'] ?? null, '404 status preserved' );
 
 // ── 8. Create: optional notes forwarded, omitted when empty ─────────────
 echo "[8] create — notes passthrough\n";
 http_reset( 200, array( 'status' => 'accepted' ) );
-DEF_Core_Staff_AI::rest_content_create( req_json( array( 'keyphrase' => 'best running shoes', 'notes' => 'audience: trail runners' ) ) );
+Widrow_AI_Staff_AI::rest_content_create( req_json( array( 'keyphrase' => 'best running shoes', 'notes' => 'audience: trail runners' ) ) );
 $sent = json_decode( http_one()['args']['body'] ?? '', true );
 assert_same( 'best running shoes', $sent['keyphrase'] ?? null, 'keyphrase forwarded' );
 assert_same( 'audience: trail runners', $sent['notes'] ?? null, 'notes forwarded' );
 
 http_reset( 200, array( 'status' => 'accepted' ) );
-DEF_Core_Staff_AI::rest_content_create( req_json( array( 'keyphrase' => 'best running shoes' ) ) );
+Widrow_AI_Staff_AI::rest_content_create( req_json( array( 'keyphrase' => 'best running shoes' ) ) );
 $sent = json_decode( http_one()['args']['body'] ?? '', true );
 assert_true( ! array_key_exists( 'notes', $sent ), 'no notes key when the field is empty' );
 
 http_reset();
-$resp = DEF_Core_Staff_AI::rest_content_create( req_json( array( 'keyphrase' => 'kp', 'notes' => str_repeat( 'a', 2001 ) ) ) );
+$resp = Widrow_AI_Staff_AI::rest_content_create( req_json( array( 'keyphrase' => 'kp', 'notes' => str_repeat( 'a', 2001 ) ) ) );
 assert_true( is_wp_error( $resp ), 'over-long notes → WP_Error' );
 assert_same( 'invalid_notes', $resp->get_error_code(), 'over-long notes → invalid_notes' );
 assert_same( array(), $GLOBALS['_t_http_log'], 'over-long notes → no backend call' );
 
 // No keyphrase AND no sources → rejected before any backend call.
 http_reset();
-$resp = DEF_Core_Staff_AI::rest_content_create( req_json( array() ) );
+$resp = Widrow_AI_Staff_AI::rest_content_create( req_json( array() ) );
 assert_true( is_wp_error( $resp ), 'no keyphrase + no sources → WP_Error' );
 assert_same( 'invalid_keyphrase', $resp->get_error_code(), 'no keyphrase/sources → invalid_keyphrase' );
 assert_same( array(), $GLOBALS['_t_http_log'], 'no keyphrase/sources → no backend call' );
@@ -559,7 +559,7 @@ echo "[8b] create — reference_sources passthrough + validation\n";
 // Keyphrase OPTIONAL once a source is present; the object passes through unchanged.
 $pdf_b64 = base64_encode( 'PDF bytes here' );
 http_reset( 200, array( 'status' => 'accepted' ) );
-DEF_Core_Staff_AI::rest_content_create( req_json( array(
+Widrow_AI_Staff_AI::rest_content_create( req_json( array(
 	'reference_sources' => array(
 		'urls'  => array( 'https://example.test/brief', 'https://example.test/spec' ),
 		'text'  => "Pasted source material — keep & verbatim < chars >.",
@@ -580,7 +580,7 @@ assert_same(
 
 // Keyphrase + sources both forwarded; empty url strings are dropped, not errors.
 http_reset( 200, array( 'status' => 'accepted' ) );
-DEF_Core_Staff_AI::rest_content_create( req_json( array(
+Widrow_AI_Staff_AI::rest_content_create( req_json( array(
 	'keyphrase'         => 'event recap',
 	'reference_sources' => array( 'urls' => array( 'https://example.test/a', '' ) ),
 ) ) );
@@ -590,7 +590,7 @@ assert_same( array( 'https://example.test/a' ), $sent['reference_sources']['urls
 
 // Absent reference_sources → byte-identical legacy body (no empty key invented).
 http_reset( 200, array( 'status' => 'accepted' ) );
-DEF_Core_Staff_AI::rest_content_create( req_json( array( 'keyphrase' => 'plain' ) ) );
+Widrow_AI_Staff_AI::rest_content_create( req_json( array( 'keyphrase' => 'plain' ) ) );
 $sent = json_decode( http_one()['args']['body'] ?? '', true );
 assert_same( array( 'keyphrase' => 'plain' ), $sent, 'no sources → legacy body unchanged (no reference_sources key)' );
 
@@ -608,7 +608,7 @@ $ref_bad     = array(
 );
 foreach ( $ref_bad as $label => $rs ) {
 	http_reset();
-	$resp = DEF_Core_Staff_AI::rest_content_create( req_json( array( 'keyphrase' => 'kp', 'reference_sources' => $rs ) ) );
+	$resp = Widrow_AI_Staff_AI::rest_content_create( req_json( array( 'keyphrase' => 'kp', 'reference_sources' => $rs ) ) );
 	assert_true( is_wp_error( $resp ), "reference_sources $label → WP_Error" );
 	assert_same( 'invalid_reference_sources', $resp->get_error_code(), "$label → invalid_reference_sources" );
 	assert_same( 400, $resp->get_error_data()['status'] ?? null, "$label → 400" );
@@ -616,7 +616,7 @@ foreach ( $ref_bad as $label => $rs ) {
 }
 
 // Inverted pins (5.7.11): the deleted COUNT caps must not return — six URLs
-// and three files pass def-core and are forwarded to DEF, whose budget owns
+// and three files pass widrow-ai and are forwarded to DEF, whose budget owns
 // any count decision.
 foreach ( array(
 	'6 urls forwarded'  => array( 'urls' => array_map( static function ( $i ) { return "https://d.test/$i"; }, range( 1, 6 ) ) ),
@@ -627,7 +627,7 @@ foreach ( array(
 	) ),
 ) as $label => $rs ) {
 	http_reset();
-	$resp = DEF_Core_Staff_AI::rest_content_create( req_json( array( 'keyphrase' => 'kp', 'reference_sources' => $rs ) ) );
+	$resp = Widrow_AI_Staff_AI::rest_content_create( req_json( array( 'keyphrase' => 'kp', 'reference_sources' => $rs ) ) );
 	assert_true( ! is_wp_error( $resp ), "reference_sources $label (count caps deleted)" );
 	assert_true( ! empty( $GLOBALS['_t_http_log'] ), "$label — reached the backend" );
 }
@@ -641,7 +641,7 @@ $GLOBALS['_t_posts'][42] = array( 'status' => 'publish', 'title' => 'Quotes & Or
 $GLOBALS['_t_posts'][99] = array( 'status' => 'publish', 'title' => 'Quote Pro', 'permalink' => 'https://site.test/product/quote-pro/' );
 $GLOBALS['_t_get_posts_args'] = null;
 
-$resp  = DEF_Core_Staff_AI::rest_target_search( req_json( array(), array( 'q' => 'quote' ) ) );
+$resp  = Widrow_AI_Staff_AI::rest_target_search( req_json( array(), array( 'q' => 'quote' ) ) );
 $items = $resp->get_data()['items'];
 assert_same( 2, count( $items ), 'two items returned' );
 assert_same( 'page', $items[0]['item_type'], 'item_type from the post type' );
@@ -659,14 +659,14 @@ assert_same( 'publish', $q_args['post_status'] ?? null, 'published items only' )
 
 // Short query short-circuits without touching WP_Query.
 $GLOBALS['_t_get_posts_args'] = null;
-$resp = DEF_Core_Staff_AI::rest_target_search( req_json( array(), array( 'q' => 'q' ) ) );
+$resp = Widrow_AI_Staff_AI::rest_target_search( req_json( array(), array( 'q' => 'q' ) ) );
 assert_same( array(), $resp->get_data()['items'], 'sub-2-char query → empty items' );
 assert_same( null, $GLOBALS['_t_get_posts_args'], 'sub-2-char query → no WP_Query' );
 
 // ── 10. Backend errors surface as errors (not silently swallowed) ───────
 echo "[10] DEF 409/422 surface to the client\n";
 http_reset( 409, array( 'detail' => 'phrase already queued for this tenant' ) );
-$resp = DEF_Core_Staff_AI::rest_add_target_keyphrase( req_json(
+$resp = Widrow_AI_Staff_AI::rest_add_target_keyphrase( req_json(
 	array( 'phrase' => 'duplicate phrase', 'intent_type' => 'how_to' ),
 	array( 'id' => 't-1' )
 ) );
@@ -683,25 +683,25 @@ assert_true( false !== strpos( $resp->get_error_message(), 'phrase already queue
 echo "[11] creator_name forwarded on /drafts and /targets\n";
 
 http_reset( 200, array( 'drafts' => array(), 'creator_name' => 'Rowena' ) );
-$resp = DEF_Core_Staff_AI::rest_list_content_drafts( req_json( array() ) );
+$resp = Widrow_AI_Staff_AI::rest_list_content_drafts( req_json( array() ) );
 assert_same( 'Rowena', $resp->get_data()['creator_name'] ?? null, 'drafts list forwards the tenant name' );
 
 http_reset( 200, array( 'targets' => array(), 'creator_name' => 'Rowena' ) );
-$resp = DEF_Core_Staff_AI::rest_list_content_targets( req_json( array() ) );
+$resp = Widrow_AI_Staff_AI::rest_list_content_targets( req_json( array() ) );
 assert_same( 'Rowena', $resp->get_data()['creator_name'] ?? null, 'targets list forwards the tenant name' );
 
 // An older DEF, or a field that never arrives: the page is never nameless.
 http_reset( 200, array( 'drafts' => array() ) );
-$resp = DEF_Core_Staff_AI::rest_list_content_drafts( req_json( array() ) );
+$resp = Widrow_AI_Staff_AI::rest_list_content_drafts( req_json( array() ) );
 assert_same( 'Carol', $resp->get_data()['creator_name'] ?? null, 'drafts: absent creator_name → the default' );
 
 http_reset( 200, array( 'targets' => array() ) );
-$resp = DEF_Core_Staff_AI::rest_list_content_targets( req_json( array() ) );
+$resp = Widrow_AI_Staff_AI::rest_list_content_targets( req_json( array() ) );
 assert_same( 'Carol', $resp->get_data()['creator_name'] ?? null, 'targets: absent creator_name → the default' );
 
 // The sanitiser both handlers share, over what a name can carry.
-$name_of = function ( $v ) { return DEF_Core_Staff_AI::creator_name_from( array( 'creator_name' => $v ) ); };
-assert_same( 'Carol', DEF_Core_Staff_AI::creator_name_from( 'not-an-array' ), 'non-array payload → the default' );
+$name_of = function ( $v ) { return Widrow_AI_Staff_AI::creator_name_from( array( 'creator_name' => $v ) ); };
+assert_same( 'Carol', Widrow_AI_Staff_AI::creator_name_from( 'not-an-array' ), 'non-array payload → the default' );
 assert_same( 'Carol', $name_of( 42 ), 'a non-string name → the default' );
 assert_same( 'Carol', $name_of( '   ' ), 'a blank name → the default' );
 assert_same( 'Ro wena', $name_of( "Ro\nwena" ), 'a newline cannot break the title out of its line' );
@@ -719,41 +719,41 @@ echo "[12] creator_name remembered by both list handlers, written only on change
 // Forget the name and start counting writes from zero — the whole option store
 // cannot be reset here, the API key backend_request needs lives in it.
 $forget_creator = function () {
-	unset( $GLOBALS['_wp_test_options']['def_core_creator_name'] );
+	unset( $GLOBALS['_wp_test_options']['widrow_ai_creator_name'] );
 	$GLOBALS['_wp_test_option_writes'] = 0;
 };
 
 $forget_creator();
 http_reset( 200, array( 'drafts' => array(), 'creator_name' => 'Rowena' ) );
-DEF_Core_Staff_AI::rest_list_content_drafts( req_json( array() ) );
-assert_same( 'Rowena', get_option( 'def_core_creator_name' ), 'the drafts list stores the name' );
+Widrow_AI_Staff_AI::rest_list_content_drafts( req_json( array() ) );
+assert_same( 'Rowena', get_option( 'widrow_ai_creator_name' ), 'the drafts list stores the name' );
 assert_same( 1, $GLOBALS['_wp_test_option_writes'], 'a name the plugin had not seen is written once' );
 
 // The same name again — the ordinary load, on every visit.
 http_reset( 200, array( 'drafts' => array(), 'creator_name' => 'Rowena' ) );
-DEF_Core_Staff_AI::rest_list_content_drafts( req_json( array() ) );
+Widrow_AI_Staff_AI::rest_list_content_drafts( req_json( array() ) );
 http_reset( 200, array( 'targets' => array(), 'creator_name' => 'Rowena' ) );
-DEF_Core_Staff_AI::rest_list_content_targets( req_json( array() ) );
+Widrow_AI_Staff_AI::rest_list_content_targets( req_json( array() ) );
 assert_same( 1, $GLOBALS['_wp_test_option_writes'], 'an unchanged name is not written again, by either list' );
 
 // The rename.
 http_reset( 200, array( 'targets' => array(), 'creator_name' => 'Caz' ) );
-DEF_Core_Staff_AI::rest_list_content_targets( req_json( array() ) );
-assert_same( 'Caz', get_option( 'def_core_creator_name' ), 'the targets list stores the rename' );
+Widrow_AI_Staff_AI::rest_list_content_targets( req_json( array() ) );
+assert_same( 'Caz', get_option( 'widrow_ai_creator_name' ), 'the targets list stores the rename' );
 assert_same( 2, $GLOBALS['_wp_test_option_writes'], 'a rename is written once' );
 
 // What is stored is what the page may render, so it is the SANITISED name.
 $forget_creator();
 http_reset( 200, array( 'drafts' => array(), 'creator_name' => "Ca\nz\x00" ) );
-DEF_Core_Staff_AI::rest_list_content_drafts( req_json( array() ) );
-assert_same( 'Ca z', get_option( 'def_core_creator_name' ), 'the stored name is the one creator_name_from returned' );
+Widrow_AI_Staff_AI::rest_list_content_drafts( req_json( array() ) );
+assert_same( 'Ca z', get_option( 'widrow_ai_creator_name' ), 'the stored name is the one creator_name_from returned' );
 
 // An older DEF that sends no name stores the default rather than nothing —
 // the page then renders the default it would have rendered anyway.
 $forget_creator();
 http_reset( 200, array( 'targets' => array() ) );
-DEF_Core_Staff_AI::rest_list_content_targets( req_json( array() ) );
-assert_same( 'Carol', get_option( 'def_core_creator_name' ), 'absent creator_name stores the default' );
+Widrow_AI_Staff_AI::rest_list_content_targets( req_json( array() ) );
+assert_same( 'Carol', get_option( 'widrow_ai_creator_name' ), 'absent creator_name stores the default' );
 
 // ── Summary ─────────────────────────────────────────────────────────────
 echo "\n$pass passed, $fail failed\n";

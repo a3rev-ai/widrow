@@ -13,7 +13,7 @@
  *
  * Runs standalone (no WordPress bootstrap).
  *
- * @package def-core/tests
+ * @package widrow-ai/tests
  */
 
 declare(strict_types=1);
@@ -224,10 +224,10 @@ if ( ! function_exists( 'get_avatar_url' ) ) {
 }
 
 // Load the standalone theme colors class (no plugin bootstrap needed).
-require_once dirname( __DIR__ ) . '/includes/class-def-core-theme-colors.php';
+require_once dirname( __DIR__ ) . '/includes/class-widrow-ai-theme-colors.php';
 
 // Load Admin API (for REST endpoint + validation tests).
-require_once dirname( __DIR__ ) . '/includes/class-def-core-admin-api.php';
+require_once dirname( __DIR__ ) . '/includes/class-widrow-ai-admin-api.php';
 
 // ── Test infrastructure ─────────────────────────────────────────────────
 
@@ -284,9 +284,9 @@ function setup_admin(): void {
 	$user               = new WP_User( 1 );
 	$user->display_name = 'Test Admin';
 	$user->user_email   = 'admin@test.com';
-	$user->caps         = array( 'def_admin_access' => true );
+	$user->caps         = array( 'widrow_admin_access' => true );
 	$_wp_test_current_user = $user;
-	$_wp_test_user_caps    = array( 'def_admin_access' );
+	$_wp_test_user_caps    = array( 'widrow_admin_access' );
 	$_wp_test_users[1]     = $user;
 	$_SERVER['HTTP_X_WP_NONCE'] = 'valid_nonce';
 }
@@ -317,7 +317,7 @@ $_wp_test_global_styles = array(
 	),
 );
 
-$colors = DEF_Core_Theme_Colors::detect();
+$colors = Widrow_AI_Theme_Colors::detect();
 assert_equals( '#0073aa', $colors['button_color'], 'detects block theme button color' );
 assert_equals( '#005177', $colors['button_hover_color'], 'detects block theme hover color' );
 assert_equals( 'block_theme', $colors['source'], 'source is block_theme' );
@@ -348,7 +348,7 @@ $_wp_test_global_settings = array(
 	),
 );
 
-$colors = DEF_Core_Theme_Colors::detect();
+$colors = Widrow_AI_Theme_Colors::detect();
 assert_equals( '#e63946', $colors['button_color'], 'resolves CSS variable to hex via palette' );
 assert_equals( 'block_theme', $colors['source'], 'source is block_theme' );
 
@@ -366,7 +366,7 @@ $_wp_test_global_styles = array(
 	),
 );
 
-$colors = DEF_Core_Theme_Colors::detect();
+$colors = Widrow_AI_Theme_Colors::detect();
 assert_equals( '#ff5733', $colors['button_color'], 'converts rgb() to hex' );
 assert_equals( 'block_theme', $colors['source'], 'source is block_theme' );
 
@@ -390,7 +390,7 @@ body { background: #fff; }
 a { color: #333; }
 ');
 
-$colors = DEF_Core_Theme_Colors::detect();
+$colors = Widrow_AI_Theme_Colors::detect();
 assert_equals( '#28a745', $colors['button_color'], 'extracts button color from classic theme CSS' );
 assert_equals( 'classic_theme_css', $colors['source'], 'source is classic_theme_css' );
 assert_equals( '', $colors['button_hover_color'], 'no hover color from CSS parsing' );
@@ -414,7 +414,7 @@ input[type="submit"] {
 }
 ');
 
-$colors = DEF_Core_Theme_Colors::detect();
+$colors = Widrow_AI_Theme_Colors::detect();
 assert_equals( '#dc3545', $colors['button_color'], 'extracts from input[type=submit]' );
 assert_equals( 'classic_theme_css', $colors['source'], 'source is classic_theme_css' );
 
@@ -428,7 +428,7 @@ reset_theme_state();
 $_wp_test_global_styles   = array();
 $_wp_test_stylesheet_dir  = sys_get_temp_dir() . '/nonexistent-theme';
 
-$colors = DEF_Core_Theme_Colors::detect();
+$colors = Widrow_AI_Theme_Colors::detect();
 assert_equals( '', $colors['button_color'], 'no color when theme has no button styles' );
 assert_equals( 'none', $colors['source'], 'source is none' );
 
@@ -451,15 +451,15 @@ $_wp_test_global_styles = array(
 	),
 );
 
-DEF_Core_Theme_Colors::maybe_set_defaults();
-assert_equals( '#6366f1', get_option( 'def_core_chat_button_color' ), 'activation sets button color from theme' );
-assert_equals( '#4f46e5', get_option( 'def_core_chat_button_hover_color' ), 'activation sets hover color from theme' );
+Widrow_AI_Theme_Colors::maybe_set_defaults();
+assert_equals( '#6366f1', get_option( 'widrow_ai_chat_button_color' ), 'activation sets button color from theme' );
+assert_equals( '#4f46e5', get_option( 'widrow_ai_chat_button_hover_color' ), 'activation sets hover color from theme' );
 
 // ── 8. Activation does NOT overwrite existing colors ───────────────────
 
 echo "\n[8] Activation preserves existing button colors\n";
 reset_theme_state();
-update_option( 'def_core_chat_button_color', '#ff0000' );
+update_option( 'widrow_ai_chat_button_color', '#ff0000' );
 $_wp_test_global_styles = array(
 	'elements' => array(
 		'button' => array(
@@ -470,8 +470,8 @@ $_wp_test_global_styles = array(
 	),
 );
 
-DEF_Core_Theme_Colors::maybe_set_defaults();
-assert_equals( '#ff0000', get_option( 'def_core_chat_button_color' ), 'does not overwrite existing color' );
+Widrow_AI_Theme_Colors::maybe_set_defaults();
+assert_equals( '#ff0000', get_option( 'widrow_ai_chat_button_color' ), 'does not overwrite existing color' );
 
 // ── 9. REST endpoint returns correct data ──────────────────────────────
 
@@ -488,10 +488,10 @@ $_wp_test_global_styles = array(
 		),
 	),
 );
-update_option( 'def_core_chat_button_color', '#111827' );
-update_option( 'def_core_chat_button_hover_color', '' );
+update_option( 'widrow_ai_chat_button_color', '#111827' );
+update_option( 'widrow_ai_chat_button_hover_color', '' );
 
-$sa       = new DEF_Core_Admin_API();
+$sa       = new Widrow_AI_Admin_API();
 $request  = new WP_REST_Request( 'GET', '/def-core/v1/setup/detect-theme-colors' );
 $response = $sa->rest_detect_theme_colors( $request );
 $data     = $response->get_data();
@@ -510,26 +510,26 @@ echo "\n[10] Hex color validation — valid values\n";
 reset_theme_state();
 setup_admin();
 
-$sa      = new DEF_Core_Admin_API();
+$sa      = new Widrow_AI_Admin_API();
 
 // 6-digit hex.
-$request = new WP_REST_Request( 'POST', '/def-core/v1/setup/setting/def_core_chat_button_color' );
-$request->set_param( 'key', 'def_core_chat_button_color' );
+$request = new WP_REST_Request( 'POST', '/def-core/v1/setup/setting/widrow_ai_chat_button_color' );
+$request->set_param( 'key', 'widrow_ai_chat_button_color' );
 $request->set_body( json_encode( array( 'value' => '#FF5733' ) ) );
 $response = $sa->rest_update_setting( $request );
 assert_equals( 200, $response->get_status(), 'accepts valid 6-digit hex color' );
-assert_equals( '#FF5733', get_option( 'def_core_chat_button_color' ), 'saves 6-digit hex' );
+assert_equals( '#FF5733', get_option( 'widrow_ai_chat_button_color' ), 'saves 6-digit hex' );
 
 // 3-digit hex.
-$request = new WP_REST_Request( 'POST', '/def-core/v1/setup/setting/def_core_chat_button_color' );
-$request->set_param( 'key', 'def_core_chat_button_color' );
+$request = new WP_REST_Request( 'POST', '/def-core/v1/setup/setting/widrow_ai_chat_button_color' );
+$request->set_param( 'key', 'widrow_ai_chat_button_color' );
 $request->set_body( json_encode( array( 'value' => '#F00' ) ) );
 $response = $sa->rest_update_setting( $request );
 assert_equals( 200, $response->get_status(), 'accepts valid 3-digit hex color' );
 
 // Empty value (clear).
-$request = new WP_REST_Request( 'POST', '/def-core/v1/setup/setting/def_core_chat_button_hover_color' );
-$request->set_param( 'key', 'def_core_chat_button_hover_color' );
+$request = new WP_REST_Request( 'POST', '/def-core/v1/setup/setting/widrow_ai_chat_button_hover_color' );
+$request->set_param( 'key', 'widrow_ai_chat_button_hover_color' );
 $request->set_body( json_encode( array( 'value' => '' ) ) );
 $response = $sa->rest_update_setting( $request );
 assert_equals( 200, $response->get_status(), 'accepts empty value to clear color' );
@@ -539,33 +539,33 @@ assert_equals( 200, $response->get_status(), 'accepts empty value to clear color
 echo "\n[11] Hex color validation — invalid values\n";
 reset_theme_state();
 setup_admin();
-$sa = new DEF_Core_Admin_API();
+$sa = new Widrow_AI_Admin_API();
 
 // Named color.
-$request = new WP_REST_Request( 'POST', '/def-core/v1/setup/setting/def_core_chat_button_color' );
-$request->set_param( 'key', 'def_core_chat_button_color' );
+$request = new WP_REST_Request( 'POST', '/def-core/v1/setup/setting/widrow_ai_chat_button_color' );
+$request->set_param( 'key', 'widrow_ai_chat_button_color' );
 $request->set_body( json_encode( array( 'value' => 'red' ) ) );
 $response = $sa->rest_update_setting( $request );
 assert_equals( 400, $response->get_status(), 'rejects named color' );
 assert_equals( 'VALIDATION_ERROR', $response->get_data()['error']['code'], 'error code is VALIDATION_ERROR' );
 
 // Missing hash.
-$request = new WP_REST_Request( 'POST', '/def-core/v1/setup/setting/def_core_chat_button_color' );
-$request->set_param( 'key', 'def_core_chat_button_color' );
+$request = new WP_REST_Request( 'POST', '/def-core/v1/setup/setting/widrow_ai_chat_button_color' );
+$request->set_param( 'key', 'widrow_ai_chat_button_color' );
 $request->set_body( json_encode( array( 'value' => 'FF5733' ) ) );
 $response = $sa->rest_update_setting( $request );
 assert_equals( 400, $response->get_status(), 'rejects hex without # prefix' );
 
 // Invalid hex characters.
-$request = new WP_REST_Request( 'POST', '/def-core/v1/setup/setting/def_core_chat_button_color' );
-$request->set_param( 'key', 'def_core_chat_button_color' );
+$request = new WP_REST_Request( 'POST', '/def-core/v1/setup/setting/widrow_ai_chat_button_color' );
+$request->set_param( 'key', 'widrow_ai_chat_button_color' );
 $request->set_body( json_encode( array( 'value' => '#GGGGGG' ) ) );
 $response = $sa->rest_update_setting( $request );
 assert_equals( 400, $response->get_status(), 'rejects invalid hex characters' );
 
 // 8-digit hex (rgba).
-$request = new WP_REST_Request( 'POST', '/def-core/v1/setup/setting/def_core_chat_button_color' );
-$request->set_param( 'key', 'def_core_chat_button_color' );
+$request = new WP_REST_Request( 'POST', '/def-core/v1/setup/setting/widrow_ai_chat_button_color' );
+$request->set_param( 'key', 'widrow_ai_chat_button_color' );
 $request->set_body( json_encode( array( 'value' => '#FF573300' ) ) );
 $response = $sa->rest_update_setting( $request );
 assert_equals( 400, $response->get_status(), 'rejects 8-digit hex (rgba)' );
@@ -593,7 +593,7 @@ $_wp_test_global_settings = array(
 	),
 );
 
-$colors = DEF_Core_Theme_Colors::detect();
+$colors = Widrow_AI_Theme_Colors::detect();
 assert_equals( '', $colors['button_color'], 'unresolvable variable returns empty' );
 assert_equals( 'none', $colors['source'], 'source is none when variable unresolvable' );
 
@@ -615,7 +615,7 @@ file_put_contents( $tmp_dir . '/style.css', '
 }
 ');
 
-$colors = DEF_Core_Theme_Colors::detect();
+$colors = Widrow_AI_Theme_Colors::detect();
 assert_equals( '#1e40af', $colors['button_color'], 'wp-element-button takes priority over .button' );
 
 unlink( $tmp_dir . '/style.css' );
@@ -626,11 +626,11 @@ rmdir( $tmp_dir );
 echo "\n[14] GET /setup/setting — read button color settings\n";
 reset_theme_state();
 setup_admin();
-update_option( 'def_core_chat_button_color', '#FF5733' );
+update_option( 'widrow_ai_chat_button_color', '#FF5733' );
 
-$sa      = new DEF_Core_Admin_API();
-$request = new WP_REST_Request( 'GET', '/def-core/v1/setup/setting/def_core_chat_button_color' );
-$request->set_param( 'key', 'def_core_chat_button_color' );
+$sa      = new Widrow_AI_Admin_API();
+$request = new WP_REST_Request( 'GET', '/def-core/v1/setup/setting/widrow_ai_chat_button_color' );
+$request->set_param( 'key', 'widrow_ai_chat_button_color' );
 $response = $sa->rest_get_setting( $request );
 $data     = $response->get_data();
 assert_equals( 200, $response->get_status(), 'returns 200' );

@@ -11,7 +11,7 @@
  * Runs standalone (no WordPress bootstrap). Stubs is_user_logged_in() and
  * wp_verify_nonce() to exercise each auth branch.
  *
- * @package def-core/tests
+ * @package widrow-ai/tests
  */
 
 declare(strict_types=1);
@@ -19,8 +19,8 @@ declare(strict_types=1);
 if ( ! defined( 'ABSPATH' ) ) {
 	define( 'ABSPATH', dirname( __DIR__ ) . '/' );
 }
-if ( ! defined( 'DEF_CORE_PLUGIN_DIR' ) ) {
-	define( 'DEF_CORE_PLUGIN_DIR', dirname( __DIR__ ) . '/' );
+if ( ! defined( 'WIDROW_AI_PLUGIN_DIR' ) ) {
+	define( 'WIDROW_AI_PLUGIN_DIR', dirname( __DIR__ ) . '/' );
 }
 
 require_once __DIR__ . '/wp-stubs.php';
@@ -79,9 +79,9 @@ if ( ! class_exists( 'WP_Error' ) ) {
 	}
 }
 
-// Stub DEF_Core::get_def_api_url_internal() — required by the forwarding path.
-if ( ! class_exists( 'DEF_Core' ) ) {
-	class DEF_Core {
+// Stub Widrow_AI::get_def_api_url_internal() — required by the forwarding path.
+if ( ! class_exists( 'Widrow_AI' ) ) {
+	class Widrow_AI {
 		public static function get_def_api_url_internal(): string {
 			return 'http://def-api-stub';
 		}
@@ -89,7 +89,7 @@ if ( ! class_exists( 'DEF_Core' ) ) {
 }
 
 // Load class under test.
-require_once DEF_CORE_PLUGIN_DIR . 'includes/class-def-core-tools.php';
+require_once WIDROW_AI_PLUGIN_DIR . 'includes/class-widrow-ai-tools.php';
 
 // Swap json_proxy for a stub so we don't actually hit the network.
 // Uses Reflection since json_proxy is private.
@@ -117,7 +117,7 @@ $_confirm_test_nonce_valid = false;
 $_confirm_test_forwarded   = false;
 
 $req    = new WP_REST_Request( array(), '{}' );
-$result = DEF_Core_Tools::rest_proxy_tool_result_confirm( $req );
+$result = Widrow_AI_Tools::rest_proxy_tool_result_confirm( $req );
 
 assert_true( $result instanceof WP_Error, 'returned WP_Error' );
 assert_true( isset( $result->code ) && $result->code === 'invalid_nonce', 'error code is invalid_nonce' );
@@ -134,7 +134,7 @@ $_confirm_test_nonce_valid = false;
 $_confirm_test_forwarded   = false;
 
 $req    = new WP_REST_Request( array( 'X-WP-Nonce' => 'bogus' ), '{}' );
-$result = DEF_Core_Tools::rest_proxy_tool_result_confirm( $req );
+$result = Widrow_AI_Tools::rest_proxy_tool_result_confirm( $req );
 
 assert_true( $result instanceof WP_Error, 'returned WP_Error' );
 assert_true( false === $_confirm_test_forwarded, 'forwarding NOT attempted' );
@@ -157,12 +157,12 @@ $_confirm_test_nonce_valid = false; // irrelevant — not checked when not logge
 assert_true( true, 'auth gate has no anonymous block (verified by test 1+2 branching)' );
 
 // ── 4. Method exists and is callable ────────────────────────────────────
-echo "\n[4] Method exists on DEF_Core_Tools\n";
+echo "\n[4] Method exists on Widrow_AI_Tools\n";
 assert_true(
-	method_exists( 'DEF_Core_Tools', 'rest_proxy_tool_result_confirm' ),
+	method_exists( 'Widrow_AI_Tools', 'rest_proxy_tool_result_confirm' ),
 	'rest_proxy_tool_result_confirm method exists'
 );
-$reflect = new ReflectionMethod( 'DEF_Core_Tools', 'rest_proxy_tool_result_confirm' );
+$reflect = new ReflectionMethod( 'Widrow_AI_Tools', 'rest_proxy_tool_result_confirm' );
 assert_true( $reflect->isPublic(), 'method is public' );
 assert_true( $reflect->isStatic(), 'method is static' );
 

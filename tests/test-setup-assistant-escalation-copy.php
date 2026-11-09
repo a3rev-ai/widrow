@@ -8,7 +8,7 @@
  *
  * Runs standalone (no WordPress bootstrap), same harness as test-staff-ai-share-attachments.php.
  *
- * @package def-core/tests
+ * @package widrow-ai/tests
  */
 
 declare(strict_types=1);
@@ -20,8 +20,8 @@ $_wp_test_current_user = null;
 $_wp_test_can          = true;
 $_wp_test_mail_calls   = array();
 
-if ( ! defined( 'DEF_CORE_API_NAME_SPACE' ) ) {
-	define( 'DEF_CORE_API_NAME_SPACE', 'a3-ai/v1' );
+if ( ! defined( 'WIDROW_AI_API_NAME_SPACE' ) ) {
+	define( 'WIDROW_AI_API_NAME_SPACE', 'a3-ai/v1' );
 }
 
 if ( ! class_exists( 'WP_User' ) ) {
@@ -92,10 +92,10 @@ if ( ! class_exists( 'WP_REST_Response' ) ) {
 	}
 }
 
-require_once dirname( __DIR__ ) . '/includes/class-def-core-escalation.php';
+require_once dirname( __DIR__ ) . '/includes/class-widrow-ai-escalation.php';
 
 update_option( 'admin_email', 'admin@site.example' );
-update_option( 'def_core_escalation_setup_assistant', array( 'to' => array( 'partner@agency.example' ) ) );
+update_option( 'widrow_ai_escalation_setup_assistant', array( 'to' => array( 'partner@agency.example' ) ) );
 
 $pass = 0;
 $fail = 0;
@@ -115,7 +115,7 @@ function escalate( array $body, string $nonce = 'good' ): WP_REST_Response {
 	$request = new WP_REST_Request( 'POST', '/a3-ai/v1/setup-assistant/send-escalation-email' );
 	$request->set_header( 'X-WP-Nonce', $nonce );
 	$request->set_body( (string) wp_json_encode( $body ) );
-	return DEF_Core_Escalation::rest_setup_assistant_send( $request );
+	return Widrow_AI_Escalation::rest_setup_assistant_send( $request );
 }
 
 echo "Setup Assistant escalation — a copy to the sender\n";

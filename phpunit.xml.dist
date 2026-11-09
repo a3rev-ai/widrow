@@ -8,7 +8,7 @@
 	convertWarningsToExceptions="true"
 >
 	<testsuites>
-		<testsuite name="def-core-wpunit">
+		<testsuite name="widrow-ai-wpunit">
 			<directory suffix=".php">tests/wpunit</directory>
 		</testsuite>
 	</testsuites>

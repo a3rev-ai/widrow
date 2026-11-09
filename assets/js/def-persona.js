@@ -1,7 +1,7 @@
 /**
  * Digital Employee Framework — Agent Persona Helper
  *
- * Shared across def-core-customer-chat.js, staff-ai.js, and
+ * Shared across widrow-ai-customer-chat.js, staff-ai.js, and
  * setup-assistant-drawer.js. Renders a "X is helping" divider in the
  * message stream when an Orchestrator V2 specialist takes over from the
  * Concierge, and prefixes the thinking-status row with the current
@@ -25,7 +25,7 @@
 
 	// Platform-wide default display names for known specialists. Channels
 	// merge channel-specific overrides on top of this. Adding a new specialist
-	// to a Concierge's roster (DEF-side) does NOT require a def-core change —
+	// to a Concierge's roster (DEF-side) does NOT require a widrow-ai change —
 	// the agent_id either matches a default here, a channel override below,
 	// or falls through to a snake-case → Title Case humaniser in
 	// specialistDisplayName().

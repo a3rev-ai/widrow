@@ -8,7 +8,7 @@
  * - C2: Content-Disposition header injection prevention
  * - C3: Content-Type reflection XSS prevention
  *
- * @package def-core/tests
+ * @package widrow-ai/tests
  */
 
 declare(strict_types=1);
@@ -91,8 +91,8 @@ if ( ! function_exists( 'wp_get_current_user' ) ) {
 	function wp_get_current_user(): WP_User { return new WP_User(); }
 }
 
-require_once DEF_CORE_PLUGIN_DIR . 'includes/class-def-core-jwt.php';
-require_once DEF_CORE_PLUGIN_DIR . 'includes/class-def-core-staff-ai.php';
+require_once WIDROW_AI_PLUGIN_DIR . 'includes/class-widrow-ai-jwt.php';
+require_once WIDROW_AI_PLUGIN_DIR . 'includes/class-widrow-ai-staff-ai.php';
 
 $pass = 0;
 $fail = 0;
@@ -126,10 +126,10 @@ echo "\n[C1] JWT audience claim enforcement\n";
 $valid_claims = array(
 	'sub' => '1',
 	'iss' => 'https://test.example.com',
-	'aud' => DEF_CORE_AUDIENCE, // 'digital-employee-framework'
+	'aud' => WIDROW_AI_AUDIENCE, // 'digital-employee-framework'
 );
-$valid_token = DEF_Core_JWT::issue_token( $valid_claims, 300 );
-$result      = DEF_Core_JWT::verify_token( $valid_token );
+$valid_token = Widrow_AI_JWT::issue_token( $valid_claims, 300 );
+$result      = Widrow_AI_JWT::verify_token( $valid_token );
 assert_true( is_array( $result ), 'correct aud accepted' );
 assert_equals( '1', $result['sub'], 'payload preserved with correct aud' );
 
@@ -160,7 +160,7 @@ $signature      = '';
 openssl_sign( $signing_input, $signature, $private_key, OPENSSL_ALGO_SHA256 );
 $wrong_aud_token = $signing_input . '.' . $b64url_encode( $signature );
 
-$result = DEF_Core_JWT::verify_token( $wrong_aud_token );
+$result = Widrow_AI_JWT::verify_token( $wrong_aud_token );
 assert_null( $result, 'wrong aud rejected' );
 
 // 3. Token with aud as array not containing our audience → rejected.
@@ -172,19 +172,19 @@ $signing_input  = $encoded_header . '.' . $encoded_body;
 openssl_sign( $signing_input, $signature, $private_key, OPENSSL_ALGO_SHA256 );
 $array_wrong_token = $signing_input . '.' . $b64url_encode( $signature );
 
-$result = DEF_Core_JWT::verify_token( $array_wrong_token );
+$result = Widrow_AI_JWT::verify_token( $array_wrong_token );
 assert_null( $result, 'array aud not containing our audience rejected' );
 
 // 4. Token with aud as array containing our audience → accepted.
 $array_ok_claims = $wrong_aud_claims;
-$array_ok_claims['aud'] = array( 'other-service', DEF_CORE_AUDIENCE );
+$array_ok_claims['aud'] = array( 'other-service', WIDROW_AI_AUDIENCE );
 $payload_json   = json_encode( $array_ok_claims, JSON_UNESCAPED_SLASHES );
 $encoded_body   = $b64url_encode( $payload_json );
 $signing_input  = $encoded_header . '.' . $encoded_body;
 openssl_sign( $signing_input, $signature, $private_key, OPENSSL_ALGO_SHA256 );
 $array_ok_token = $signing_input . '.' . $b64url_encode( $signature );
 
-$result = DEF_Core_JWT::verify_token( $array_ok_token );
+$result = Widrow_AI_JWT::verify_token( $array_ok_token );
 assert_true( is_array( $result ), 'array aud containing our audience accepted' );
 
 // 5. Token with no aud claim → accepted (backwards compat — external tokens may not set aud).
@@ -196,7 +196,7 @@ $signing_input  = $encoded_header . '.' . $encoded_body;
 openssl_sign( $signing_input, $signature, $private_key, OPENSSL_ALGO_SHA256 );
 $no_aud_token = $signing_input . '.' . $b64url_encode( $signature );
 
-$result = DEF_Core_JWT::verify_token( $no_aud_token );
+$result = Widrow_AI_JWT::verify_token( $no_aud_token );
 assert_true( is_array( $result ), 'no aud claim still accepted (backwards compat)' );
 
 // =====================================================================
@@ -208,7 +208,7 @@ echo "\n[C1b] JWT not-before (nbf) claim enforcement\n";
 $future_nbf_claims = array(
 	'sub' => '1',
 	'iss' => 'https://test.example.com',
-	'aud' => DEF_CORE_AUDIENCE,
+	'aud' => WIDROW_AI_AUDIENCE,
 	'iat' => time(),
 	'exp' => time() + 3600,
 	'nbf' => time() + 3600, // Not valid for another hour.
@@ -220,7 +220,7 @@ $signing_input  = $encoded_header . '.' . $encoded_body;
 openssl_sign( $signing_input, $signature, $private_key, OPENSSL_ALGO_SHA256 );
 $future_nbf_token = $signing_input . '.' . $b64url_encode( $signature );
 
-$result = DEF_Core_JWT::verify_token( $future_nbf_token );
+$result = Widrow_AI_JWT::verify_token( $future_nbf_token );
 assert_null( $result, 'future nbf rejected' );
 
 // Token with nbf in the past → accepted.
@@ -232,7 +232,7 @@ $signing_input  = $encoded_header . '.' . $encoded_body;
 openssl_sign( $signing_input, $signature, $private_key, OPENSSL_ALGO_SHA256 );
 $past_nbf_token = $signing_input . '.' . $b64url_encode( $signature );
 
-$result = DEF_Core_JWT::verify_token( $past_nbf_token );
+$result = Widrow_AI_JWT::verify_token( $past_nbf_token );
 assert_true( is_array( $result ), 'past nbf accepted' );
 
 // =====================================================================
@@ -241,7 +241,7 @@ assert_true( is_array( $result ), 'past nbf accepted' );
 echo "\n[C2] Content-Disposition filename sanitization\n";
 
 // Use reflection to access the private method.
-$ref = new ReflectionMethod( 'DEF_Core_Staff_AI', 'sanitize_proxy_filename' );
+$ref = new ReflectionMethod( 'Widrow_AI_Staff_AI', 'sanitize_proxy_filename' );
 $ref->setAccessible( true );
 
 // Normal filename → passes through.
@@ -289,7 +289,7 @@ assert_true( strpos( $result, 'résumé' ) !== false, 'unicode filename preserve
 // =====================================================================
 echo "\n[C3] Content-Type sanitization\n";
 
-$ref_ct = new ReflectionMethod( 'DEF_Core_Staff_AI', 'sanitize_proxy_content_type' );
+$ref_ct = new ReflectionMethod( 'Widrow_AI_Staff_AI', 'sanitize_proxy_content_type' );
 $ref_ct->setAccessible( true );
 
 // Safe types → preserved.

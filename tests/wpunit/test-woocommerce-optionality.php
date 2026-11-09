@@ -2,10 +2,10 @@
 /**
  * D4: WooCommerce Optionality Tests
  *
- * Verifies that def-core works correctly when WooCommerce is NOT installed:
+ * Verifies that widrow-ai works correctly when WooCommerce is NOT installed:
  * plugin activates, core classes exist, core routes work, WC routes absent.
  *
- * @package def-core
+ * @package widrow-ai
  * @group woocommerce-optionality
  */
 
@@ -24,15 +24,15 @@ class Test_WooCommerce_Optionality extends WP_UnitTestCase {
 		);
 
 		// Core plugin classes must exist.
-		$this->assertTrue( class_exists( 'DEF_Core' ), 'DEF_Core class should exist' );
-		$this->assertTrue( class_exists( 'DEF_Core_JWT' ), 'DEF_Core_JWT class should exist' );
-		$this->assertTrue( class_exists( 'DEF_Core_Routes' ), 'DEF_Core_Routes class should exist' );
-		$this->assertTrue( class_exists( 'DEF_Core_Tools' ), 'DEF_Core_Tools class should exist' );
-		$this->assertTrue( class_exists( 'DEF_Core_Staff_AI' ), 'DEF_Core_Staff_AI class should exist' );
-		$this->assertTrue( class_exists( 'DEF_Core_Escalation' ), 'DEF_Core_Escalation class should exist' );
-		$this->assertTrue( class_exists( 'DEF_Core_Admin' ), 'DEF_Core_Admin class should exist' );
-		$this->assertTrue( class_exists( 'DEF_Core_Cache' ), 'DEF_Core_Cache class should exist' );
-		$this->assertTrue( class_exists( 'DEF_Core_API_Registry' ), 'DEF_Core_API_Registry class should exist' );
+		$this->assertTrue( class_exists( 'Widrow_AI' ), 'Widrow_AI class should exist' );
+		$this->assertTrue( class_exists( 'Widrow_AI_JWT' ), 'Widrow_AI_JWT class should exist' );
+		$this->assertTrue( class_exists( 'Widrow_AI_Routes' ), 'Widrow_AI_Routes class should exist' );
+		$this->assertTrue( class_exists( 'Widrow_AI_Tools' ), 'Widrow_AI_Tools class should exist' );
+		$this->assertTrue( class_exists( 'Widrow_AI_Staff_AI' ), 'Widrow_AI_Staff_AI class should exist' );
+		$this->assertTrue( class_exists( 'Widrow_AI_Escalation' ), 'Widrow_AI_Escalation class should exist' );
+		$this->assertTrue( class_exists( 'Widrow_AI_Admin' ), 'Widrow_AI_Admin class should exist' );
+		$this->assertTrue( class_exists( 'Widrow_AI_Cache' ), 'Widrow_AI_Cache class should exist' );
+		$this->assertTrue( class_exists( 'Widrow_AI_API_Registry' ), 'Widrow_AI_API_Registry class should exist' );
 	}
 
 	/**

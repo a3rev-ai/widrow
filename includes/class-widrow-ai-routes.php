@@ -1,0 +1,353 @@
+<?php
+/**
+ * Class Widrow_AI_Routes
+ *
+ * Registers the REST routes for the Digital Employee Framework - Core plugin.
+ *
+ * @package widrow-ai
+ * @since 0.1.0
+ * @version 0.1.0
+ */
+
+declare(strict_types=1);
+
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
+/**
+ * Class Widrow_AI_Routes
+ *
+ * Registers the REST routes for the Digital Employee Framework - Core plugin.
+ *
+ * @package widrow-ai
+ * @since 0.1.0
+ * @version 0.1.0
+ */
+final class Widrow_AI_Routes {
+	/**
+	 * Initialize the routes.
+	 *
+	 * @since 0.1.0
+	 * @version 0.2.0
+	 */
+	public static function init(): void {
+		// Register tools early so they're available for admin page and REST API.
+		add_action( 'init', array( __CLASS__, 'register_tools' ), 10 );
+		// Register REST routes when REST API is initialized.
+		add_action( 'rest_api_init', array( __CLASS__, 'register_rest_routes' ) );
+	}
+
+	/**
+	 * Register tools with the registry (called early on 'init').
+	 *
+	 * @since 0.2.0
+	 * @version 0.2.0
+	 */
+	public static function register_tools(): void {
+		// Register core tools via registry.
+		self::register_core_tools();
+
+		// Allow modules to register their tools.
+		do_action( 'widrow_ai_register_tools' );
+	}
+
+	/**
+	 * Register the REST routes (called on 'rest_api_init').
+	 *
+	 * @since 0.1.0
+	 * @version 0.2.0
+	 */
+	public static function register_rest_routes(): void {
+		// Core routes (not tools, so registered directly).
+		register_rest_route(
+			WIDROW_AI_API_NAME_SPACE,
+			'/context-token',
+			array(
+				'methods'             => 'GET',
+				'permission_callback' => function () {
+					return is_user_logged_in();
+				},
+				'callback'            => array( 'Widrow_AI_Tools', 'rest_issue_context_token' ),
+			)
+		);
+
+		// The widget's stream token (W74): Customer Chat's is anyone's, as /chat/stream is
+		// (its nonce rule runs in the callback); Staff AI's takes the staff stream's permission.
+		register_rest_route(
+			WIDROW_AI_API_NAME_SPACE,
+			'/chat/stream-token',
+			array(
+				'methods'             => 'POST',
+				'args'                => array(
+					'channel' => array(
+						'type'     => 'string',
+						'required' => true,
+						'enum'     => array( 'customer_chat', 'staff_ai' ),
+					),
+					'thread'  => array(
+						'type'    => 'string',
+						'default' => '',
+					),
+				),
+				'permission_callback' => function ( $request ) {
+					if ( 'staff_ai' !== $request->get_param( 'channel' ) ) {
+						return true;
+					}
+					if ( ! is_user_logged_in() ) {
+						return false;
+					}
+					if ( current_user_can( 'widrow_staff_access' ) || current_user_can( 'widrow_management_access' ) ) {
+						return true;
+					}
+					return \Widrow_AI_Staff_AI::access_denied_error();
+				},
+				'callback'            => array( 'Widrow_AI_Tools', 'rest_issue_stream_token' ),
+			)
+		);
+
+		register_rest_route(
+			WIDROW_AI_API_NAME_SPACE,
+			'/jwks',
+			array(
+				'methods'             => 'GET',
+				'permission_callback' => '__return_true',
+				'callback'            => array( 'Widrow_AI_Tools', 'rest_get_jwks' ),
+			)
+		);
+
+		// Customer Chat BFF proxy — proxies chat requests to DEF backend
+		register_rest_route(
+			WIDROW_AI_API_NAME_SPACE,
+			'/chat/stream',
+			array(
+				'methods'             => 'POST',
+				'permission_callback' => '__return_true',
+				'callback'            => array( 'Widrow_AI_Tools', 'rest_proxy_chat_stream' ),
+			)
+		);
+
+		// Customer Chat BFF proxy — whether the customer employee takes a spoken turn (7.7.8).
+		register_rest_route(
+			WIDROW_AI_API_NAME_SPACE,
+			'/chat/voice',
+			array(
+				'methods'             => 'GET',
+				'permission_callback' => '__return_true',
+				'callback'            => array( 'Widrow_AI_Tools', 'rest_proxy_chat_voice' ),
+			)
+		);
+
+		// Customer Chat BFF proxy — upload init/commit (same pattern as chat)
+		register_rest_route(
+			WIDROW_AI_API_NAME_SPACE,
+			'/uploads/init',
+			array(
+				'methods'             => 'POST',
+				'permission_callback' => '__return_true',
+				'callback'            => array( 'Widrow_AI_Tools', 'rest_proxy_upload_init' ),
+			)
+		);
+
+		register_rest_route(
+			WIDROW_AI_API_NAME_SPACE,
+			'/uploads/commit',
+			array(
+				'methods'             => 'POST',
+				'permission_callback' => '__return_true',
+				'callback'            => array( 'Widrow_AI_Tools', 'rest_proxy_upload_commit' ),
+			)
+		);
+
+		// Customer Chat BFF proxy — async tool-result confirmation
+		// (agentic loop closure, DEF-AGENTIC-LOOP-CLOSURE-V1.2 §4.2).
+		register_rest_route(
+			WIDROW_AI_API_NAME_SPACE,
+			'/tool-result-confirm',
+			array(
+				'methods'             => 'POST',
+				'permission_callback' => '__return_true',
+				'callback'            => array( 'Widrow_AI_Tools', 'rest_proxy_tool_result_confirm' ),
+			)
+		);
+
+		// Staff AI BFF proxy — proxies chat requests to DEF backend
+		register_rest_route(
+			WIDROW_AI_API_NAME_SPACE,
+			'/staff-ai/chat/stream',
+			array(
+				'methods'             => 'POST',
+				'permission_callback' => function () {
+					if ( ! is_user_logged_in() ) {
+						return false;
+					}
+					if ( current_user_can( 'widrow_staff_access' ) || current_user_can( 'widrow_management_access' ) ) {
+						return true;
+					}
+					// Logged-in but uncapped: named refusal with actionable copy
+					// (5.7.7). Anonymous stays bare false above — 401 shape untouched.
+					return \Widrow_AI_Staff_AI::access_denied_error();
+				},
+				'callback'            => array( 'Widrow_AI_Tools', 'rest_proxy_staff_ai_stream' ),
+			)
+		);
+
+		// NOTE: GET /staff-ai/status is ALSO registered (diagnostic-only) in
+		// Widrow_AI_Staff_AI::register_rest_routes(). This passthrough wins dispatch
+		// because Widrow_AI_Routes::init() runs before Widrow_AI_Staff_AI::init() in
+		// Widrow_AI::init() (so it registers first, and WordPress matches the first
+		// method handler). The model switcher's `available_models` is only on THIS
+		// (passthrough) response, so this ordering is load-bearing — do not reorder
+		// those init() calls without moving the dropdown to a dedicated route.
+		register_rest_route(
+			WIDROW_AI_API_NAME_SPACE,
+			'/staff-ai/status',
+			array(
+				'methods'             => 'GET',
+				'permission_callback' => function () {
+					if ( ! is_user_logged_in() ) {
+						return false;
+					}
+					if ( current_user_can( 'widrow_staff_access' ) || current_user_can( 'widrow_management_access' ) ) {
+						return true;
+					}
+					// Logged-in but uncapped: named refusal with actionable copy
+					// (5.7.7). Anonymous stays bare false above — 401 shape untouched.
+					return \Widrow_AI_Staff_AI::access_denied_error();
+				},
+				'callback'            => array( 'Widrow_AI_Tools', 'rest_proxy_staff_ai_status' ),
+			)
+		);
+
+		// Setup Assistant BFF proxy — proxies chat requests to DEF backend
+		register_rest_route(
+			WIDROW_AI_API_NAME_SPACE,
+			'/setup-assistant/chat/stream',
+			array(
+				'methods'             => 'POST',
+				'permission_callback' => function () {
+					if ( ! is_user_logged_in() ) {
+						return false;
+					}
+					return current_user_can( 'widrow_admin_access' );
+				},
+				'callback'            => array( 'Widrow_AI_Tools', 'rest_proxy_setup_assistant_stream' ),
+			)
+		);
+
+		// Setup Assistant BFF proxy — resume the active thread on drawer mount.
+		register_rest_route(
+			WIDROW_AI_API_NAME_SPACE,
+			'/setup-assistant/active-thread',
+			array(
+				'methods'             => 'GET',
+				'permission_callback' => function () {
+					if ( ! is_user_logged_in() ) {
+						return false;
+					}
+					return current_user_can( 'widrow_admin_access' );
+				},
+				'callback'            => array( 'Widrow_AI_Tools', 'rest_proxy_setup_assistant_active_thread' ),
+			)
+		);
+
+		// Setup Assistant BFF proxy — clear the active thread ("new chat").
+		register_rest_route(
+			WIDROW_AI_API_NAME_SPACE,
+			'/setup-assistant/clear',
+			array(
+				'methods'             => 'POST',
+				'permission_callback' => function () {
+					if ( ! is_user_logged_in() ) {
+						return false;
+					}
+					return current_user_can( 'widrow_admin_access' );
+				},
+				'callback'            => array( 'Widrow_AI_Tools', 'rest_proxy_setup_assistant_clear' ),
+			)
+		);
+
+		// Register all tools with WordPress REST API.
+		// Tools are already registered in register_tools() on 'init' hook.
+		$registry = Widrow_AI_API_Registry::instance();
+		$registry->register_all_tools();
+	}
+
+	/**
+	 * Register core tools.
+	 *
+	 * @since 0.2.0
+	 * @version 0.2.0
+	 */
+	private static function register_core_tools(): void {
+		$registry = Widrow_AI_API_Registry::instance();
+
+		// User profile tool (always available).
+		$registry->register_tool(
+			'/tools/me',
+			__( 'User Profile', 'widrow-ai' ),
+			array( 'GET' ),
+			array( 'Widrow_AI_Tools', 'me' ),
+			array( 'Widrow_AI_Tools', 'permission_check' ),
+			array(),
+			'core'
+		);
+
+		// Check if WooCommerce is installed and active.
+		$woocommerce_active = class_exists( 'WooCommerce' ) || function_exists( 'WC' );
+
+		if ( $woocommerce_active ) {
+			// WooCommerce Orders.
+			$registry->register_tool(
+				'/tools/wc/orders',
+				__( 'WooCommerce Orders', 'widrow-ai' ),
+				array( 'GET' ),
+				array( 'Widrow_AI_Tools', 'wc_orders' ),
+				array( 'Widrow_AI_Tools', 'permission_check' ),
+				array(),
+				'core'
+			);
+
+			// WooCommerce Order Detail.
+			$registry->register_tool(
+				'/tools/wc/orders/(?P<order_id>\d+)',
+				__( 'WooCommerce Order Detail', 'widrow-ai' ),
+				array( 'GET' ),
+				array( 'Widrow_AI_Tools', 'wc_order_detail' ),
+				array( 'Widrow_AI_Tools', 'permission_check' ),
+				array(),
+				'core'
+			);
+
+			// Adding to cart is handled by the widget calling WooCommerce's
+			// Store API directly (wc/store/v1/cart/add-item). Running a
+			// custom REST endpoint through WC's session/cart machinery in
+			// REST context is fragile — Store API is the endpoint the WC
+			// Cart Block uses and has a Cart-Token mechanism designed for
+			// this use case. No custom add-to-cart route is registered.
+
+			// WooCommerce Products (public - no authentication required).
+			$registry->register_tool(
+				'/tools/wc/products',
+				__( 'WooCommerce Products', 'widrow-ai' ),
+				array( 'GET' ),
+				array( 'Widrow_AI_Tools', 'wc_get_products_list' ),
+				'__return_true',
+				array(),
+				'core'
+			);
+
+			// WooCommerce Cart — server-side fallback for DEF's `get_cart`
+			// when the browser has no Cart-Token but the user is logged in.
+			$registry->register_tool(
+				'/tools/wc/cart',
+				__( 'WooCommerce Cart', 'widrow-ai' ),
+				array( 'GET' ),
+				array( 'Widrow_AI_Tools', 'wc_get_cart' ),
+				array( 'Widrow_AI_Tools', 'permission_check' ),
+				array(),
+				'core'
+			);
+		}
+	}
+}

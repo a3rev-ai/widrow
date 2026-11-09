@@ -1,12 +1,12 @@
 <?php
 /**
  * Page Context Build Plan V1.1 Sub-PR C — PHP-side tests for
- * DEF_Core_Page_Context.
+ * Widrow_AI_Page_Context.
  *
  * Runs standalone (no WordPress bootstrap). Stubs the minimum WP +
  * WooCommerce surface area needed to drive each helper.
  *
- * @package def-core/tests
+ * @package widrow-ai/tests
  */
 
 declare(strict_types=1);
@@ -186,7 +186,7 @@ if ( ! function_exists( 'get_post_meta' ) )          { function get_post_meta( $
 if ( ! function_exists( 'get_post_field' ) )         { function get_post_field( $field, $post = null ) { return ''; } }
 
 // Load the class under test.
-require_once __DIR__ . '/../includes/class-def-core-page-context.php';
+require_once __DIR__ . '/../includes/class-widrow-ai-page-context.php';
 
 // ─── Test runner ───────────────────────────────────────────────────────
 
@@ -206,88 +206,88 @@ function assert_test( bool $cond, string $name ): void {
 	}
 }
 
-echo "=== DEF_Core_Page_Context Tests ===\n\n";
+echo "=== Widrow_AI_Page_Context Tests ===\n\n";
 
 // ─── detect_page_type ─────────────────────────────────────────────────
 echo "detect_page_type:\n";
 
 _fx_reset();
 _fx_set( array( 'is_front_page' => true ) );
-assert_test( DEF_Core_Page_Context::detect_page_type() === 'home', 'front page → home' );
+assert_test( Widrow_AI_Page_Context::detect_page_type() === 'home', 'front page → home' );
 
 _fx_reset();
 _fx_set( array( 'is_product' => true ) );
-assert_test( DEF_Core_Page_Context::detect_page_type() === 'product', 'WC product → product' );
+assert_test( Widrow_AI_Page_Context::detect_page_type() === 'product', 'WC product → product' );
 
 _fx_reset();
 _fx_set( array( 'is_cart' => true ) );
-assert_test( DEF_Core_Page_Context::detect_page_type() === 'cart', 'cart → cart' );
+assert_test( Widrow_AI_Page_Context::detect_page_type() === 'cart', 'cart → cart' );
 
 _fx_reset();
 _fx_set( array( 'is_checkout' => true ) );
-assert_test( DEF_Core_Page_Context::detect_page_type() === 'checkout', 'checkout → checkout' );
+assert_test( Widrow_AI_Page_Context::detect_page_type() === 'checkout', 'checkout → checkout' );
 
 _fx_reset();
 _fx_set( array( 'is_account_page' => true ) );
-assert_test( DEF_Core_Page_Context::detect_page_type() === 'account', 'account → account' );
+assert_test( Widrow_AI_Page_Context::detect_page_type() === 'account', 'account → account' );
 
 _fx_reset();
 _fx_set( array( 'is_singular' => true, 'is_singular_post' => true ) );
-assert_test( DEF_Core_Page_Context::detect_page_type() === 'post', 'single post → post' );
+assert_test( Widrow_AI_Page_Context::detect_page_type() === 'post', 'single post → post' );
 
 _fx_reset();
 _fx_set( array( 'is_singular' => true, 'is_singular_page' => true ) );
-assert_test( DEF_Core_Page_Context::detect_page_type() === 'page', 'single page → page' );
+assert_test( Widrow_AI_Page_Context::detect_page_type() === 'page', 'single page → page' );
 
 _fx_reset();
 _fx_set( array( 'is_product_category' => true ) );
-assert_test( DEF_Core_Page_Context::detect_page_type() === 'taxonomy_archive', 'WC product category → taxonomy_archive' );
+assert_test( Widrow_AI_Page_Context::detect_page_type() === 'taxonomy_archive', 'WC product category → taxonomy_archive' );
 
 _fx_reset();
 _fx_set( array( 'is_category' => true ) );
-assert_test( DEF_Core_Page_Context::detect_page_type() === 'taxonomy_archive', 'WP post category → taxonomy_archive' );
+assert_test( Widrow_AI_Page_Context::detect_page_type() === 'taxonomy_archive', 'WP post category → taxonomy_archive' );
 
 _fx_reset();
 _fx_set( array( 'is_tag' => true ) );
-assert_test( DEF_Core_Page_Context::detect_page_type() === 'taxonomy_archive', 'WP post tag → taxonomy_archive' );
+assert_test( Widrow_AI_Page_Context::detect_page_type() === 'taxonomy_archive', 'WP post tag → taxonomy_archive' );
 
 _fx_reset();
 _fx_set( array( 'is_tax' => true ) );
-assert_test( DEF_Core_Page_Context::detect_page_type() === 'taxonomy_archive', 'custom tax archive → taxonomy_archive' );
+assert_test( Widrow_AI_Page_Context::detect_page_type() === 'taxonomy_archive', 'custom tax archive → taxonomy_archive' );
 
 _fx_reset();
 _fx_set( array( 'is_singular' => true ) );
-assert_test( DEF_Core_Page_Context::detect_page_type() === 'other_singular', 'unknown CPT → other_singular' );
+assert_test( Widrow_AI_Page_Context::detect_page_type() === 'other_singular', 'unknown CPT → other_singular' );
 
 _fx_reset();
-assert_test( DEF_Core_Page_Context::detect_page_type() === 'other', 'unrecognised page → other' );
+assert_test( Widrow_AI_Page_Context::detect_page_type() === 'other', 'unrecognised page → other' );
 
 // ─── detect_language ─────────────────────────────────────────────────
 echo "\ndetect_language:\n";
 
 _fx_reset();
 _fx_set( array( 'locale' => 'en_US' ) );
-assert_test( DEF_Core_Page_Context::detect_language() === 'en', 'en_US → en' );
+assert_test( Widrow_AI_Page_Context::detect_language() === 'en', 'en_US → en' );
 
 _fx_set( array( 'locale' => 'de_DE' ) );
-assert_test( DEF_Core_Page_Context::detect_language() === 'de', 'de_DE → de' );
+assert_test( Widrow_AI_Page_Context::detect_language() === 'de', 'de_DE → de' );
 
 _fx_set( array( 'locale' => 'zh_CN' ) );
-assert_test( DEF_Core_Page_Context::detect_language() === 'zh-Hans', 'zh_CN → zh-Hans' );
+assert_test( Widrow_AI_Page_Context::detect_language() === 'zh-Hans', 'zh_CN → zh-Hans' );
 
 _fx_set( array( 'locale' => 'zh_TW' ) );
-assert_test( DEF_Core_Page_Context::detect_language() === 'zh-Hant', 'zh_TW → zh-Hant' );
+assert_test( Widrow_AI_Page_Context::detect_language() === 'zh-Hant', 'zh_TW → zh-Hant' );
 
 // Filter hook
-$GLOBALS['fx_filters']['def_core_detected_language'] = 'fr';
-assert_test( DEF_Core_Page_Context::detect_language() === 'fr', 'def_core_detected_language filter overrides fallback' );
-unset( $GLOBALS['fx_filters']['def_core_detected_language'] );
+$GLOBALS['fx_filters']['widrow_ai_detected_language'] = 'fr';
+assert_test( Widrow_AI_Page_Context::detect_language() === 'fr', 'widrow_ai_detected_language filter overrides fallback' );
+unset( $GLOBALS['fx_filters']['widrow_ai_detected_language'] );
 
 // ─── collect_queried_taxonomy ────────────────────────────────────────
 echo "\ncollect_queried_taxonomy:\n";
 
 _fx_reset();
-assert_test( DEF_Core_Page_Context::collect_queried_taxonomy() === null, 'non-archive page → null' );
+assert_test( Widrow_AI_Page_Context::collect_queried_taxonomy() === null, 'non-archive page → null' );
 
 _fx_reset();
 _fx_set( array(
@@ -296,7 +296,7 @@ _fx_set( array(
 	'queried_object_id'   => 89,
 	'is_taxonomy_hierarchical' => array( 'product_cat' => true ),
 ) );
-$qt = DEF_Core_Page_Context::collect_queried_taxonomy();
+$qt = Widrow_AI_Page_Context::collect_queried_taxonomy();
 assert_test( is_array( $qt ) && $qt['taxonomy'] === 'product_cat' && $qt['term_id'] === 89, 'product_cat archive → identity fields populated' );
 assert_test( $qt['hierarchy'] === array( 'Search Plugins' ), 'hierarchy contains the queried term name' );
 
@@ -317,7 +317,7 @@ _fx_set( array(
 		'12|product_cat' => (object) array( 'name' => 'Shirts' ),
 	),
 ) );
-$qt = DEF_Core_Page_Context::collect_queried_taxonomy();
+$qt = Widrow_AI_Page_Context::collect_queried_taxonomy();
 assert_test( $qt['hierarchy'] === array( 'Mens', 'Shirts', 'Long Sleeve' ), 'hierarchy is root→leaf' );
 
 // Non-hierarchical taxonomy → empty hierarchy.
@@ -328,7 +328,7 @@ _fx_set( array(
 	'queried_object'           => (object) array( 'taxonomy' => 'product_tag', 'term_id' => 145, 'slug' => 'ajax', 'name' => 'AJAX' ),
 	'is_taxonomy_hierarchical' => array( 'product_tag' => false ),
 ) );
-$qt = DEF_Core_Page_Context::collect_queried_taxonomy();
+$qt = Widrow_AI_Page_Context::collect_queried_taxonomy();
 assert_test( $qt['hierarchy'] === array(), 'non-hierarchical tag → empty hierarchy' );
 
 // ─── collect_page_terms ──────────────────────────────────────────────
@@ -347,7 +347,7 @@ _fx_set( array(
 		),
 	),
 ) );
-$terms = DEF_Core_Page_Context::collect_page_terms( 1234 );
+$terms = Widrow_AI_Page_Context::collect_page_terms( 1234 );
 assert_test( count( $terms ) === 2, 'product with 2 taxonomies → 2 terms' );
 assert_test( $terms[0]['taxonomy'] === 'product_cat' && $terms[0]['term_id'] === 89, 'first entry is product_cat with right term_id' );
 
@@ -366,14 +366,14 @@ _fx_set( array(
 		),
 	),
 ) );
-$terms = DEF_Core_Page_Context::collect_page_terms( 1234 );
+$terms = Widrow_AI_Page_Context::collect_page_terms( 1234 );
 $tax_names = array_column( $terms, 'taxonomy' );
 assert_test( in_array( 'product_cat', $tax_names, true ), 'product_cat included' );
 assert_test( ! in_array( 'pa_color', $tax_names, true ), 'pa_color excluded by default' );
 assert_test( ! in_array( 'pa_size',  $tax_names, true ), 'pa_size excluded by default' );
 
 // pa_brand allowlisted via filter
-$GLOBALS['fx_filters']['def_core_page_context_allowed_attribute_taxonomies'] = array( 'pa_brand' );
+$GLOBALS['fx_filters']['widrow_ai_page_context_allowed_attribute_taxonomies'] = array( 'pa_brand' );
 _fx_set( array(
 	'object_taxonomies' => array( 'product' => array( 'product_cat', 'pa_brand', 'pa_color' ) ),
 	'object_terms'      => array(
@@ -384,11 +384,11 @@ _fx_set( array(
 		),
 	),
 ) );
-$terms = DEF_Core_Page_Context::collect_page_terms( 1234 );
+$terms = Widrow_AI_Page_Context::collect_page_terms( 1234 );
 $tax_names = array_column( $terms, 'taxonomy' );
 assert_test( in_array( 'pa_brand', $tax_names, true ), 'pa_brand re-enabled via allowlist filter' );
 assert_test( ! in_array( 'pa_color', $tax_names, true ), 'pa_color still excluded (not in allowlist)' );
-unset( $GLOBALS['fx_filters']['def_core_page_context_allowed_attribute_taxonomies'] );
+unset( $GLOBALS['fx_filters']['widrow_ai_page_context_allowed_attribute_taxonomies'] );
 
 // Private taxonomy excluded
 _fx_reset();
@@ -405,7 +405,7 @@ _fx_set( array(
 	),
 	'taxonomies_public' => array( 'internal-tag' => false ),
 ) );
-$terms = DEF_Core_Page_Context::collect_page_terms( 1234 );
+$terms = Widrow_AI_Page_Context::collect_page_terms( 1234 );
 $tax_names = array_column( $terms, 'taxonomy' );
 assert_test( in_array( 'product_cat', $tax_names, true ), 'public product_cat kept' );
 assert_test( ! in_array( 'internal-tag', $tax_names, true ), 'private internal-tag excluded' );
@@ -427,7 +427,7 @@ _fx_set( array(
 	),
 	'taxonomies_unregistered' => array( 'ghost-tax' ),
 ) );
-$terms = DEF_Core_Page_Context::collect_page_terms( 1234 );
+$terms = Widrow_AI_Page_Context::collect_page_terms( 1234 );
 $tax_names = array_column( $terms, 'taxonomy' );
 assert_test( in_array( 'product_cat', $tax_names, true ), 'resolvable public taxonomy kept alongside an unresolvable one' );
 assert_test( ! in_array( 'ghost-tax', $tax_names, true ), 'unresolvable taxonomy excluded — cannot confirm public means fail closed' );
@@ -445,11 +445,11 @@ _fx_set( array(
 	'object_taxonomies' => array( 'product' => array( 'product_cat' ) ),
 	'object_terms'      => array( 7 => $many_terms ),
 ) );
-assert_test( count( DEF_Core_Page_Context::collect_page_terms( 7 ) ) === 10, '15 terms → capped at 10' );
+assert_test( count( Widrow_AI_Page_Context::collect_page_terms( 7 ) ) === 10, '15 terms → capped at 10' );
 
 // Empty post id
 _fx_reset();
-assert_test( DEF_Core_Page_Context::collect_page_terms( 0 ) === array(), 'post_id=0 → empty array' );
+assert_test( Widrow_AI_Page_Context::collect_page_terms( 0 ) === array(), 'post_id=0 → empty array' );
 
 // Non-singular page returns empty
 _fx_reset();
@@ -462,29 +462,29 @@ _fx_set( array(
 		(object) array( 'taxonomy' => 'product_cat', 'term_id' => 1, 'slug' => 'x', 'name' => 'X' ),
 	) ),
 ) );
-assert_test( DEF_Core_Page_Context::collect_page_terms( 89 ) === array(), 'taxonomy archive → no per-page terms (defensive)' );
+assert_test( Widrow_AI_Page_Context::collect_page_terms( 89 ) === array(), 'taxonomy archive → no per-page terms (defensive)' );
 
 // ─── safe_title ──────────────────────────────────────────────────────
 echo "\nsafe_title:\n";
 _fx_reset();
 _fx_set( array( 'document_title' => 'Hello' ) );
-assert_test( DEF_Core_Page_Context::safe_title() === 'Hello', 'plain title preserved' );
+assert_test( Widrow_AI_Page_Context::safe_title() === 'Hello', 'plain title preserved' );
 
 _fx_set( array( 'document_title' => '<script>alert(1)</script>Real' ) );
-assert_test( DEF_Core_Page_Context::safe_title() === 'alert(1)Real', 'HTML tags stripped' );
+assert_test( Widrow_AI_Page_Context::safe_title() === 'alert(1)Real', 'HTML tags stripped' );
 
 _fx_set( array( 'document_title' => "Hello\x00World" ) );
-assert_test( DEF_Core_Page_Context::safe_title() === 'HelloWorld', 'control chars stripped' );
+assert_test( Widrow_AI_Page_Context::safe_title() === 'HelloWorld', 'control chars stripped' );
 
 _fx_set( array( 'document_title' => str_repeat( 'a', 250 ) ) );
-assert_test( strlen( DEF_Core_Page_Context::safe_title() ) === 200, 'title capped at 200 chars' );
+assert_test( strlen( Widrow_AI_Page_Context::safe_title() ) === 200, 'title capped at 200 chars' );
 
 // ─── normalise_path ──────────────────────────────────────────────────
 echo "\nnormalise_path:\n";
-assert_test( DEF_Core_Page_Context::normalise_path( '/' ) === '/', 'root preserved' );
-assert_test( DEF_Core_Page_Context::normalise_path( '/foo' ) === '/foo', 'no trailing slash → unchanged' );
-assert_test( DEF_Core_Page_Context::normalise_path( '/foo/' ) === '/foo', 'trailing slash trimmed' );
-assert_test( DEF_Core_Page_Context::normalise_path( '/foo//' ) === '/foo', 'multiple trailing slashes trimmed' );
+assert_test( Widrow_AI_Page_Context::normalise_path( '/' ) === '/', 'root preserved' );
+assert_test( Widrow_AI_Page_Context::normalise_path( '/foo' ) === '/foo', 'no trailing slash → unchanged' );
+assert_test( Widrow_AI_Page_Context::normalise_path( '/foo/' ) === '/foo', 'trailing slash trimmed' );
+assert_test( Widrow_AI_Page_Context::normalise_path( '/foo//' ) === '/foo', 'multiple trailing slashes trimmed' );
 
 // ─── build_payload (end-to-end) ──────────────────────────────────────
 echo "\nbuild_payload:\n";
@@ -501,7 +501,7 @@ _fx_set( array(
 		),
 	),
 ) );
-$payload = DEF_Core_Page_Context::build_payload();
+$payload = Widrow_AI_Page_Context::build_payload();
 assert_test( $payload['page_type'] === 'product', 'payload.page_type populated' );
 assert_test( $payload['product_id'] === 1234, 'payload.product_id populated for product page' );
 assert_test( $payload['page_id'] === 1234, 'payload.page_id populated' );
@@ -527,7 +527,7 @@ _fx_set( array(
 	'object_taxonomies' => array(),
 	'object_terms'      => array(),
 ) );
-$payload_post = DEF_Core_Page_Context::build_payload();
+$payload_post = Widrow_AI_Page_Context::build_payload();
 assert_test( $payload_post['product_id'] === null, 'payload.product_id is null on non-product page' );
 assert_test( $payload_post['page_type'] === 'post', 'payload.page_type=post for a single post' );
 

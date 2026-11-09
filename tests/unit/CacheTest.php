@@ -1,10 +1,10 @@
 <?php
 /**
- * PHPUnit tests for DEF_Core_Cache.
+ * PHPUnit tests for Widrow_AI_Cache.
  *
  * Converted from tests/test-cache.php — all original test cases preserved.
  *
- * @package def-core/tests/unit
+ * @package widrow-ai/tests/unit
  */
 
 declare(strict_types=1);
@@ -12,7 +12,7 @@ declare(strict_types=1);
 use Yoast\PHPUnitPolyfills\TestCases\TestCase;
 
 /**
- * @covers DEF_Core_Cache
+ * @covers Widrow_AI_Cache
  */
 final class CacheTest extends TestCase {
 
@@ -58,13 +58,13 @@ final class CacheTest extends TestCase {
 
 	public function test_invalidate_user_with_prefix_executes_query(): void {
 		global $wpdb;
-		DEF_Core_Cache::invalidate_user( 42, 'cart_' );
+		Widrow_AI_Cache::invalidate_user( 42, 'cart_' );
 		$this->assertCount( 1, $wpdb->queries );
 	}
 
 	public function test_invalidate_user_with_prefix_targets_correct_pattern(): void {
 		global $wpdb;
-		DEF_Core_Cache::invalidate_user( 42, 'cart_' );
+		Widrow_AI_Cache::invalidate_user( 42, 'cart_' );
 		$this->assertStringContainsString( 'de\\_tool\\_42\\_cart\\_', $wpdb->queries[0] );
 	}
 
@@ -72,13 +72,13 @@ final class CacheTest extends TestCase {
 
 	public function test_invalidate_user_without_prefix_executes_query(): void {
 		global $wpdb;
-		DEF_Core_Cache::invalidate_user( 42 );
+		Widrow_AI_Cache::invalidate_user( 42 );
 		$this->assertCount( 1, $wpdb->queries );
 	}
 
 	public function test_invalidate_user_without_prefix_targets_all_user_keys(): void {
 		global $wpdb;
-		DEF_Core_Cache::invalidate_user( 42 );
+		Widrow_AI_Cache::invalidate_user( 42 );
 		$this->assertStringContainsString( 'de\\_tool\\_42\\_', $wpdb->queries[0] );
 	}
 
@@ -86,7 +86,7 @@ final class CacheTest extends TestCase {
 
 	public function test_invalidate_user_prefix_targets_specific_user(): void {
 		global $wpdb;
-		DEF_Core_Cache::invalidate_user( 7, 'cart_' );
+		Widrow_AI_Cache::invalidate_user( 7, 'cart_' );
 		$this->assertStringContainsString( 'de\\_tool\\_7\\_cart\\_', $wpdb->queries[0] ?? '' );
 	}
 
@@ -98,7 +98,7 @@ final class CacheTest extends TestCase {
 		set_transient( 'de_tool_0_products_list', array( 'product1', 'product2' ) );
 		$this->assertNotFalse( get_transient( 'de_tool_0_products_list' ) );
 
-		DEF_Core_Cache::on_product_changed();
+		Widrow_AI_Cache::on_product_changed();
 
 		$this->assertFalse( get_transient( 'de_tool_0_products_list' ) );
 		$this->assertContains( 'de_tool_0_products_list', $_wp_test_deleted_transients );
@@ -108,7 +108,7 @@ final class CacheTest extends TestCase {
 
 	public function test_on_product_changed_does_not_use_wrong_key(): void {
 		global $_wp_test_deleted_transients;
-		DEF_Core_Cache::on_product_changed();
+		Widrow_AI_Cache::on_product_changed();
 		$this->assertNotContains( 'de_products_list', $_wp_test_deleted_transients );
 	}
 
@@ -116,7 +116,7 @@ final class CacheTest extends TestCase {
 
 	public function test_get_or_set_calls_callback_on_miss(): void {
 		$call_count = 0;
-		$result = DEF_Core_Cache::get_or_set( 'products_list', 0, 300, function () use ( &$call_count ) {
+		$result = Widrow_AI_Cache::get_or_set( 'products_list', 0, 300, function () use ( &$call_count ) {
 			++$call_count;
 			return array( 'widget_a', 'widget_b' );
 		} );
@@ -132,9 +132,9 @@ final class CacheTest extends TestCase {
 			return array( 'widget_a', 'widget_b' );
 		};
 
-		DEF_Core_Cache::get_or_set( 'products_list', 0, 300, $callback );
+		Widrow_AI_Cache::get_or_set( 'products_list', 0, 300, $callback );
 
-		$result2 = DEF_Core_Cache::get_or_set( 'products_list', 0, 300, function () use ( &$call_count ) {
+		$result2 = Widrow_AI_Cache::get_or_set( 'products_list', 0, 300, function () use ( &$call_count ) {
 			++$call_count;
 			return array( 'should_not_see_this' );
 		} );
@@ -144,7 +144,7 @@ final class CacheTest extends TestCase {
 	}
 
 	public function test_get_or_set_stores_with_correct_key(): void {
-		DEF_Core_Cache::get_or_set( 'products_list', 0, 300, function () {
+		Widrow_AI_Cache::get_or_set( 'products_list', 0, 300, function () {
 			return array( 'data' );
 		} );
 		$this->assertNotFalse( get_transient( 'de_tool_0_products_list' ) );

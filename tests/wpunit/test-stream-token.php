@@ -7,7 +7,7 @@
  * AI's takes the staff stream's permission and carries what build_proxy_headers(true)
  * sends. Ten minutes, no-store, never the API key.
  *
- * @package def-core
+ * @package widrow-ai
  * @group permissions
  */
 
@@ -22,7 +22,7 @@ class Test_Stream_Token extends WP_UnitTestCase {
 	public function set_up(): void {
 		parent::set_up();
 		$this->server = rest_get_server();
-		DEF_Core_Encryption::set_secret( 'def_core_api_key', self::API_KEY );
+		Widrow_AI_Encryption::set_secret( 'widrow_ai_api_key', self::API_KEY );
 		$_SERVER['REMOTE_ADDR'] = '203.0.113.44';
 	}
 
@@ -44,14 +44,14 @@ class Test_Stream_Token extends WP_UnitTestCase {
 
 	private function claims( WP_REST_Response $response ): array {
 		$token = $response->get_data()['token'];
-		$this->assertIsArray( DEF_Core_JWT::verify_token( $token ), 'the token verifies on the plugin\'s own key' );
+		$this->assertIsArray( Widrow_AI_JWT::verify_token( $token ), 'the token verifies on the plugin\'s own key' );
 		$part = strtr( explode( '.', $token )[1], '-_', '+/' );
 		return json_decode( base64_decode( $part . str_repeat( '=', ( 4 - strlen( $part ) % 4 ) % 4 ) ), true );
 	}
 
 	/** What the proxy's headers carry, as claim names (X-DEF-User → sub, …). */
 	private function proxy_fields( bool $staff ): array {
-		$method = new ReflectionMethod( 'DEF_Core_Tools', 'build_proxy_headers' );
+		$method = new ReflectionMethod( 'Widrow_AI_Tools', 'build_proxy_headers' );
 		$method->setAccessible( true );
 		$names  = array(
 			'X-DEF-User'              => 'sub',
@@ -91,7 +91,7 @@ class Test_Stream_Token extends WP_UnitTestCase {
 		$this->assertSame( 'customer_chat', $claims['channel'] );
 		$this->assertSame( 'thr-1', $claims['thread'] );
 		$this->assertSame( get_site_url(), $claims['iss'] );
-		$this->assertSame( DEF_CORE_AUDIENCE, $claims['aud'] );
+		$this->assertSame( WIDROW_AI_AUDIENCE, $claims['aud'] );
 		$this->assertNotSame( $claims['sub'], $this->claims( $this->mint( 'customer_chat' ) )['sub'], 'a fresh anon sub per mint' );
 	}
 
@@ -106,7 +106,7 @@ class Test_Stream_Token extends WP_UnitTestCase {
 
 	public function test_the_api_key_is_never_in_the_response(): void {
 		$staff_id = self::factory()->user->create( array( 'role' => 'administrator' ) );
-		get_user_by( 'id', $staff_id )->add_cap( 'def_staff_access' );
+		get_user_by( 'id', $staff_id )->add_cap( 'widrow_staff_access' );
 		wp_set_current_user( $staff_id );
 		foreach ( array( 'customer_chat', 'staff_ai' ) as $channel ) {
 			$response = $this->mint( $channel, '', wp_create_nonce( 'wp_rest' ) );
@@ -117,18 +117,18 @@ class Test_Stream_Token extends WP_UnitTestCase {
 	}
 
 	public function test_stream_url_is_the_platform_stream_for_the_channel(): void {
-		$this->assertSame( DEF_Core::get_def_api_url() . '/api/chat/stream', $this->mint( 'customer_chat' )->get_data()['stream_url'] );
+		$this->assertSame( Widrow_AI::get_def_api_url() . '/api/chat/stream', $this->mint( 'customer_chat' )->get_data()['stream_url'] );
 		$staff_id = self::factory()->user->create();
-		get_user_by( 'id', $staff_id )->add_cap( 'def_staff_access' );
+		get_user_by( 'id', $staff_id )->add_cap( 'widrow_staff_access' );
 		wp_set_current_user( $staff_id );
-		$this->assertSame( DEF_Core::get_def_api_url() . '/api/staff-ai/chat/stream', $this->mint( 'staff_ai' )->get_data()['stream_url'] );
+		$this->assertSame( Widrow_AI::get_def_api_url() . '/api/staff-ai/chat/stream', $this->mint( 'staff_ai' )->get_data()['stream_url'] );
 	}
 
 	public function test_live_url_is_the_platform_voice_socket_for_the_channel(): void {
 		$this->assertSame( 'wss://api.defho.ai/api/customer/voice/live', $this->mint( 'customer_chat' )->get_data()['live_url'], 'https becomes wss' );
-		update_option( 'def_core_staff_ai_api_url', 'http://localhost:8000' );
+		update_option( 'widrow_ai_staff_ai_api_url', 'http://localhost:8000' );
 		$staff_id = self::factory()->user->create();
-		get_user_by( 'id', $staff_id )->add_cap( 'def_staff_access' );
+		get_user_by( 'id', $staff_id )->add_cap( 'widrow_staff_access' );
 		wp_set_current_user( $staff_id );
 		$this->assertSame( 'ws://localhost:8000/api/staff_ai/voice/live', $this->mint( 'staff_ai' )->get_data()['live_url'], 'http becomes ws' );
 	}
@@ -154,7 +154,7 @@ class Test_Stream_Token extends WP_UnitTestCase {
 
 	public function test_staff_claims_are_what_the_staff_proxy_sends(): void {
 		$staff_id = self::factory()->user->create( array( 'role' => 'editor', 'display_name' => 'Sue Staff', 'user_email' => 'sue@example.com' ) );
-		get_user_by( 'id', $staff_id )->add_cap( 'def_staff_access' );
+		get_user_by( 'id', $staff_id )->add_cap( 'widrow_staff_access' );
 		wp_set_current_user( $staff_id );
 		update_option( 'blogname', 'Widrow & Co' );
 

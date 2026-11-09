@@ -1,4 +1,4 @@
-# CODEOWNERS — def-core (public WordPress plugin)
+# CODEOWNERS — Widrow AI (public WordPress plugin)
 #
 # Owners listed here become REQUIRED reviewers on any PR touching the matched paths
 # (the main-branch ruleset enforces "require code owner review").
@@ -7,23 +7,23 @@
 # Write here (his only repo) but is NOT a core-maintainer, so every PR — and every
 # crown-jewel path — needs a core-maintainer's review before it can merge.
 
-# Default: every change to def-core requires a core-maintainer review.
+# Default: every change to Widrow AI requires a core-maintainer review.
 *                                               @a3rev-ai/core-maintainers
 
 # --- Bridge security: HMAC, OAuth, JWT, encryption (the DEF<->WP trust boundary) ---
-/includes/class-def-core-hmac-auth.php          @a3rev-ai/core-maintainers
-/includes/class-def-core-oauth.php              @a3rev-ai/core-maintainers
-/includes/class-def-core-jwt.php                @a3rev-ai/core-maintainers
-/includes/class-def-core-encryption.php         @a3rev-ai/core-maintainers
+/includes/class-widrow-ai-hmac-auth.php          @a3rev-ai/core-maintainers
+/includes/class-widrow-ai-oauth.php              @a3rev-ai/core-maintainers
+/includes/class-widrow-ai-jwt.php                @a3rev-ai/core-maintainers
+/includes/class-widrow-ai-encryption.php         @a3rev-ai/core-maintainers
 
 # --- REST surface & admin API ---
-/includes/class-def-core-api-registry.php       @a3rev-ai/core-maintainers
-/includes/class-def-core-admin-api.php          @a3rev-ai/core-maintainers
-/includes/class-def-core-connection-config.php  @a3rev-ai/core-maintainers
+/includes/class-widrow-ai-api-registry.php       @a3rev-ai/core-maintainers
+/includes/class-widrow-ai-admin-api.php          @a3rev-ai/core-maintainers
+/includes/class-widrow-ai-connection-config.php  @a3rev-ai/core-maintainers
 
 # --- Auto-updater (supply chain) & plugin bootstrap ---
-/includes/class-def-core-github-updater.php     @a3rev-ai/core-maintainers
-/def-core.php                                   @a3rev-ai/core-maintainers
+/includes/class-widrow-ai-github-updater.php     @a3rev-ai/core-maintainers
+/widrow-ai.php                                   @a3rev-ai/core-maintainers
 
 # --- CI/CD & release ---
 /.github/                                       @a3rev-ai/core-maintainers

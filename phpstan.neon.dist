@@ -5,7 +5,7 @@ parameters:
     level: 3
     paths:
         - includes
-        - def-core.php
+        - widrow-ai.php
     excludePaths:
         - vendor
         - node_modules

@@ -2,7 +2,7 @@
 /**
  * Content Agent — Adapter G (block-safe edit) pure-logic tests.
  *
- * Covers the security-critical, WordPress-independent helpers of DEF_Core_Blocks:
+ * Covers the security-critical, WordPress-independent helpers of Widrow_AI_Blocks:
  * - path validation (rejects traversal / injection in node paths)
  * - innerHTML-surgical splice (wrapper + attributes preserved byte-for-byte)
  * - editable-inner extraction (single-wrapper only; custom markup → locked)
@@ -14,7 +14,7 @@
  * The parse_blocks/serialize_blocks round-trip is validated by live smoke (it needs
  * a real WordPress with the site's block versions). Runs standalone with WP stubs.
  *
- * @package def-core/tests
+ * @package widrow-ai/tests
  */
 
 declare(strict_types=1);
@@ -40,7 +40,7 @@ if ( ! function_exists( 'esc_attr' ) ) {
 	}
 }
 
-require_once __DIR__ . '/../includes/class-def-core-blocks.php';
+require_once __DIR__ . '/../includes/class-widrow-ai-blocks.php';
 
 $passed = 0;
 $failed = 0;
@@ -58,7 +58,7 @@ function assert_test( bool $condition, string $name ): void {
 	}
 }
 
-$ref = new ReflectionClass( 'DEF_Core_Blocks' );
+$ref = new ReflectionClass( 'Widrow_AI_Blocks' );
 function call_priv( ReflectionClass $ref, string $method, array $args ) {
 	$m = $ref->getMethod( $method );
 	$m->setAccessible( true );

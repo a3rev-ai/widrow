@@ -3,7 +3,7 @@
  * A signed-in customer's hand-off email says who it is from: the form hides the contact
  * fields from them, so their name and address come from their account, server-side.
  *
- * @package def-core
+ * @package widrow-ai
  */
 
 declare(strict_types=1);
@@ -71,7 +71,7 @@ class Test_Escalation_Signed_In extends WP_UnitTestCase {
 	public function test_a_companion_is_not_handed_a_customers_address(): void {
 		$seen = null;
 		add_filter(
-			'def_core_customer_chat_handoff_body',
+			'widrow_ai_customer_chat_handoff_body',
 			function ( $body, $safe_body ) use ( &$seen ) {
 				$seen = $safe_body;
 				return $body;

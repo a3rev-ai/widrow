@@ -2807,7 +2807,7 @@ function t(key, fallback) {
 		var icon = failed ? '&#10007;' : '&#10003;';
 		// Persist the in-progress label after completion — "Searching... ✓ Done"
 		// rather than the in-progress text being replaced by a separate done
-		// label. Mirrors the same fix in def-core-customer-chat.js.
+		// label. Mirrors the same fix in widrow-ai-customer-chat.js.
 		var inProgressLabel = toolStatusLabel(toolName, shownAs);
 		var suffix = failed ? 'Failed' : 'Done';
 		el.innerHTML = '<span class="tool-label">' + escapeHtml(inProgressLabel) + '</span>'
@@ -2829,7 +2829,7 @@ function t(key, fallback) {
 		labelEl.textContent = text;
 	}
 
-	// KEEP IN SYNC: def-core-customer-chat.js, staff-ai.js, setup-assistant-drawer.js
+	// KEEP IN SYNC: widrow-ai-customer-chat.js, staff-ai.js, setup-assistant-drawer.js
 	function classifySuggestionOutcome(sentText, suggestion) {
 		if (!suggestion) return { outcome: null, score: null };
 		var normalize = function(s) {
@@ -2878,7 +2878,7 @@ function t(key, fallback) {
 	// employee's own voice — or the device voice reads them from the text. A
 	// pause after speaking sends; when the employee finishes speaking the mic
 	// opens again; a tap on the pill while she answers ends the conversation.
-	var VOICE_MODE_KEY = 'def_staff_ai_voice_mode';
+	var VOICE_MODE_KEY = 'widrow_staff_ai_voice_mode';
 	var VOICE_MODES = ['server', 'device', 'off'];
 	var voiceRecorder = null;
 	var speaker = null;
@@ -5100,7 +5100,7 @@ function t(key, fallback) {
 				// Reload FIRST, then speak. loadList() runs synchronously to its first await
 				// and sets its own "Loading…" status, so setting the outcome before it is a
 				// message the user never sees — the honesty chain survives DEF → DEFHO →
-				// def-core and then gets overwritten one line later.
+				// widrow-ai and then gets overwritten one line later.
 				await loadList();
 				// `failed` is a grant the provider would not end. Saying "disconnected" over
 				// that would be the same overclaim the old copy made in the other direction.
@@ -5402,7 +5402,7 @@ function t(key, fallback) {
 				await navigator.clipboard.writeText(shareLinkEl.value);
 				// Say so: a clipboard write leaves nothing on screen, and on a phone
 				// there is no paste target in sight to check it against — silence is
-				// a dead button. The admin screens' own pattern (def-core-admin.js).
+				// a dead button. The admin screens' own pattern (widrow-ai-admin.js).
 				clearTimeout(copiedTimer);
 				shareCopyBtn.textContent = t('documentShareCopied', 'Copied!');
 				copiedTimer = setTimeout(function () {
@@ -5686,7 +5686,7 @@ function t(key, fallback) {
 			if (emptyEl) emptyEl.style.display = 'none';
 			try {
 				// apiBase can be the plain-permalink ?rest_route= form — pick the
-				// separator accordingly (same idiom as def-core-product-cards.js).
+				// separator accordingly (same idiom as widrow-ai-product-cards.js).
 				const sep = apiBase.indexOf('?') === -1 ? '?' : '&';
 				const data = await apiRequest('/documents' + (projectFilter ? sep + 'project_id=' + encodeURIComponent(projectFilter) : ''));
 				let docs = Array.isArray(data.documents) ? data.documents : [];
@@ -6843,7 +6843,7 @@ function t(key, fallback) {
 			// The bar's IDENTITY is pinned to the family's strong model, which DEF
 			// now resolves and sends as family_top_model. That pin is the whole
 			// point: the share can only fall toward 0% if the model it names holds
-			// still. Originally def-core could not see the family ladder, so the
+			// still. Originally widrow-ai could not see the family ladder, so the
 			// heaviest spender stood in for it — and that stand-in switched
 			// identity as the user succeeded. Shifting work to a cheaper model
 			// re-pointed the bar AT the cheaper model and showed near-100%, so a

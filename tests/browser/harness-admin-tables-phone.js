@@ -8,12 +8,12 @@
  * landscape. Under the inline table-layout: fixed it also left Message narrower
  * than a word, so the message read one letter per line.
  *
- * The fix is one wrapper, .def-core-table-scroll, and a floor under the table and
+ * The fix is one wrapper, .widrow-ai-table-scroll, and a floor under the table and
  * under Message, so a phone scrolls the TABLE rather than the page. This file
  * holds both halves of that to the shipped files:
  *
- *  - the rule, read out of assets/css/def-core-admin.css through extract.cssRules;
- *  - the containment, read out of includes/class-def-core-logs-page.php by slicing
+ *  - the rule, read out of assets/css/widrow-ai-admin.css through extract.cssRules;
+ *  - the containment, read out of includes/class-widrow-ai-logs-page.php by slicing
  *    the wrapper element with extract.element, which counts nesting. Nothing here
  *    is a copy of the markup: move the table out of the wrapper and the slice no
  *    longer contains it.
@@ -22,7 +22,7 @@
  * treated here — that table is S3's, and nothing in this PR touches it.
  *
  * Check 7 is the one that outlives this PR. It names no table — it ENUMERATES
- * from the stylesheet every .def-core-*-table given a min-width and insists each
+ * from the stylesheet every .widrow-ai-*-table given a min-width and insists each
  * one is wrapped somewhere in the shipped markup. The next table floored without
  * a wrapper is the exact bug this PR fixes, and it fails here without anyone
  * remembering to add a case for it. The settings template stays in SOURCES for
@@ -40,11 +40,11 @@ const fs = require('fs');
 const path = require('path');
 const extract = require('./extract');
 
-const ADMIN_CSS = fs.readFileSync(path.join(extract.REPO, 'assets/css/def-core-admin.css'), 'utf8');
+const ADMIN_CSS = fs.readFileSync(path.join(extract.REPO, 'assets/css/widrow-ai-admin.css'), 'utf8');
 const DRAWER_CSS = fs.readFileSync(path.join(extract.REPO, 'assets/css/setup-assistant-drawer.css'), 'utf8');
 const INDEX = extract.cssRules(ADMIN_CSS);
 
-const LOGS_FILE = 'includes/class-def-core-logs-page.php';
+const LOGS_FILE = 'includes/class-widrow-ai-logs-page.php';
 
 // The shipped files that render an admin table. Only the log table is wrapped in
 // this PR; the settings template is listed so check 6's enumeration covers it too.
@@ -82,16 +82,16 @@ let n = 0;
 //
 // overflow-x is the whole mechanism; max-width is what stops the wrapper itself
 // growing to its content and re-widening the page it was added to contain.
-check(++n, '.def-core-table-scroll scrolls sideways (overflow-x: auto)',
-	declared('def-core-table-scroll', 'overflow-x').includes('auto'),
-	'got: ' + JSON.stringify(declared('def-core-table-scroll', 'overflow-x')));
+check(++n, '.widrow-ai-table-scroll scrolls sideways (overflow-x: auto)',
+	declared('widrow-ai-table-scroll', 'overflow-x').includes('auto'),
+	'got: ' + JSON.stringify(declared('widrow-ai-table-scroll', 'overflow-x')));
 
-check(++n, '.def-core-table-scroll cannot itself outgrow the page (max-width: 100%)',
-	declared('def-core-table-scroll', 'max-width').includes('100%'),
-	'got: ' + JSON.stringify(declared('def-core-table-scroll', 'max-width')));
+check(++n, '.widrow-ai-table-scroll cannot itself outgrow the page (max-width: 100%)',
+	declared('widrow-ai-table-scroll', 'max-width').includes('100%'),
+	'got: ' + JSON.stringify(declared('widrow-ai-table-scroll', 'max-width')));
 
-check(++n, '.def-core-table-scroll keeps momentum scrolling on older iOS',
-	declared('def-core-table-scroll', '-webkit-overflow-scrolling').includes('touch'));
+check(++n, '.widrow-ai-table-scroll keeps momentum scrolling on older iOS',
+	declared('widrow-ai-table-scroll', '-webkit-overflow-scrolling').includes('touch'));
 
 // ── 4-5. The floors ─────────────────────────────────────────────────────────
 //
@@ -100,17 +100,17 @@ check(++n, '.def-core-table-scroll keeps momentum scrolling on older iOS',
 // being declared: a 1px min-width would satisfy `has a min-width` and fix nothing.
 const READABLE = 400;
 
-const logsFloor = declared('def-core-logs-table', 'min-width').map(px).filter(Boolean);
+const logsFloor = declared('widrow-ai-logs-table', 'min-width').map(px).filter(Boolean);
 check(++n, 'the Connection Logs table has a readable floor, so a phone scrolls the TABLE not the page',
 	logsFloor.some(v => v >= READABLE),
-	'min-width: ' + JSON.stringify(declared('def-core-logs-table', 'min-width')));
+	'min-width: ' + JSON.stringify(declared('widrow-ai-logs-table', 'min-width')));
 
 // The column that broke: under table-layout:fixed it was left narrower than a
 // word and read one letter per line. Its own floor, wide enough for a sentence.
-const msgFloor = declared('def-core-log-message', 'min-width').map(px).filter(Boolean);
+const msgFloor = declared('widrow-ai-log-message', 'min-width').map(px).filter(Boolean);
 check(++n, 'the Message column has a floor wide enough to read as words (>= 200px)',
 	msgFloor.some(v => v >= 200),
-	'min-width: ' + JSON.stringify(declared('def-core-log-message', 'min-width')));
+	'min-width: ' + JSON.stringify(declared('widrow-ai-log-message', 'min-width')));
 
 // ── 6. Containment, out of the shipped markup ───────────────────────────────
 //
@@ -121,35 +121,35 @@ function scrollers(file) {
 	const lines = SOURCES[file].split(/\r?\n/);
 	const out = [];
 	lines.forEach(function (line, i) {
-		if (!/<div class="def-core-table-scroll">/.test(line)) return;
+		if (!/<div class="widrow-ai-table-scroll">/.test(line)) return;
 		// Sliced from THIS opener, so a second wrapper in the same file is its own
 		// element rather than being swallowed by the first one's slice.
 		out.push(extract.element(lines.slice(i).join('\n'), 'div',
-			(l, j) => j === 0, file + ' .def-core-table-scroll #' + out.length));
+			(l, j) => j === 0, file + ' .widrow-ai-table-scroll #' + out.length));
 	});
 	return out;
 }
 const wraps = cls => chunk => new RegExp('<table class="[^"]*\\b' + cls + '\\b').test(chunk);
 
-check(++n, 'the Connection Logs table is INSIDE a .def-core-table-scroll in ' + LOGS_FILE,
-	scrollers(LOGS_FILE).some(wraps('def-core-logs-table')));
+check(++n, 'the Connection Logs table is INSIDE a .widrow-ai-table-scroll in ' + LOGS_FILE,
+	scrollers(LOGS_FILE).some(wraps('widrow-ai-logs-table')));
 
 // ── 7. The rule that outlives this PR ───────────────────────────────────────
 //
-// Enumerated from the stylesheet, not listed here: any .def-core-*-table given a
+// Enumerated from the stylesheet, not listed here: any .widrow-ai-*-table given a
 // floor has to be wrapped somewhere in the shipped markup, or that floor is just
 // a wider page. (A table with no floor is not in scope and is not asked to be
-// wrapped — .def-core-tools-table stacks its cells on a phone instead, and
-// .def-core-roles-table is S3's to deal with.)
+// wrapped — .widrow-ai-tools-table stacks its cells on a phone instead, and
+// .widrow-ai-roles-table is S3's to deal with.)
 const floored = [];
 INDEX.rules.forEach(function (r) {
 	if (!/(?:^|;)\s*min-width:/.test(r.body)) return;
-	const m = /^\.(def-core-[a-z0-9-]*table)$/.exec(r.selector.trim());
+	const m = /^\.(widrow-ai-[a-z0-9-]*table)$/.exec(r.selector.trim());
 	if (m) floored.push(m[1]);
 });
 const allScrollers = Object.keys(SOURCES).reduce((a, f) => a.concat(scrollers(f)), []);
 const unwrapped = Array.from(new Set(floored)).filter(cls => !allScrollers.some(wraps(cls)));
-check(++n, 'every .def-core-*-table given a min-width is wrapped in a scroller (' +
+check(++n, 'every .widrow-ai-*-table given a min-width is wrapped in a scroller (' +
 	Array.from(new Set(floored)).join(', ') + ')',
 	floored.length > 0 && unwrapped.length === 0,
 	floored.length === 0 ? 'no floored tables found at all — the floor has gone'

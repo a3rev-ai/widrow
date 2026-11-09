@@ -47,6 +47,6 @@ jobs:
       - name: Start the pinned WordPress test environment
         run: npx wp-env start
       - name: Install composer dependencies inside the test container
-        run: npx wp-env run tests-cli --env-cwd=wp-content/plugins/def-core -- composer install --no-interaction
+        run: npx wp-env run tests-cli --env-cwd=wp-content/plugins/widrow-ai -- composer install --no-interaction
       - name: Run wpunit suite
         run: npm run test:phpunit

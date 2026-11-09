@@ -1,10 +1,10 @@
 <?php
 /**
- * PHPUnit tests for DEF_Core_JWT.
+ * PHPUnit tests for Widrow_AI_JWT.
  *
  * Converted from tests/test-jwt.php — all original test cases preserved.
  *
- * @package def-core/tests/unit
+ * @package widrow-ai/tests/unit
  */
 
 declare(strict_types=1);
@@ -12,7 +12,7 @@ declare(strict_types=1);
 use Yoast\PHPUnitPolyfills\TestCases\TestCase;
 
 /**
- * @covers DEF_Core_JWT
+ * @covers Widrow_AI_JWT
  */
 final class JwtTest extends TestCase {
 
@@ -54,8 +54,8 @@ final class JwtTest extends TestCase {
 
 	public function test_ensure_keys_exist_is_idempotent(): void {
 		$kid_before = $this->keys['kid'];
-		DEF_Core_JWT::ensure_keys_exist();
-		$keys_after = get_option( DEF_CORE_OPTION_KEYS );
+		Widrow_AI_JWT::ensure_keys_exist();
+		$keys_after = get_option( WIDROW_AI_OPTION_KEYS );
 		$this->assertSame( $kid_before, $keys_after['kid'] );
 	}
 
@@ -67,17 +67,17 @@ final class JwtTest extends TestCase {
 			'email' => 'test@example.com',
 			'roles' => array( 'administrator' ),
 			'iss'   => 'https://test.example.com',
-			'aud'   => DEF_CORE_AUDIENCE,
+			'aud'   => WIDROW_AI_AUDIENCE,
 		);
 	}
 
 	public function test_issue_token_returns_nonempty_string(): void {
-		$token = DEF_Core_JWT::issue_token( $this->sample_claims(), 300 );
+		$token = Widrow_AI_JWT::issue_token( $this->sample_claims(), 300 );
 		$this->assertNotEmpty( $token );
 	}
 
 	public function test_token_has_three_parts(): void {
-		$token = DEF_Core_JWT::issue_token( $this->sample_claims(), 300 );
+		$token = Widrow_AI_JWT::issue_token( $this->sample_claims(), 300 );
 		$parts = explode( '.', $token );
 		$this->assertCount( 3, $parts );
 	}
@@ -85,19 +85,19 @@ final class JwtTest extends TestCase {
 	// ── 4. Token header ─────────────────────────────────────────────────
 
 	public function test_header_algorithm_is_rs256(): void {
-		$token  = DEF_Core_JWT::issue_token( $this->sample_claims(), 300 );
+		$token  = Widrow_AI_JWT::issue_token( $this->sample_claims(), 300 );
 		$header = $this->decode_part( $token, 0 );
 		$this->assertSame( 'RS256', $header['alg'] );
 	}
 
 	public function test_header_type_is_jwt(): void {
-		$token  = DEF_Core_JWT::issue_token( $this->sample_claims(), 300 );
+		$token  = Widrow_AI_JWT::issue_token( $this->sample_claims(), 300 );
 		$header = $this->decode_part( $token, 0 );
 		$this->assertSame( 'JWT', $header['typ'] );
 	}
 
 	public function test_header_kid_matches_generated_key(): void {
-		$token  = DEF_Core_JWT::issue_token( $this->sample_claims(), 300 );
+		$token  = Widrow_AI_JWT::issue_token( $this->sample_claims(), 300 );
 		$header = $this->decode_part( $token, 0 );
 		$this->assertSame( $this->keys['kid'], $header['kid'] );
 	}
@@ -105,19 +105,19 @@ final class JwtTest extends TestCase {
 	// ── 5. Token payload ────────────────────────────────────────────────
 
 	public function test_payload_preserves_sub_claim(): void {
-		$token   = DEF_Core_JWT::issue_token( $this->sample_claims(), 300 );
+		$token   = Widrow_AI_JWT::issue_token( $this->sample_claims(), 300 );
 		$payload = $this->decode_part( $token, 1 );
 		$this->assertSame( '42', $payload['sub'] );
 	}
 
 	public function test_payload_preserves_email_claim(): void {
-		$token   = DEF_Core_JWT::issue_token( $this->sample_claims(), 300 );
+		$token   = Widrow_AI_JWT::issue_token( $this->sample_claims(), 300 );
 		$payload = $this->decode_part( $token, 1 );
 		$this->assertSame( 'test@example.com', $payload['email'] );
 	}
 
 	public function test_payload_has_standard_time_fields(): void {
-		$token   = DEF_Core_JWT::issue_token( $this->sample_claims(), 300 );
+		$token   = Widrow_AI_JWT::issue_token( $this->sample_claims(), 300 );
 		$payload = $this->decode_part( $token, 1 );
 		$this->assertArrayHasKey( 'iat', $payload );
 		$this->assertArrayHasKey( 'exp', $payload );
@@ -126,28 +126,28 @@ final class JwtTest extends TestCase {
 	}
 
 	public function test_payload_exp_greater_than_iat(): void {
-		$token   = DEF_Core_JWT::issue_token( $this->sample_claims(), 300 );
+		$token   = Widrow_AI_JWT::issue_token( $this->sample_claims(), 300 );
 		$payload = $this->decode_part( $token, 1 );
 		$this->assertGreaterThan( $payload['iat'], $payload['exp'] );
 	}
 
 	public function test_payload_nbf_lte_iat(): void {
-		$token   = DEF_Core_JWT::issue_token( $this->sample_claims(), 300 );
+		$token   = Widrow_AI_JWT::issue_token( $this->sample_claims(), 300 );
 		$payload = $this->decode_part( $token, 1 );
 		$this->assertLessThanOrEqual( $payload['iat'], $payload['nbf'] );
 	}
 
 	public function test_payload_audience_matches(): void {
-		$token   = DEF_Core_JWT::issue_token( $this->sample_claims(), 300 );
+		$token   = Widrow_AI_JWT::issue_token( $this->sample_claims(), 300 );
 		$payload = $this->decode_part( $token, 1 );
-		$this->assertSame( DEF_CORE_AUDIENCE, $payload['aud'] );
+		$this->assertSame( WIDROW_AI_AUDIENCE, $payload['aud'] );
 	}
 
 	// ── 6. Verify roundtrip ─────────────────────────────────────────────
 
 	public function test_verify_token_roundtrip(): void {
-		$token    = DEF_Core_JWT::issue_token( $this->sample_claims(), 300 );
-		$verified = DEF_Core_JWT::verify_token( $token );
+		$token    = Widrow_AI_JWT::issue_token( $this->sample_claims(), 300 );
+		$verified = Widrow_AI_JWT::verify_token( $token );
 		$this->assertIsArray( $verified );
 		$this->assertSame( '42', $verified['sub'] );
 		$this->assertSame( 'test@example.com', $verified['email'] );
@@ -156,42 +156,42 @@ final class JwtTest extends TestCase {
 	// ── 7. Tampered token ───────────────────────────────────────────────
 
 	public function test_tampered_signature_rejected(): void {
-		$token   = DEF_Core_JWT::issue_token( $this->sample_claims(), 300 );
+		$token   = Widrow_AI_JWT::issue_token( $this->sample_claims(), 300 );
 		$parts   = explode( '.', $token );
 		$tampered = $parts[0] . '.' . $parts[1] . '.INVALID_SIGNATURE';
-		$this->assertNull( DEF_Core_JWT::verify_token( $tampered ) );
+		$this->assertNull( Widrow_AI_JWT::verify_token( $tampered ) );
 	}
 
 	// ── 8. Malformed tokens ─────────────────────────────────────────────
 
 	public function test_five_segment_token_rejected(): void {
-		$this->assertNull( DEF_Core_JWT::verify_token( 'not.a.jwt.at.all' ) );
+		$this->assertNull( Widrow_AI_JWT::verify_token( 'not.a.jwt.at.all' ) );
 	}
 
 	public function test_one_segment_token_rejected(): void {
-		$this->assertNull( DEF_Core_JWT::verify_token( 'only-one-part' ) );
+		$this->assertNull( Widrow_AI_JWT::verify_token( 'only-one-part' ) );
 	}
 
 	public function test_empty_string_rejected(): void {
-		$this->assertNull( DEF_Core_JWT::verify_token( '' ) );
+		$this->assertNull( Widrow_AI_JWT::verify_token( '' ) );
 	}
 
 	// ── 9. Expired token ────────────────────────────────────────────────
 
 	public function test_expired_token_rejected(): void {
-		$token     = DEF_Core_JWT::issue_token( $this->sample_claims(), 60 );
+		$token     = Widrow_AI_JWT::issue_token( $this->sample_claims(), 60 );
 		$parts     = explode( '.', $token );
 		$payload   = json_decode( base64_decode( strtr( $parts[1], '-_', '+/' ) . '==' ), true );
 		$payload['exp'] = time() - 100;
 		$new_b64   = rtrim( strtr( base64_encode( json_encode( $payload, JSON_UNESCAPED_SLASHES ) ), '+/', '-_' ), '=' );
 		$forged    = $parts[0] . '.' . $new_b64 . '.' . $parts[2];
-		$this->assertNull( DEF_Core_JWT::verify_token( $forged ) );
+		$this->assertNull( Widrow_AI_JWT::verify_token( $forged ) );
 	}
 
 	// ── 10. JWKS structure ──────────────────────────────────────────────
 
 	public function test_jwks_structure(): void {
-		$jwks = DEF_Core_JWT::get_jwks();
+		$jwks = Widrow_AI_JWT::get_jwks();
 		$this->assertIsArray( $jwks );
 		$this->assertArrayHasKey( 'keys', $jwks );
 		$this->assertCount( 1, $jwks['keys'] );
@@ -209,7 +209,7 @@ final class JwtTest extends TestCase {
 
 	public function test_no_keys_returns_empty_jwks(): void {
 		_wp_test_reset_options();
-		$empty_jwks = DEF_Core_JWT::get_jwks();
+		$empty_jwks = Widrow_AI_JWT::get_jwks();
 		$this->assertSame( array( 'keys' => array() ), $empty_jwks );
 	}
 
@@ -217,7 +217,7 @@ final class JwtTest extends TestCase {
 
 	public function test_issue_token_without_keys_does_not_crash(): void {
 		_wp_test_reset_options();
-		$token = DEF_Core_JWT::issue_token( $this->sample_claims(), 300 );
+		$token = Widrow_AI_JWT::issue_token( $this->sample_claims(), 300 );
 		// May return empty string on Windows if OpenSSL can't generate keys.
 		// The test verifies it doesn't throw/crash.
 		$this->assertTrue( true );
@@ -226,7 +226,7 @@ final class JwtTest extends TestCase {
 	// ── 13. TTL minimum enforcement ─────────────────────────────────────
 
 	public function test_ttl_minimum_enforcement_60s(): void {
-		$token   = DEF_Core_JWT::issue_token( $this->sample_claims(), 10 );
+		$token   = Widrow_AI_JWT::issue_token( $this->sample_claims(), 10 );
 		$payload = $this->decode_part( $token, 1 );
 		$ttl     = $payload['exp'] - $payload['iat'];
 		$this->assertGreaterThanOrEqual( 60, $ttl );

@@ -18,7 +18,7 @@
  * anchor the sites the defects lived at; the shapes are also proven by
  * mutation before the PR (re-adding each old behaviour goes red).
  *
- * @package def-core/tests
+ * @package widrow-ai/tests
  */
 
 declare(strict_types=1);
@@ -39,7 +39,7 @@ function assert_test( $cond, string $label ): void {
 
 $root        = dirname( __DIR__ );
 $staff_js    = file_get_contents( $root . '/assets/js/staff-ai.js' );
-$customer_js = file_get_contents( $root . '/assets/js/def-core-customer-chat.js' );
+$customer_js = file_get_contents( $root . '/assets/js/widrow-ai-customer-chat.js' );
 
 // ── 1. Failed chips block send, loudly ───────────────────────────────────────
 

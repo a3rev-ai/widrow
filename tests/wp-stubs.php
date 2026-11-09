@@ -1,18 +1,18 @@
 <?php
 /**
- * Minimal WordPress function stubs for unit testing def-core classes
+ * Minimal WordPress function stubs for unit testing widrow-ai classes
  * without a full WordPress bootstrap.
  *
- * @package def-core/tests
+ * @package widrow-ai/tests
  */
 
 declare(strict_types=1);
 
 // Prevent double-definition.
-if ( defined( 'DEF_CORE_TEST_STUBS_LOADED' ) ) {
+if ( defined( 'WIDROW_AI_TEST_STUBS_LOADED' ) ) {
 	return;
 }
-define( 'DEF_CORE_TEST_STUBS_LOADED', true );
+define( 'WIDROW_AI_TEST_STUBS_LOADED', true );
 
 // Fix OpenSSL config path on Windows (XAMPP).
 // PHP's openssl functions need the config file location on Windows.
@@ -28,7 +28,7 @@ if ( PHP_OS_FAMILY === 'Windows' ) {
 
 /**
  * Generate RSA keypair and seed into options (works on Windows).
- * Call this instead of DEF_Core_JWT::ensure_keys_exist() in tests.
+ * Call this instead of Widrow_AI_JWT::ensure_keys_exist() in tests.
  */
 function _wp_test_seed_rsa_keys(): array {
 	global $_wp_test_openssl_cnf;
@@ -55,7 +55,7 @@ function _wp_test_seed_rsa_keys(): array {
 		'kid'     => $kid,
 		'created' => time(),
 	);
-	update_option( DEF_CORE_OPTION_KEYS, $data );
+	update_option( WIDROW_AI_OPTION_KEYS, $data );
 	return $data;
 }
 
@@ -64,24 +64,24 @@ if ( ! defined( 'ABSPATH' ) ) {
 	define( 'ABSPATH', dirname( __DIR__ ) . '/' );
 }
 
-// Plugin constants (mirroring def-core.php).
-if ( ! defined( 'DEF_CORE_VERSION' ) ) {
-	define( 'DEF_CORE_VERSION', '1.0.0' );
+// Plugin constants (mirroring widrow-ai.php).
+if ( ! defined( 'WIDROW_AI_VERSION' ) ) {
+	define( 'WIDROW_AI_VERSION', '1.0.0' );
 }
-if ( ! defined( 'DEF_CORE_OPTION_KEYS' ) ) {
-	define( 'DEF_CORE_OPTION_KEYS', 'def_core_keys' );
+if ( ! defined( 'WIDROW_AI_OPTION_KEYS' ) ) {
+	define( 'WIDROW_AI_OPTION_KEYS', 'widrow_ai_keys' );
 }
-if ( ! defined( 'DEF_CORE_OPTION_ALLOWED_ORIGINS' ) ) {
-	define( 'DEF_CORE_OPTION_ALLOWED_ORIGINS', 'def_core_allowed_origins' );
+if ( ! defined( 'WIDROW_AI_OPTION_ALLOWED_ORIGINS' ) ) {
+	define( 'WIDROW_AI_OPTION_ALLOWED_ORIGINS', 'widrow_ai_allowed_origins' );
 }
-if ( ! defined( 'DEF_CORE_API_NAME_SPACE' ) ) {
-	define( 'DEF_CORE_API_NAME_SPACE', 'a3-ai/v1' );
+if ( ! defined( 'WIDROW_AI_API_NAME_SPACE' ) ) {
+	define( 'WIDROW_AI_API_NAME_SPACE', 'a3-ai/v1' );
 }
-if ( ! defined( 'DEF_CORE_AUDIENCE' ) ) {
-	define( 'DEF_CORE_AUDIENCE', 'digital-employee-framework' );
+if ( ! defined( 'WIDROW_AI_AUDIENCE' ) ) {
+	define( 'WIDROW_AI_AUDIENCE', 'digital-employee-framework' );
 }
-if ( ! defined( 'DEF_CORE_PLUGIN_DIR' ) ) {
-	define( 'DEF_CORE_PLUGIN_DIR', dirname( __DIR__ ) . '/' );
+if ( ! defined( 'WIDROW_AI_PLUGIN_DIR' ) ) {
+	define( 'WIDROW_AI_PLUGIN_DIR', dirname( __DIR__ ) . '/' );
 }
 
 // ── In-memory option store ──────────────────────────────────────────────
@@ -326,4 +326,6 @@ if ( ! defined( 'DAY_IN_SECONDS' ) ) {
 }
 
 // Load encryption class — plugin-level infrastructure used by all secret-reading classes.
-require_once DEF_CORE_PLUGIN_DIR . 'includes/class-def-core-encryption.php';
+require_once WIDROW_AI_PLUGIN_DIR . 'includes/class-widrow-ai-encryption.php';
+// The alias table — read by the setting and role routes for the pre-10.0.0 names.
+require_once WIDROW_AI_PLUGIN_DIR . 'includes/class-widrow-ai-legacy-names.php';

@@ -5,7 +5,7 @@
  * Verifies security invariants: no JWT leaks in errors, no stack traces,
  * Content-Disposition sanitization, Content-Type sanitization, JWKS structure.
  *
- * @package def-core
+ * @package widrow-ai
  * @group security
  */
 
@@ -25,7 +25,7 @@ class Test_Bridge_Security extends WP_UnitTestCase {
 		$this->server = rest_get_server();
 
 		// Ensure RSA keys exist for JWT tests.
-		DEF_Core_JWT::ensure_keys_exist();
+		Widrow_AI_JWT::ensure_keys_exist();
 	}
 
 	public function tear_down(): void {

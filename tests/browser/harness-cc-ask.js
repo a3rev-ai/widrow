@@ -2,7 +2,7 @@
  * Customer Chat ask() - behavioural harness (v8.5.0), 7 checks.
  *
  * Runs the SHIPPED ask() block (extracted by marker from
- * assets/js/def-core-customer-chat.js) over a fake of the closure it lives in.
+ * assets/js/widrow-ai-customer-chat.js) over a fake of the closure it lives in.
  *
  * What it holds: a page trigger's question is sent as the visitor's message,
  * trimmed, through the same submit a typed message takes; an empty question,

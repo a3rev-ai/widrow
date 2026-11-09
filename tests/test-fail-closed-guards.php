@@ -11,7 +11,7 @@
  * validation entirely when the function was absent, accepting ANY integer
  * as a logo attachment ID.
  *
- * @package def-core/tests
+ * @package widrow-ai/tests
  */
 
 declare(strict_types=1);
@@ -20,7 +20,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	define( 'ABSPATH', __DIR__ . '/../' );
 }
 
-require_once __DIR__ . '/../includes/class-def-core-admin-api.php';
+require_once __DIR__ . '/../includes/class-widrow-ai-admin-api.php';
 
 $pass = 0;
 $fail = 0;
@@ -42,8 +42,8 @@ assert_test(
 	'precondition: wp_attachment_is_image() is NOT defined in this process'
 );
 
-$api    = ( new ReflectionClass( 'DEF_Core_Admin_API' ) )->newInstanceWithoutConstructor();
-$method = new ReflectionMethod( 'DEF_Core_Admin_API', 'validate_logo_id' );
+$api    = ( new ReflectionClass( 'Widrow_AI_Admin_API' ) )->newInstanceWithoutConstructor();
+$method = new ReflectionMethod( 'Widrow_AI_Admin_API', 'validate_logo_id' );
 $method->setAccessible( true );
 
 // The inverted branch: cannot verify ⇒ refuse, not accept.

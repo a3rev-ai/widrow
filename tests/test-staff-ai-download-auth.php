@@ -13,7 +13,7 @@
  * Runs standalone (no WordPress bootstrap), same harness pattern as
  * test-bridge-contract.php.
  *
- * @package def-core/tests
+ * @package widrow-ai/tests
  */
 
 declare(strict_types=1);
@@ -155,10 +155,10 @@ if ( ! function_exists( 'wp_remote_retrieve_header' ) ) {
 }
 
 // Backend URL resolver (same shape as test-bridge-contract.php).
-if ( ! class_exists( 'DEF_Core' ) ) {
-	class DEF_Core {
+if ( ! class_exists( 'Widrow_AI' ) ) {
+	class Widrow_AI {
 		public static function get_def_api_url_internal(): ?string {
-			$url = get_option( 'def_core_staff_ai_api_url', '' );
+			$url = get_option( 'widrow_ai_staff_ai_api_url', '' );
 			return ! empty( $url ) ? rtrim( $url, '/' ) : null;
 		}
 	}
@@ -167,8 +167,8 @@ if ( ! class_exists( 'DEF_Core' ) ) {
 // Capability derivation is pinned by test-proxy-identity-headers.php against
 // the real class; here it is stubbed so this file pins ONLY the header
 // contract and gate order of the download proxy.
-if ( ! class_exists( 'DEF_Core_Tools' ) ) {
-	class DEF_Core_Tools {
+if ( ! class_exists( 'Widrow_AI_Tools' ) ) {
+	class Widrow_AI_Tools {
 		public static function get_user_def_capabilities( $user ): array {
 			global $_wp_test_user_caps;
 			return $_wp_test_user_caps;
@@ -176,10 +176,10 @@ if ( ! class_exists( 'DEF_Core_Tools' ) ) {
 	}
 }
 
-require_once dirname( __DIR__ ) . '/includes/class-def-core-staff-ai.php';
+require_once dirname( __DIR__ ) . '/includes/class-widrow-ai-staff-ai.php';
 
-update_option( 'def_core_staff_ai_api_url', 'http://backend:8000' );
-update_option( 'def_core_api_key', 'test-api-key-download' );
+update_option( 'widrow_ai_staff_ai_api_url', 'http://backend:8000' );
+update_option( 'widrow_ai_api_key', 'test-api-key-download' );
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -199,7 +199,7 @@ function check( bool $cond, string $label ): void {
 
 function invoke_download(): ?WPDieException {
 	try {
-		$m = new ReflectionMethod( 'DEF_Core_Staff_AI', 'handle_file_download' );
+		$m = new ReflectionMethod( 'Widrow_AI_Staff_AI', 'handle_file_download' );
 		$m->setAccessible( true );
 		$m->invoke( null );
 	} catch ( WPDieException $e ) {
@@ -224,13 +224,13 @@ function reset_state( bool $logged_in, array $caps ): void {
 echo "Staff-AI download proxy auth\n";
 
 // 1. Authenticated staff request sends the BFF header set — and no JWT.
-reset_state( true, array( 'def_staff_access' ) );
+reset_state( true, array( 'widrow_staff_access' ) );
 $e = invoke_download(); // Backend errors (stub default) → wp_die AFTER the call.
 check( count( $GLOBALS['_wp_test_remote_calls'] ) === 1, 'exactly one backend call made' );
 $headers = $GLOBALS['_wp_test_remote_calls'][0]['args']['headers'] ?? array();
 check( ( $headers['X-DEF-API-Key'] ?? '' ) === 'test-api-key-download', 'X-DEF-API-Key rides the request' );
 check( ( $headers['X-DEF-User'] ?? '' ) === '7', 'X-DEF-User is the WP user ID' );
-check( isset( $headers['X-DEF-User-Capabilities'] ) && strpos( $headers['X-DEF-User-Capabilities'], 'def_staff_access' ) !== false, 'capabilities header present' );
+check( isset( $headers['X-DEF-User-Capabilities'] ) && strpos( $headers['X-DEF-User-Capabilities'], 'widrow_staff_access' ) !== false, 'capabilities header present' );
 check( ! isset( $headers['Authorization'] ), 'NO Authorization/JWT header (the retired auth that 401d every download)' );
 check( strpos( $GLOBALS['_wp_test_remote_calls'][0]['url'], 'http://backend:8000/api/files/' ) === 0, 'URL targets /api/files/ on the backend' );
 
@@ -247,7 +247,7 @@ check( $e !== null && $e->status === 403, 'no staff capability → 403' );
 check( count( $GLOBALS['_wp_test_remote_calls'] ) === 0, 'no backend call without capability' );
 
 // 4. Backend non-200 surfaces the proxy error, never the API key.
-reset_state( true, array( 'def_staff_access' ) );
+reset_state( true, array( 'widrow_staff_access' ) );
 $GLOBALS['_wp_test_remote_responses'][] = array(
 	'response' => array( 'code' => 401 ),
 	'body'     => 'Authentication required for Staff AI',
@@ -267,7 +267,7 @@ check( $e !== null && strpos( $e->getMessage(), 'test-api-key-download' ) === fa
 echo "\nStaff-AI download proxy — the saved name\n";
 
 function saved_name( $disposition, string $url_filename ): string {
-	$m = new ReflectionMethod( 'DEF_Core_Staff_AI', 'download_filename_from' );
+	$m = new ReflectionMethod( 'Widrow_AI_Staff_AI', 'download_filename_from' );
 	$m->setAccessible( true );
 	return $m->invoke( null, $disposition, $url_filename );
 }
@@ -327,7 +327,7 @@ check(
 // it. handle_file_download's success path ends in `exit`, so it cannot be invoked
 // in-process to watch a real header come out — a source pin is the honest substitute,
 // and it is a pin ON TOP of behavioural coverage, not instead of it.
-$handler = file_get_contents( dirname( __DIR__ ) . '/includes/class-def-core-staff-ai.php' );
+$handler = file_get_contents( dirname( __DIR__ ) . '/includes/class-widrow-ai-staff-ai.php' );
 check(
 	(bool) preg_match(
 		"/self::download_filename_from\(\s*wp_remote_retrieve_header\(\s*\\\$response,\s*'content-disposition'\s*\)/",
@@ -338,7 +338,7 @@ check(
 
 // The value still goes through sanitize_proxy_filename before it reaches a header;
 // this pins that the two work together rather than each being right alone.
-$inject = new ReflectionMethod( 'DEF_Core_Staff_AI', 'sanitize_proxy_filename' );
+$inject = new ReflectionMethod( 'Widrow_AI_Staff_AI', 'sanitize_proxy_filename' );
 $inject->setAccessible( true );
 $hostile = saved_name(
 	"attachment; filename*=UTF-8''Quarter%22%0D%0AX-Injected:%20yes.md",
@@ -360,7 +360,7 @@ check(
 // and wrong for a Download link. One URL cannot be both, so the caller asks.
 
 function disposition( string $type, bool $save ): string {
-	$m = new ReflectionMethod( 'DEF_Core_Staff_AI', 'download_disposition_for' );
+	$m = new ReflectionMethod( 'Widrow_AI_Staff_AI', 'download_disposition_for' );
 	$m->setAccessible( true );
 	return $m->invoke( null, $type, $save );
 }
@@ -373,14 +373,14 @@ check( disposition( 'application/octet-stream', true ) === 'attachment', 'a down
 
 // The handler ends in `exit` on the success path, so the real header cannot be watched
 // in-process (same reason the filename decision was lifted out). Pin that it asks.
-$src = file_get_contents( dirname( __DIR__ ) . '/includes/class-def-core-staff-ai.php' );
+$src = file_get_contents( dirname( __DIR__ ) . '/includes/class-widrow-ai-staff-ai.php' );
 check(
 	strpos( $src, 'self::download_disposition_for(' ) !== false
 		&& strpos( $src, "get_query_var( 'staff_ai_save' )" ) !== false,
 	'handle_file_download asks the decision, with the flag off the request'
 );
 check(
-	in_array( 'staff_ai_save', DEF_Core_Staff_AI::add_query_vars( array() ), true ),
+	in_array( 'staff_ai_save', Widrow_AI_Staff_AI::add_query_vars( array() ), true ),
 	'staff_ai_save is a registered query var, or get_query_var would never see it'
 );
 

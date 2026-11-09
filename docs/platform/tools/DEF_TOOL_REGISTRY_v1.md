@@ -86,8 +86,8 @@ version: 1.0
 enabled: true
 
 allowed_capabilities:
-  - def_staff_access
-  - def_management_access
+  - widrow_staff_access
+  - widrow_management_access
 
 input_schema:
   type: object
@@ -115,7 +115,7 @@ output_schema:
 
 - Tools are enabled by default unless explicitly disabled.
 - Activation state is stored server-side and enforced by the Python control plane.
-- def-core (WordPress) MAY expose UI controls to toggle tools, but Python is authoritative.
+- widrow-ai (WordPress) MAY expose UI controls to toggle tools, but Python is authoritative.
 
 ### 6.2 Enforcement
 
@@ -135,13 +135,13 @@ Tools MUST declare required DEF capabilities.
 
 Supported capabilities (v1):
 
-- def_staff_access
-- def_management_access
+- widrow_staff_access
+- widrow_management_access
 
 Rules:
 
-- def_management_access implicitly includes all staff-level access
-- def_staff_access does NOT grant management-only tools
+- widrow_management_access implicitly includes all staff-level access
+- widrow_staff_access does NOT grant management-only tools
 - Capabilities are assigned directly to users (no WP role inference)
 
 ---
@@ -247,7 +247,7 @@ Before exposing any tools to the LLM, the Python control plane MUST perform a **
 
 Inputs to tool search:
 - Channel (`staff_ai`, `customer`, `setup_assistant`)
-- User capabilities (`def_staff_access`, `def_management_access`)
+- User capabilities (`widrow_staff_access`, `widrow_management_access`)
 - Natural language query (derived from the user message)
 - Tool activation state (enabled / disabled)
 

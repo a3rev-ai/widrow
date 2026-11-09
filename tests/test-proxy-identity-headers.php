@@ -15,7 +15,7 @@
  *
  * Added as part of the Bug #2 fix (staff_ai_bff_identity regression).
  *
- * @package def-core/tests
+ * @package widrow-ai/tests
  */
 
 declare(strict_types=1);
@@ -25,11 +25,11 @@ declare(strict_types=1);
 if ( ! defined( 'ABSPATH' ) ) {
 	define( 'ABSPATH', dirname( __DIR__ ) . '/' );
 }
-if ( ! defined( 'DEF_CORE_PLUGIN_DIR' ) ) {
-	define( 'DEF_CORE_PLUGIN_DIR', dirname( __DIR__ ) . '/' );
+if ( ! defined( 'WIDROW_AI_PLUGIN_DIR' ) ) {
+	define( 'WIDROW_AI_PLUGIN_DIR', dirname( __DIR__ ) . '/' );
 }
 
-// Load shared stubs (gets DEF_Core_Encryption, options, etc.)
+// Load shared stubs (gets Widrow_AI_Encryption, options, etc.)
 require_once __DIR__ . '/wp-stubs.php';
 
 // Controllable user state.
@@ -122,9 +122,9 @@ if ( ! function_exists( '__' ) ) {
 	}
 }
 
-// Stub DEF_Core so get_def_api_url_internal() doesn't fail at class load.
-if ( ! class_exists( 'DEF_Core' ) ) {
-	class DEF_Core {
+// Stub Widrow_AI so get_def_api_url_internal() doesn't fail at class load.
+if ( ! class_exists( 'Widrow_AI' ) ) {
+	class Widrow_AI {
 		public static function get_def_api_url_internal(): string {
 			return 'http://localhost:8000';
 		}
@@ -141,10 +141,10 @@ if ( ! function_exists( 'get_bloginfo' ) ) {
 }
 
 // Seed a dummy API key so build_proxy_headers() produces the key header.
-\DEF_Core_Encryption::set_secret( 'def_core_api_key', 'test-api-key-for-proxy-test' );
+\Widrow_AI_Encryption::set_secret( 'widrow_ai_api_key', 'test-api-key-for-proxy-test' );
 
 // ── Load class under test ───────────────────────────────────────────────
-require_once DEF_CORE_PLUGIN_DIR . 'includes/class-def-core-tools.php';
+require_once WIDROW_AI_PLUGIN_DIR . 'includes/class-widrow-ai-tools.php';
 
 // ── Test helpers ────────────────────────────────────────────────────────
 
@@ -169,7 +169,7 @@ function assert_false( $value, string $label ): void {
  * Call the private build_proxy_headers() via reflection.
  */
 function call_build_proxy_headers( bool $include_capabilities = false, bool $include_visitor_ip = true ): array {
-	$method = new ReflectionMethod( 'DEF_Core_Tools', 'build_proxy_headers' );
+	$method = new ReflectionMethod( 'Widrow_AI_Tools', 'build_proxy_headers' );
 	$method->setAccessible( true );
 	return $method->invoke( null, $include_capabilities, $include_visitor_ip );
 }
@@ -335,9 +335,9 @@ assert_true(
 unset( $_SERVER['HTTP_X_FORWARDED_FOR'], $_SERVER['HTTP_CF_CONNECTING_IP'] );
 
 // ── 10. CDN sites opt in through the filter ─────────────────────────────
-echo "\n[10] def_core_visitor_ip filter overrides (CDN topology)\n";
+echo "\n[10] widrow_ai_visitor_ip filter overrides (CDN topology)\n";
 
-$_proxy_test_filters['def_core_visitor_ip'] = fn( $ip ) => '198.51.100.99';
+$_proxy_test_filters['widrow_ai_visitor_ip'] = fn( $ip ) => '198.51.100.99';
 $headers = call_build_proxy_headers( false );
 assert_true(
 	get_header_value( $headers, 'X-DEF-Client-IP: ' ) === '198.51.100.99',
@@ -345,7 +345,7 @@ assert_true(
 );
 
 // A filter returning junk must not put junk on the wire.
-$_proxy_test_filters['def_core_visitor_ip'] = fn( $ip ) => "not-an-ip\r\nX-Injected: 1";
+$_proxy_test_filters['widrow_ai_visitor_ip'] = fn( $ip ) => "not-an-ip\r\nX-Injected: 1";
 $headers = call_build_proxy_headers( false );
 assert_false( has_header( $headers, 'X-DEF-Client-IP:' ), 'invalid filtered IP is dropped' );
 assert_false( has_header( $headers, 'X-Injected:' ), 'no header injection through the filter' );

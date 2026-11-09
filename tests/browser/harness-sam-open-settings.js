@@ -10,7 +10,7 @@ const { JSDOM } = require('jsdom');
 const extract = require('./extract');
 
 const SRC = fs.readFileSync(path.resolve(__dirname, '../../assets/js/setup-assistant-drawer.js'), 'utf8');
-const P = 'def_core_chat_escalation_';
+const P = 'widrow_ai_chat_escalation_';
 
 let pass = 0, fail = 0;
 function check(label, cond) {
@@ -29,13 +29,13 @@ function check(label, cond) {
 		`<textarea id="${P}pref_options"></textarea><textarea id="${P}ack_body"></textarea>` +
 		`<select id="${P}business_fields"><option value="hidden"></option><option value="required"></option></select>` +
 		`<input type="checkbox" id="${P}pref_enabled"><input type="checkbox" id="${P}ack_enabled" checked>` +
-		'<input type="hidden" id="def_core_app_icon_id"><input type="hidden" id="def_core_chat_button_icon_id">' +
-		'<input type="hidden" id="def_core_chat_loading_mark_id"><input type="url" id="def_core_chat_privacy_url">' +
-		'<input type="number" id="def_core_logo_max_height">' +
-		'<input type="checkbox" id="def_core_logo_show_staff_ai"><input type="checkbox" id="def_core_logo_show_customer_chat">' +
-		'<input type="checkbox" id="def_core_chat_show_floating"><input type="checkbox" id="def_core_chat_ai_notice">' +
-		'<input type="radio" name="def_core_chat_button_position" value="right" checked>' +
-		'<input type="radio" name="def_core_chat_button_position" value="left">' +
+		'<input type="hidden" id="widrow_ai_app_icon_id"><input type="hidden" id="widrow_ai_chat_button_icon_id">' +
+		'<input type="hidden" id="widrow_ai_chat_loading_mark_id"><input type="url" id="widrow_ai_chat_privacy_url">' +
+		'<input type="number" id="widrow_ai_logo_max_height">' +
+		'<input type="checkbox" id="widrow_ai_logo_show_staff_ai"><input type="checkbox" id="widrow_ai_logo_show_customer_chat">' +
+		'<input type="checkbox" id="widrow_ai_chat_show_floating"><input type="checkbox" id="widrow_ai_chat_ai_notice">' +
+		'<input type="radio" name="widrow_ai_chat_button_position" value="right" checked>' +
+		'<input type="radio" name="widrow_ai_chat_button_position" value="left">' +
 		'</body></html>', { url: 'https://site.test/wp-admin/', runScripts: 'outside-only', pretendToBeVisual: true });
 	const w = dom.window;
 	extract.stubMatchMedia(w);
@@ -59,7 +59,7 @@ function check(label, cond) {
 	update('ack_enabled', '0');
 	check('a switch turned off is unticked', el('ack_enabled').checked === false);
 
-	const field = key => w.document.getElementById('def_core_' + key);
+	const field = key => w.document.getElementById('widrow_ai_' + key);
 	for (const [key, value] of [['app_icon_id', '12'], ['chat_button_icon_id', '13'], ['chat_loading_mark_id', '14'],
 		['chat_privacy_url', 'https://site.test/terms/'], ['logo_max_height', '60']]) {
 		w.__sam.handleUpdateField({ field: key, value });
@@ -71,7 +71,7 @@ function check(label, cond) {
 	}
 	w.__sam.handleUpdateField({ field: 'chat_button_position', value: 'left' });
 	check('chat_button_position moves to left',
-		w.document.querySelector('input[name="def_core_chat_button_position"]:checked').value === 'left');
+		w.document.querySelector('input[name="widrow_ai_chat_button_position"]:checked').value === 'left');
 
 	console.log('harness-sam-open-settings: ' + pass + ' passed, ' + fail + ' failed');
 	process.exit(fail ? 1 : 0);

@@ -2,8 +2,8 @@
  * W77 — the page's pictures ride the chat message (customer-chat page-reads
  * runsheet D-PR4).
  *
- * Runs the SHIPPED assets/js/def-core-page-context.js inside jsdom with the
- * payload PHP localizes (window.DefCorePageContext), then calls the helper's
+ * Runs the SHIPPED assets/js/widrow-ai-page-context.js inside jsdom with the
+ * payload PHP localizes (window.WidrowAiPageContext), then calls the helper's
  * build() the way the chat does at submit time.
  *
  *  1. build() carries the payload's images on `current`, as PHP listed them.
@@ -16,7 +16,7 @@ const path = require('path');
 const { JSDOM } = require('jsdom');
 
 const SOURCE = fs.readFileSync(
-	path.join(__dirname, '..', '..', 'assets', 'js', 'def-core-page-context.js'), 'utf8');
+	path.join(__dirname, '..', '..', 'assets', 'js', 'widrow-ai-page-context.js'), 'utf8');
 
 let passed = 0, failed = 0;
 function check(cond, name) {
@@ -27,9 +27,9 @@ function check(cond, name) {
 function build(payload) {
 	const dom = new JSDOM('<!doctype html><html><body></body></html>',
 		{ url: 'https://shop.example/kettle/', runScripts: 'outside-only' });
-	dom.window.DefCorePageContext = payload;
+	dom.window.WidrowAiPageContext = payload;
 	dom.window.eval(SOURCE);
-	return dom.window.DefCorePageContextHelper.build(null);
+	return dom.window.WidrowAiPageContextHelper.build(null);
 }
 
 console.log('page context images:');

@@ -108,15 +108,15 @@ Capabilities are evaluated **before Employee selection**.
 Routing rules:
 
 1. If user is not authenticated → deny access
-2. If user has `def_management_access`:
+2. If user has `widrow_management_access`:
    - Route to **Management Knowledge Assistant**
-3. Else if user has `def_staff_access`:
+3. Else if user has `widrow_staff_access`:
    - Route to **Staff Knowledge Assistant**
 4. Else:
    - Deny access
 
 Notes:
-- `def_management_access` implicitly includes staff-level access
+- `widrow_management_access` implicitly includes staff-level access
 - Users must never be routed to Staff AI Employees without capabilities
 
 ---

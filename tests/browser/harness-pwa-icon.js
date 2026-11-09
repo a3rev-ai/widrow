@@ -19,7 +19,7 @@ const extract = require('./extract');
 
 const read = f => fs.readFileSync(path.join(extract.REPO, f), 'utf8');
 const TPL = read('templates/staff-ai-shell.php');
-const PHP = read('includes/class-def-core-staff-ai.php');
+const PHP = read('includes/class-widrow-ai-staff-ai.php');
 
 let pass = 0, fail = 0;
 const results = [];
@@ -58,7 +58,7 @@ check(++n, 'the href names no SVG, the resolver admits only PNG/JPEG/WebP, and i
 // The un-prefixed mobile-web-app-capable is the standard; Chrome logs a
 // deprecation warning for a page carrying only the legacy Apple one.
 check(++n, 'the installed app is named Staff AI, and opens without browser chrome (both spellings)',
-	/<meta name="apple-mobile-web-app-title" content="<\?php echo esc_attr__\( 'Staff AI', 'digital-employees' \); \?>">/.test(HEAD) &&
+	/<meta name="apple-mobile-web-app-title" content="<\?php echo esc_attr__\( 'Staff AI', 'widrow-ai' \); \?>">/.test(HEAD) &&
 	/<meta name="mobile-web-app-capable" content="yes">/.test(HEAD) &&
 	/<meta name="apple-mobile-web-app-capable" content="yes">/.test(HEAD));
 

@@ -4,7 +4,7 @@ Widrow AI includes a built-in connection logging system for diagnosing sync pipe
 
 ## Overview
 
-The logger captures what flows between def-core and the DEF backend:
+The logger captures what flows between widrow-ai and the DEF backend:
 
 - **Sync requests and responses** — what was requested, what WordPress queried, what was returned
 - **Auth handshakes** — connection tests, JWT validation
@@ -66,7 +66,7 @@ This allows matching logs across both systems for a single request.
 
 ## Storage
 
-Logs are stored in the `{prefix}def_core_logs` database table with indexed columns for fast filtering:
+Logs are stored in the `{prefix}widrow_ai_logs` database table with indexed columns for fast filtering:
 
 | Column | Purpose |
 |--------|---------|
@@ -79,9 +79,9 @@ Logs are stored in the `{prefix}def_core_logs` database table with indexed colum
 
 ## Log Rotation
 
-- **Daily cleanup** via WordPress cron (`def_core_log_cleanup`)
-- **Retention**: 30 days (filterable via `def_core_log_retention_days`)
-- **Row cap**: 50,000 entries (filterable via `def_core_log_max_entries`)
+- **Daily cleanup** via WordPress cron (`widrow_ai_log_cleanup`)
+- **Retention**: 30 days (filterable via `widrow_ai_log_retention_days`)
+- **Row cap**: 50,000 entries (filterable via `widrow_ai_log_max_entries`)
 - **Emergency fallback**: probabilistic trim if cron hasn't fired
 
 ## Fail-Open Design
@@ -100,17 +100,17 @@ The logger is designed to **never break your site**:
 
 ```php
 // Change retention period (default: 30 days)
-add_filter( 'def_core_log_retention_days', function() { return 14; } );
+add_filter( 'widrow_ai_log_retention_days', function() { return 14; } );
 
 // Change max entries (default: 50,000)
-add_filter( 'def_core_log_max_entries', function() { return 25000; } );
+add_filter( 'widrow_ai_log_max_entries', function() { return 25000; } );
 ```
 
 ### Using the Logger in Custom Code
 
 ```php
 // Log a connection event
-DEF_Core_Logger::info( DEF_Core_Logger::SOURCE_SYNC, 'My custom log message', [
+Widrow_AI_Logger::info( Widrow_AI_Logger::SOURCE_SYNC, 'My custom log message', [
     'key'        => 'value',
     'request_id' => $request_id,
 ] );

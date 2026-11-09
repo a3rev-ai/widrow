@@ -261,7 +261,7 @@ const history = () => Array.from({ length: 12 }, (_, i) => ({
 	// The SHIPPED placeholder, with its PHP strings as WordPress prints them untranslated.
 	const php = fs.readFileSync(extract.TEMPLATE_PATH, 'utf8');
 	const placeholder = php.match(/<div class="conversation-list-placeholder"[\s\S]*?<\/div>/)[0]
-		.replace(/<\?php echo esc_html__\( '([^']*)', 'digital-employees' \); \?>/g, '$1');
+		.replace(/<\?php echo esc_html__\( '([^']*)', 'widrow-ai' \); \?>/g, '$1');
 
 	function bootLoad(answer) {
 		const dom = new JSDOM('<!doctype html><nav id="conversationList">' + placeholder + '</nav>');

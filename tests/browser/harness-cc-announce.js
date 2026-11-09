@@ -6,7 +6,7 @@
  * (9.1.0's module fails both). #36 (9.1.2): so does the rest of a reply that `done` renders
  * at once, ahead of the word drain (9.1.1's module fails it).
  *
- * Runs the SHIPPED chat module (assets/js/def-core-customer-chat.js), whole, in a
+ * Runs the SHIPPED chat module (assets/js/widrow-ai-customer-chat.js), whole, in a
  * jsdom page with the shipped marked, DOMPurify and product-card renderer, over a
  * fake network: a context token, server threads, the login endpoint, the cart,
  * and the chat itself — answered as JSON (the sync path) or as an SSE stream the
@@ -60,8 +60,8 @@ const MODULE = extract.customerChatSource();
 // What the page has loaded before the module: the persona controller (enqueued by
 // PHP), then what the loader chains in — marked, DOMPurify, the product cards.
 const VENDOR = ['assets/js/def-persona.js', 'assets/js/vendor/marked.min.js', 'assets/js/vendor/purify.min.js',
-  'assets/js/def-core-product-cards.js'].map(f => fs.readFileSync(path.join(extract.REPO, f), 'utf8'));
-const CSS = fs.readFileSync(path.join(extract.REPO, 'assets/css/def-core-customer-chat.css'), 'utf8');
+  'assets/js/widrow-ai-product-cards.js'].map(f => fs.readFileSync(path.join(extract.REPO, f), 'utf8'));
+const CSS = fs.readFileSync(path.join(extract.REPO, 'assets/css/widrow-ai-customer-chat.css'), 'utf8');
 
 const BASE = {
   apiBaseUrl: 'https://api.example.test',

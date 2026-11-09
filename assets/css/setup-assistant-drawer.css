@@ -2,15 +2,15 @@
  * Setup Assistant Drawer Styles
  *
  * Right-side slide-in chat panel for the Setup Assistant.
- * Matches WordPress admin color palette and def-core-admin.css conventions.
+ * Matches WordPress admin color palette and widrow-ai-admin.css conventions.
  *
- * @package def-core
+ * @package widrow-ai
  * @since   2.0.0
  */
 
 /* ─── Page Header ────────────────────────────────────────────── */
 
-.def-core-wrap > h1 {
+.widrow-ai-wrap > h1 {
 	display: inline-block;
 }
 

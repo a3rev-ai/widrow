@@ -2,7 +2,7 @@
  * Customer Chat attach gate - behavioural harness (U-1b / v7.8.5, +1 for v8.1.3, +3 for v8.7.13), 20 checks.
  *
  * Runs the SHIPPED attach-gate and staged-upload blocks (extracted by marker
- * from assets/js/def-core-customer-chat.js) inside jsdom over the same closure
+ * from assets/js/widrow-ai-customer-chat.js) inside jsdom over the same closure
  * the widget gives them, so the checks below run the lines that ship.
  *
  * What it holds: an upload belongs to the conversation it is sent in. There is
@@ -24,7 +24,7 @@ const SINGLE = extract.slice('uploadSingleFile',
   l => l.startsWith('\tfunction checkUploadEligibility() {'),
   ['var SAFE_REFUSAL_CODES', 'function refusalError', 'function uploadSingleFile'],
   'UPLOAD_SINGLE', extract.CC_PATH);
-const PHP = fs.readFileSync(path.join(extract.REPO, 'includes/class-def-core.php'), 'utf8');
+const PHP = fs.readFileSync(path.join(extract.REPO, 'includes/class-widrow-ai.php'), 'utf8');
 
 const NOTICE = 'Send your first message, then attach the image.';
 

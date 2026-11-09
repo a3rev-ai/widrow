@@ -76,11 +76,11 @@ Escalation must not proceed without all fields.
 
 ## 6. Anonymous Customer Escalation — Recipient Fallback (Authoritative)
 
-Customer Channel escalation supports anonymous users, but anonymous callers cannot rely on fetching escalation recipients from authenticated def-core settings endpoints.
+Customer Channel escalation supports anonymous users, but anonymous callers cannot rely on fetching escalation recipients from authenticated widrow-ai settings endpoints.
 
 Therefore, anonymous escalation MUST resolve recipients using the following priority:
 
-1) **def-core configured recipients** (if accessible and returned successfully)
+1) **widrow-ai configured recipients** (if accessible and returned successfully)
 2) **Anonymous fallback recipient** (required)
    - A site-level fallback support email must be configured for anonymous escalations
    - This can be provided via environment variable or server config (e.g., `ESCALATION_FALLBACK_EMAIL`)
@@ -90,8 +90,8 @@ Therefore, anonymous escalation MUST resolve recipients using the following prio
 
 Rules:
 - The fallback recipient is used **only for anonymous customer escalation**
-- Authenticated escalation must continue to use def-core configured recipients
-- This policy does not weaken def-core settings endpoint authentication
+- Authenticated escalation must continue to use widrow-ai configured recipients
+- This policy does not weaken widrow-ai settings endpoint authentication
 
 
 ## 7. Payload Requirements

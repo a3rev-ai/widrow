@@ -2,7 +2,7 @@
 /**
  * Knowledge exclusion (v3.1.0) — focused tests for the non-trivial behavior.
  *
- * @package def-core/tests
+ * @package widrow-ai/tests
  */
 
 declare(strict_types=1);
@@ -57,8 +57,8 @@ function esc_html_e( string $s, string $d = '' ): void { echo $s; }
 function sanitize_key( string $k ): string { return strtolower( preg_replace( '/[^a-z0-9_\-]/', '', $k ) ); }
 function checked( $v ): string { return $v ? ' checked' : ''; }
 
-if ( ! defined( 'DEF_CORE_PLUGIN_URL' ) ) {
-	define( 'DEF_CORE_PLUGIN_URL', 'https://example.test/' );
+if ( ! defined( 'WIDROW_AI_PLUGIN_URL' ) ) {
+	define( 'WIDROW_AI_PLUGIN_URL', 'https://example.test/' );
 }
 
 // Per-item deindex path collaborators: a mock export class that records the
@@ -67,8 +67,8 @@ if ( ! defined( 'DEF_CORE_PLUGIN_URL' ) ) {
 global $_wp_test_tracked_exclusions;
 $_wp_test_tracked_exclusions = array();
 
-if ( ! class_exists( 'DEF_Core_Knowledge_Export' ) ) {
-	class DEF_Core_Knowledge_Export {
+if ( ! class_exists( 'Widrow_AI_Knowledge_Export' ) ) {
+	class Widrow_AI_Knowledge_Export {
 		public static function track_exclusion_change( int $post_id, string $post_type, bool $excluded ): void {
 			global $_wp_test_tracked_exclusions;
 			$_wp_test_tracked_exclusions[] = array( $post_id, $post_type, $excluded );
@@ -91,7 +91,7 @@ if ( ! function_exists( 'clean_post_cache' ) ) {
 	function clean_post_cache( $id ) {}
 }
 
-require_once __DIR__ . '/../includes/class-def-core-knowledge-exclusion.php';
+require_once __DIR__ . '/../includes/class-widrow-ai-knowledge-exclusion.php';
 
 $pass = 0;
 $fail = 0;
@@ -103,12 +103,12 @@ echo "Knowledge exclusion (v3.1.0)\n";
 
 // 1. Meta key contract — must match what the DEF backend reads.
 $assert(
-	DEF_Core_Knowledge_Exclusion::META_KEY === '_def_exclude_from_ingestion',
+	Widrow_AI_Knowledge_Exclusion::META_KEY === '_widrow_exclude_from_ingestion',
 	'META_KEY constant matches DEF backend contract'
 );
 
 // 2. Supported post types: attachment is filtered out (not standalone-ingested).
-$types = DEF_Core_Knowledge_Exclusion::get_supported_post_types();
+$types = Widrow_AI_Knowledge_Exclusion::get_supported_post_types();
 $assert(
 	! in_array( 'attachment', $types, true ) && in_array( 'product', $types, true ),
 	'attachment filtered out, real post types kept'
@@ -118,25 +118,25 @@ $assert(
 $_wp_test_post_meta     = array();
 $_wp_test_caps          = array( 8516 => true, 8517 => false, 8518 => true, 8519 => true );
 $_wp_test_get_post_type = array( 8516 => 'product', 8517 => 'product', 8518 => 'attachment', 8519 => 'product' );
-$url = DEF_Core_Knowledge_Exclusion::handle_bulk_actions(
-	'https://e.test', DEF_Core_Knowledge_Exclusion::BULK_EXCLUDE,
+$url = Widrow_AI_Knowledge_Exclusion::handle_bulk_actions(
+	'https://e.test', Widrow_AI_Knowledge_Exclusion::BULK_EXCLUDE,
 	array( 8516, 8517, 8518, 8519 )
 );
 $assert(
-	($_wp_test_post_meta[8516]['_def_exclude_from_ingestion'] ?? null) === true
+	($_wp_test_post_meta[8516]['_widrow_exclude_from_ingestion'] ?? null) === true
 	&& ! isset( $_wp_test_post_meta[ 8517 ] )            // no edit_post cap
 	&& ! isset( $_wp_test_post_meta[ 8518 ] )            // attachment (unsupported)
-	&& ($_wp_test_post_meta[8519]['_def_exclude_from_ingestion'] ?? null) === true,
+	&& ($_wp_test_post_meta[8519]['_widrow_exclude_from_ingestion'] ?? null) === true,
 	'BULK_EXCLUDE writes only on capable + supported post types'
 );
 $assert(
-	str_contains( $url, 'def_core_bulk_count=2' ),
+	str_contains( $url, 'widrow_ai_bulk_count=2' ),
 	'bulk count reflects only authorized + supported updates'
 );
 
 // 4. handle_bulk_actions ignores unrelated bulk actions (e.g. Trash).
 $assert(
-	DEF_Core_Knowledge_Exclusion::handle_bulk_actions( 'https://e.test/x', 'trash', array( 8516 ) )
+	Widrow_AI_Knowledge_Exclusion::handle_bulk_actions( 'https://e.test/x', 'trash', array( 8516 ) )
 		=== 'https://e.test/x',
 	'unrelated bulk actions pass through untouched'
 );
@@ -144,8 +144,8 @@ $assert(
 // 5. auth_can_edit_post delegates correctly (defense-in-depth meta auth).
 $_wp_test_caps = array( 8516 => true, 8517 => false );
 $assert(
-	DEF_Core_Knowledge_Exclusion::auth_can_edit_post( false, '_def_exclude_from_ingestion', 8516 ) === true
-	&& DEF_Core_Knowledge_Exclusion::auth_can_edit_post( false, '_def_exclude_from_ingestion', 8517 ) === false,
+	Widrow_AI_Knowledge_Exclusion::auth_can_edit_post( false, '_widrow_exclude_from_ingestion', 8516 ) === true
+	&& Widrow_AI_Knowledge_Exclusion::auth_can_edit_post( false, '_widrow_exclude_from_ingestion', 8517 ) === false,
 	'auth_can_edit_post delegates to current_user_can(edit_post, $id)'
 );
 
@@ -157,7 +157,7 @@ $cases = array(
 		'caps'  => array( 8516 => true ),
 		'type'  => array( 8516 => 'product' ),
 		'nonce' => true,
-		'post'  => array( 'def_core_exclusion_nonce' => 'x', '_def_exclude_from_ingestion' => '1' ),
+		'post'  => array( 'widrow_ai_exclusion_nonce' => 'x', '_widrow_exclude_from_ingestion' => '1' ),
 		'expect_set'   => true,
 		'expect_value' => true,
 	),
@@ -167,7 +167,7 @@ $cases = array(
 		'caps'  => array( 8516 => true ),
 		'type'  => array( 8516 => 'product' ),
 		'nonce' => true,
-		'post'  => array( 'def_core_exclusion_nonce' => 'x' ),
+		'post'  => array( 'widrow_ai_exclusion_nonce' => 'x' ),
 		'expect_set'   => true,
 		'expect_value' => false,
 	),
@@ -177,7 +177,7 @@ $cases = array(
 		'caps'  => array( 8516 => true ),
 		'type'  => array( 8516 => 'product' ),
 		'nonce' => true,
-		'post'  => array( '_def_exclude_from_ingestion' => '1' ),
+		'post'  => array( '_widrow_exclude_from_ingestion' => '1' ),
 		'expect_set'   => false,
 	),
 	array(
@@ -186,7 +186,7 @@ $cases = array(
 		'caps'  => array( 8516 => true ),
 		'type'  => array( 8516 => 'product' ),
 		'nonce' => false,
-		'post'  => array( 'def_core_exclusion_nonce' => 'x', '_def_exclude_from_ingestion' => '1' ),
+		'post'  => array( 'widrow_ai_exclusion_nonce' => 'x', '_widrow_exclude_from_ingestion' => '1' ),
 		'expect_set'   => false,
 	),
 	array(
@@ -195,7 +195,7 @@ $cases = array(
 		'caps'  => array( 8516 => true ),
 		'type'  => array( 8516 => 'attachment' ),
 		'nonce' => true,
-		'post'  => array( 'def_core_exclusion_nonce' => 'x', '_def_exclude_from_ingestion' => '1' ),
+		'post'  => array( 'widrow_ai_exclusion_nonce' => 'x', '_widrow_exclude_from_ingestion' => '1' ),
 		'expect_set'   => false,
 	),
 );
@@ -205,11 +205,11 @@ foreach ( $cases as $c ) {
 	$_wp_test_get_post_type = $c['type'];
 	$_wp_test_nonce_ok      = $c['nonce'];
 	$_POST                  = $c['post'];
-	DEF_Core_Knowledge_Exclusion::save_post( 8516 );
-	$is_set = isset( $_wp_test_post_meta[ 8516 ]['_def_exclude_from_ingestion'] );
+	Widrow_AI_Knowledge_Exclusion::save_post( 8516 );
+	$is_set = isset( $_wp_test_post_meta[ 8516 ]['_widrow_exclude_from_ingestion'] );
 	if ( $c['expect_set'] ) {
 		$assert(
-			$is_set && $_wp_test_post_meta[ 8516 ]['_def_exclude_from_ingestion'] === $c['expect_value'],
+			$is_set && $_wp_test_post_meta[ 8516 ]['_widrow_exclude_from_ingestion'] === $c['expect_value'],
 			"save_post: {$c['name']}"
 		);
 	} else {
@@ -224,7 +224,7 @@ $_wp_test_get_post_type = array( 700 => 'product', 701 => 'attachment' );
 // Supported type → records the transition AND bumps post_modified (this item).
 $_wp_test_tracked_exclusions = array();
 $wpdb->calls                 = array();
-DEF_Core_Knowledge_Exclusion::record_exclusion_transition( 700, true );
+Widrow_AI_Knowledge_Exclusion::record_exclusion_transition( 700, true );
 $assert(
 	count( $_wp_test_tracked_exclusions ) === 1
 		&& $_wp_test_tracked_exclusions[0] === array( 700, 'product', true )
@@ -236,7 +236,7 @@ $assert(
 // Unsupported type (attachment) → no tracking, no modified bump.
 $_wp_test_tracked_exclusions = array();
 $wpdb->calls                 = array();
-DEF_Core_Knowledge_Exclusion::record_exclusion_transition( 701, true );
+Widrow_AI_Knowledge_Exclusion::record_exclusion_transition( 701, true );
 $assert(
 	count( $_wp_test_tracked_exclusions ) === 0 && count( $wpdb->calls ) === 0,
 	'record_exclusion_transition: skips unsupported post type'
@@ -244,7 +244,7 @@ $assert(
 
 // Meta-write hook ignores unrelated meta keys (fires for ALL post meta).
 $_wp_test_tracked_exclusions = array();
-DEF_Core_Knowledge_Exclusion::on_exclusion_meta_write( 1, 700, '_some_other_meta', '1' );
+Widrow_AI_Knowledge_Exclusion::on_exclusion_meta_write( 1, 700, '_some_other_meta', '1' );
 $assert( count( $_wp_test_tracked_exclusions ) === 0, 'meta-write hook ignores unrelated keys' );
 
 // Value mapping: '1'/true = excluded; '0'/'' = included (re-included).
@@ -258,14 +258,14 @@ $map = array(
 );
 foreach ( $map as $i => $case ) {
 	$_wp_test_tracked_exclusions = array();
-	DEF_Core_Knowledge_Exclusion::on_exclusion_meta_write( 1, 700, '_def_exclude_from_ingestion', $case[0] );
+	Widrow_AI_Knowledge_Exclusion::on_exclusion_meta_write( 1, 700, '_widrow_exclude_from_ingestion', $case[0] );
 	$got = $_wp_test_tracked_exclusions[0][2] ?? null;
 	$assert( $got === $case[1], "meta-write value " . var_export( $case[0], true ) . " → excluded=" . var_export( $case[1], true ) );
 }
 
 // Deleting the flag === back to included.
 $_wp_test_tracked_exclusions = array();
-DEF_Core_Knowledge_Exclusion::on_exclusion_meta_delete( array( 1 ), 700, '_def_exclude_from_ingestion', '1' );
+Widrow_AI_Knowledge_Exclusion::on_exclusion_meta_delete( array( 1 ), 700, '_widrow_exclude_from_ingestion', '1' );
 $assert(
 	( $_wp_test_tracked_exclusions[0][2] ?? null ) === false,
 	'meta-delete → excluded=false (re-included)'

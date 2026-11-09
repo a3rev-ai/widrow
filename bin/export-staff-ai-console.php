@@ -14,7 +14,7 @@
  * - assets/: the stylesheets and scripts the page links.
  * The manifest and home-screen icon links are left out: the installed app is the host's.
  *
- * @package def-core
+ * @package widrow-ai
  */
 
 if ( PHP_SAPI !== 'cli' || $argc !== 2 ) {
@@ -37,10 +37,10 @@ $root = dirname( __DIR__ );
 $out  = rtrim( $argv[1], '/' );
 
 define( 'ABSPATH', $root . '/' );
-define( 'DEF_CORE_PLUGIN_URL', '' );
-define( 'DEF_CORE_API_NAME_SPACE', 'a3-ai/v1' );
-preg_match( "/define\\(\\s*'DEF_CORE_VERSION',\\s*'([^']+)'/", file_get_contents( $root . '/def-core.php' ), $m );
-define( 'DEF_CORE_VERSION', $m[1] );
+define( 'WIDROW_AI_PLUGIN_URL', '' );
+define( 'WIDROW_AI_API_NAME_SPACE', 'a3-ai/v1' );
+preg_match( "/define\\(\\s*'WIDROW_AI_VERSION',\\s*'([^']+)'/", file_get_contents( $root . '/widrow-ai.php' ), $m );
+define( 'WIDROW_AI_VERSION', $m[1] );
 
 function __( $text, $domain = '' ) { return $text; }
 function esc_html__( $text, $domain = '' ) { return esc_html( $text ); }
@@ -58,7 +58,7 @@ function wp_login_url( $redirect = '' ) { return ''; }
 function wp_logout_url( $redirect = '' ) { return ''; }
 function wp_timezone_string() { return ''; }
 
-final class DEF_Core_OAuth {
+final class Widrow_AI_OAuth {
 	public static function get_defho_url() { return ''; }
 }
 
@@ -119,4 +119,4 @@ foreach ( array_unique( $assets[1] ) as $asset ) {
 		exit( 1 );
 	}
 }
-echo 'Staff AI console ' . DEF_CORE_VERSION . ' written to ' . $out . ' (' . count( array_unique( $assets[1] ) ) . " assets)\n";
+echo 'Staff AI console ' . WIDROW_AI_VERSION . ' written to ' . $out . ' (' . count( array_unique( $assets[1] ) ) . " assets)\n";

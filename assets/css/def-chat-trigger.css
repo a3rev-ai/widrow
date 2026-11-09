@@ -1,7 +1,7 @@
 /**
  * Digital Employee Framework — Chat Trigger Button (main document)
  *
- * Styles for the [def_chat_button] shortcode and `def_core_chat_button`
+ * Styles for the [def_chat_button] shortcode and `widrow_ai_chat_button`
  * action hook. The floating trigger button (`.def-cc-trigger`) lives
  * inside the Customer Chat Shadow DOM and is styled by the loader's
  * inline <style> block — those styles cannot reach the main document.
@@ -10,8 +10,8 @@
  *
  * Color variables `--def-chat-btn-color` / `--def-chat-btn-hover` are
  * injected via wp_add_inline_style on every frontend page from the
- * existing Chat Settings options (def_core_chat_button_color and
- * def_core_chat_button_hover_color), so the same admin controls drive
+ * existing Chat Settings options (widrow_ai_chat_button_color and
+ * widrow_ai_chat_button_hover_color), so the same admin controls drive
  * both the floating button and the shortcode-placed button.
  */
 

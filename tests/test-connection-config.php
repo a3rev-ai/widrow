@@ -14,7 +14,7 @@
  *
  * Runs standalone (no WordPress bootstrap).
  *
- * @package def-core/tests
+ * @package widrow-ai/tests
  */
 
 declare(strict_types=1);
@@ -137,7 +137,7 @@ if ( ! function_exists( '__' ) ) {
 // ── Load the class under test ────────────────────────────────────────────
 // Encryption class already loaded via wp-stubs.php.
 
-require_once DEF_CORE_PLUGIN_DIR . 'includes/class-def-core-connection-config.php';
+require_once WIDROW_AI_PLUGIN_DIR . 'includes/class-widrow-ai-connection-config.php';
 
 // ── Test harness ─────────────────────────────────────────────────────────
 
@@ -183,7 +183,7 @@ function reset_state(): void {
 
 // ── Register routes ──────────────────────────────────────────────────────
 
-DEF_Core_Connection_Config::register_rest_routes();
+Widrow_AI_Connection_Config::register_rest_routes();
 
 // =========================================================================
 // 1. Route Registration
@@ -208,47 +208,47 @@ echo "2. Service auth — permission check\n";
 
 // 2a. No header → 401
 reset_state();
-update_option( 'def_service_auth_secret', 'test-secret-abc123' );
-$result = DEF_Core_Connection_Config::permission_check();
+update_option( 'widrow_service_auth_secret', 'test-secret-abc123' );
+$result = Widrow_AI_Connection_Config::permission_check();
 assert_true( is_wp_error( $result ), '2a. No auth header → WP_Error' );
 assert_eq( 401, $result->get_error_data()['status'], '2a. Status 401' );
 
 // 2b. Wrong secret → 401
 reset_state();
-update_option( 'def_service_auth_secret', 'test-secret-abc123' );
+update_option( 'widrow_service_auth_secret', 'test-secret-abc123' );
 $_SERVER['HTTP_X_DEF_AUTH'] = 'wrong-secret';
-$result = DEF_Core_Connection_Config::permission_check();
+$result = Widrow_AI_Connection_Config::permission_check();
 assert_true( is_wp_error( $result ), '2b. Wrong secret → WP_Error' );
 
 // 2c. Correct secret → true
 reset_state();
-update_option( 'def_service_auth_secret', 'test-secret-abc123' );
+update_option( 'widrow_service_auth_secret', 'test-secret-abc123' );
 $_SERVER['HTTP_X_DEF_AUTH'] = 'test-secret-abc123';
-$result = DEF_Core_Connection_Config::permission_check();
+$result = Widrow_AI_Connection_Config::permission_check();
 assert_true( $result === true, '2c. Correct secret → true' );
 
 // 2d. No secret configured → 401
 reset_state();
 $_SERVER['HTTP_X_DEF_AUTH'] = 'any-secret';
-$result = DEF_Core_Connection_Config::permission_check();
+$result = Widrow_AI_Connection_Config::permission_check();
 assert_true( is_wp_error( $result ), '2d. No secret configured → WP_Error' );
 
 // 2e. Previous secret during rotation window → true
 reset_state();
-update_option( 'def_service_auth_secret', 'new-secret' );
-update_option( 'def_core_conn_previous_service_secret', 'old-secret' );
-update_option( 'def_core_conn_rotation_expires', time() + 300 );
+update_option( 'widrow_service_auth_secret', 'new-secret' );
+update_option( 'widrow_ai_conn_previous_service_secret', 'old-secret' );
+update_option( 'widrow_ai_conn_rotation_expires', time() + 300 );
 $_SERVER['HTTP_X_DEF_AUTH'] = 'old-secret';
-$result = DEF_Core_Connection_Config::permission_check();
+$result = Widrow_AI_Connection_Config::permission_check();
 assert_true( $result === true, '2e. Previous secret during rotation window → true' );
 
 // 2f. Previous secret after rotation window → 401
 reset_state();
-update_option( 'def_service_auth_secret', 'new-secret' );
-update_option( 'def_core_conn_previous_service_secret', 'old-secret' );
-update_option( 'def_core_conn_rotation_expires', time() - 1 );
+update_option( 'widrow_service_auth_secret', 'new-secret' );
+update_option( 'widrow_ai_conn_previous_service_secret', 'old-secret' );
+update_option( 'widrow_ai_conn_rotation_expires', time() - 1 );
 $_SERVER['HTTP_X_DEF_AUTH'] = 'old-secret';
-$result = DEF_Core_Connection_Config::permission_check();
+$result = Widrow_AI_Connection_Config::permission_check();
 assert_true( is_wp_error( $result ), '2f. Previous secret after rotation window → WP_Error' );
 
 // =========================================================================
@@ -269,21 +269,21 @@ $request->set_body_params( array(
 	'service_auth_secret' => 'test-service-secret',
 ) );
 
-$response = DEF_Core_Connection_Config::receive_connection_config( $request );
+$response = Widrow_AI_Connection_Config::receive_connection_config( $request );
 
 assert_eq( 200, $response->get_status(), '3a. Response status 200' );
 assert_eq( 'applied', $response->get_data()['status'], '3b. Status = applied' );
 assert_eq( 1, $response->get_data()['config_revision'], '3c. Revision returned' );
 
 // Verify options were written.
-assert_eq( 'https://def-api.example.com', get_option( 'def_core_staff_ai_api_url' ), '3d. API URL stored' );
-assert_eq( 'test-api-key-12345', DEF_Core_Encryption::get_secret( 'def_core_api_key' ), '3e. API key stored (encrypted)' );
-assert_eq( array( 'https://tenant.example.com' ), get_option( DEF_CORE_OPTION_ALLOWED_ORIGINS ), '3f. Origins stored' );
-assert_eq( 'https://tenant.example.com/wp-json/a3-ai/v1/jwks', get_option( 'def_core_external_jwks_url' ), '3g. JWKS URL stored' );
-assert_eq( 'https://tenant.example.com', get_option( 'def_core_external_issuer' ), '3h. Issuer stored' );
-assert_eq( 'test-service-secret', DEF_Core_Encryption::get_secret( 'def_service_auth_secret' ), '3i. Service secret stored (encrypted)' );
-assert_eq( 1, get_option( 'def_core_conn_config_revision' ), '3j. Revision stored' );
-assert_true( ! empty( get_option( 'def_core_conn_last_sync_at' ) ), '3k. Last sync timestamp set' );
+assert_eq( 'https://def-api.example.com', get_option( 'widrow_ai_staff_ai_api_url' ), '3d. API URL stored' );
+assert_eq( 'test-api-key-12345', Widrow_AI_Encryption::get_secret( 'widrow_ai_api_key' ), '3e. API key stored (encrypted)' );
+assert_eq( array( 'https://tenant.example.com' ), get_option( WIDROW_AI_OPTION_ALLOWED_ORIGINS ), '3f. Origins stored' );
+assert_eq( 'https://tenant.example.com/wp-json/a3-ai/v1/jwks', get_option( 'widrow_ai_external_jwks_url' ), '3g. JWKS URL stored' );
+assert_eq( 'https://tenant.example.com', get_option( 'widrow_ai_external_issuer' ), '3h. Issuer stored' );
+assert_eq( 'test-service-secret', Widrow_AI_Encryption::get_secret( 'widrow_service_auth_secret' ), '3i. Service secret stored (encrypted)' );
+assert_eq( 1, get_option( 'widrow_ai_conn_config_revision' ), '3j. Revision stored' );
+assert_true( ! empty( get_option( 'widrow_ai_conn_last_sync_at' ) ), '3k. Last sync timestamp set' );
 
 // =========================================================================
 // 4. Stale Revision Rejected
@@ -292,7 +292,7 @@ assert_true( ! empty( get_option( 'def_core_conn_last_sync_at' ) ), '3k. Last sy
 echo "4. Stale revision rejected\n";
 
 reset_state();
-update_option( 'def_core_conn_config_revision', 5 );
+update_option( 'widrow_ai_conn_config_revision', 5 );
 
 $request = new WP_REST_Request( 'POST', '/a3-ai/v1/internal/connection-config' );
 $request->set_body_params( array(
@@ -301,7 +301,7 @@ $request->set_body_params( array(
 	'service_auth_secret' => 'secret',
 ) );
 
-$response = DEF_Core_Connection_Config::receive_connection_config( $request );
+$response = Widrow_AI_Connection_Config::receive_connection_config( $request );
 
 assert_eq( 409, $response->get_status(), '4a. Stale push → 409' );
 assert_eq( 'rejected', $response->get_data()['status'], '4b. Status = rejected' );
@@ -314,7 +314,7 @@ assert_true( strpos( $response->get_data()['message'], 'Stale push rejected' ) !
 echo "5. Same revision idempotent\n";
 
 reset_state();
-update_option( 'def_core_conn_config_revision', 3 );
+update_option( 'widrow_ai_conn_config_revision', 3 );
 
 $request = new WP_REST_Request( 'POST', '/a3-ai/v1/internal/connection-config' );
 $request->set_body_params( array(
@@ -323,7 +323,7 @@ $request->set_body_params( array(
 	'service_auth_secret' => 'secret',
 ) );
 
-$response = DEF_Core_Connection_Config::receive_connection_config( $request );
+$response = Widrow_AI_Connection_Config::receive_connection_config( $request );
 
 assert_eq( 200, $response->get_status(), '5a. Same revision → 200' );
 assert_true( strpos( $response->get_data()['message'], 'already at this revision' ) !== false, '5b. Idempotent message' );
@@ -341,7 +341,7 @@ $request->set_body_params( array(
 	'config_revision'     => 1,
 	'service_auth_secret' => 'secret',
 ) );
-$response = DEF_Core_Connection_Config::receive_connection_config( $request );
+$response = Widrow_AI_Connection_Config::receive_connection_config( $request );
 assert_eq( 422, $response->get_status(), '6a. Missing api_key → 422' );
 
 // 6b. Missing service_auth_secret
@@ -351,7 +351,7 @@ $request->set_body_params( array(
 	'config_revision' => 1,
 	'api_key'         => 'key',
 ) );
-$response = DEF_Core_Connection_Config::receive_connection_config( $request );
+$response = Widrow_AI_Connection_Config::receive_connection_config( $request );
 assert_eq( 422, $response->get_status(), '6b. Missing service_auth_secret → 422' );
 
 // 6c. Missing config_revision
@@ -361,7 +361,7 @@ $request->set_body_params( array(
 	'api_key'             => 'key',
 	'service_auth_secret' => 'secret',
 ) );
-$response = DEF_Core_Connection_Config::receive_connection_config( $request );
+$response = Widrow_AI_Connection_Config::receive_connection_config( $request );
 assert_eq( 422, $response->get_status(), '6c. Missing config_revision → 422' );
 
 // =========================================================================
@@ -380,9 +380,9 @@ $request->set_body_params( array(
 	'api_key'             => 'key-v1',
 	'service_auth_secret' => 'secret-v1',
 ) );
-$response = DEF_Core_Connection_Config::receive_connection_config( $request );
+$response = Widrow_AI_Connection_Config::receive_connection_config( $request );
 assert_eq( 200, $response->get_status(), '7a. Push rev 1 → 200' );
-assert_eq( 'https://v1.example.com', get_option( 'def_core_staff_ai_api_url' ), '7b. API URL v1' );
+assert_eq( 'https://v1.example.com', get_option( 'widrow_ai_staff_ai_api_url' ), '7b. API URL v1' );
 
 // Push revision 2 with different values.
 $request2 = new WP_REST_Request( 'POST', '/a3-ai/v1/internal/connection-config' );
@@ -393,12 +393,12 @@ $request2->set_body_params( array(
 	'service_auth_secret' => 'secret-v2',
 	'allowed_origins'     => array( 'https://origin-v2.example.com' ),
 ) );
-$response2 = DEF_Core_Connection_Config::receive_connection_config( $request2 );
+$response2 = Widrow_AI_Connection_Config::receive_connection_config( $request2 );
 assert_eq( 200, $response2->get_status(), '7c. Push rev 2 → 200' );
 assert_eq( 2, $response2->get_data()['config_revision'], '7d. Revision 2 returned' );
-assert_eq( 'https://v2.example.com', get_option( 'def_core_staff_ai_api_url' ), '7e. API URL updated to v2' );
-assert_eq( 'key-v2', DEF_Core_Encryption::get_secret( 'def_core_api_key' ), '7f. API key updated to v2 (encrypted)' );
-assert_eq( 2, get_option( 'def_core_conn_config_revision' ), '7g. Stored revision is 2' );
+assert_eq( 'https://v2.example.com', get_option( 'widrow_ai_staff_ai_api_url' ), '7e. API URL updated to v2' );
+assert_eq( 'key-v2', Widrow_AI_Encryption::get_secret( 'widrow_ai_api_key' ), '7f. API key updated to v2 (encrypted)' );
+assert_eq( 2, get_option( 'widrow_ai_conn_config_revision' ), '7g. Stored revision is 2' );
 
 // =========================================================================
 // 8. Dual-Key Rotation — Service Secret
@@ -407,7 +407,7 @@ assert_eq( 2, get_option( 'def_core_conn_config_revision' ), '7g. Stored revisio
 echo "8. Dual-key rotation — service secret\n";
 
 reset_state();
-update_option( 'def_service_auth_secret', 'old-secret' );
+update_option( 'widrow_service_auth_secret', 'old-secret' );
 
 $request = new WP_REST_Request( 'POST', '/a3-ai/v1/internal/connection-config' );
 $request->set_body_params( array(
@@ -415,11 +415,11 @@ $request->set_body_params( array(
 	'api_key'             => 'key',
 	'service_auth_secret' => 'new-secret',
 ) );
-$response = DEF_Core_Connection_Config::receive_connection_config( $request );
+$response = Widrow_AI_Connection_Config::receive_connection_config( $request );
 assert_eq( 200, $response->get_status(), '8a. Push with secret rotation → 200' );
-assert_eq( 'new-secret', DEF_Core_Encryption::get_secret( 'def_service_auth_secret' ), '8b. New secret stored (encrypted)' );
-assert_eq( 'old-secret', DEF_Core_Encryption::get_secret( 'def_core_conn_previous_service_secret' ), '8c. Old secret stored as previous (encrypted)' );
-assert_true( get_option( 'def_core_conn_rotation_expires' ) > time(), '8d. Rotation expiry set in future' );
+assert_eq( 'new-secret', Widrow_AI_Encryption::get_secret( 'widrow_service_auth_secret' ), '8b. New secret stored (encrypted)' );
+assert_eq( 'old-secret', Widrow_AI_Encryption::get_secret( 'widrow_ai_conn_previous_service_secret' ), '8c. Old secret stored as previous (encrypted)' );
+assert_true( get_option( 'widrow_ai_conn_rotation_expires' ) > time(), '8d. Rotation expiry set in future' );
 
 // =========================================================================
 // 9. Dual-Key Rotation — Previous fields from payload
@@ -436,10 +436,10 @@ $request->set_body_params( array(
 	'previous_api_key'             => 'old-key',
 	'previous_service_auth_secret' => 'old-svc-secret',
 ) );
-$response = DEF_Core_Connection_Config::receive_connection_config( $request );
+$response = Widrow_AI_Connection_Config::receive_connection_config( $request );
 assert_eq( 200, $response->get_status(), '9a. Push with previous fields → 200' );
-assert_eq( 'old-key', DEF_Core_Encryption::get_secret( 'def_core_conn_previous_api_key' ), '9b. Previous API key stored (encrypted)' );
-assert_eq( 'old-svc-secret', DEF_Core_Encryption::get_secret( 'def_core_conn_previous_service_secret' ), '9c. Previous service secret stored (encrypted)' );
+assert_eq( 'old-key', Widrow_AI_Encryption::get_secret( 'widrow_ai_conn_previous_api_key' ), '9b. Previous API key stored (encrypted)' );
+assert_eq( 'old-svc-secret', Widrow_AI_Encryption::get_secret( 'widrow_ai_conn_previous_service_secret' ), '9c. Previous service secret stored (encrypted)' );
 
 // =========================================================================
 // 10. Empty Allowed Origins
@@ -455,9 +455,9 @@ $request->set_body_params( array(
 	'service_auth_secret' => 'secret',
 	'allowed_origins'     => array(),
 ) );
-$response = DEF_Core_Connection_Config::receive_connection_config( $request );
+$response = Widrow_AI_Connection_Config::receive_connection_config( $request );
 assert_eq( 200, $response->get_status(), '10a. Empty origins → 200' );
-assert_eq( array(), get_option( DEF_CORE_OPTION_ALLOWED_ORIGINS ), '10b. Empty array stored' );
+assert_eq( array(), get_option( WIDROW_AI_OPTION_ALLOWED_ORIGINS ), '10b. Empty array stored' );
 
 // =========================================================================
 // 11. Connection Status Endpoint
@@ -468,7 +468,7 @@ echo "11. Connection status endpoint\n";
 // 11a. No config → not connected.
 reset_state();
 $request = new WP_REST_Request( 'GET', '/a3-ai/v1/connection-status' );
-$response = DEF_Core_Connection_Config::get_connection_status( $request );
+$response = Widrow_AI_Connection_Config::get_connection_status( $request );
 assert_eq( 200, $response->get_status(), '11a. Status → 200' );
 assert_false( $response->get_data()['def_connected'], '11b. Not connected when no config' );
 assert_eq( 0, $response->get_data()['last_config_revision'], '11c. Revision 0' );
@@ -476,11 +476,11 @@ assert_eq( null, $response->get_data()['last_sync_at'], '11d. No sync time' );
 
 // 11e. With config → connected.
 reset_state();
-update_option( 'def_core_staff_ai_api_url', 'https://api.example.com' );
-update_option( 'def_core_api_key', 'some-key' );
-update_option( 'def_core_conn_config_revision', 3 );
-update_option( 'def_core_conn_last_sync_at', '2026-03-07T12:00:00+00:00' );
-$response = DEF_Core_Connection_Config::get_connection_status( $request );
+update_option( 'widrow_ai_staff_ai_api_url', 'https://api.example.com' );
+update_option( 'widrow_ai_api_key', 'some-key' );
+update_option( 'widrow_ai_conn_config_revision', 3 );
+update_option( 'widrow_ai_conn_last_sync_at', '2026-03-07T12:00:00+00:00' );
+$response = Widrow_AI_Connection_Config::get_connection_status( $request );
 assert_true( $response->get_data()['def_connected'], '11e. Connected when config present' );
 assert_eq( 3, $response->get_data()['last_config_revision'], '11f. Revision 3' );
 assert_eq( '2026-03-07T12:00:00+00:00', $response->get_data()['last_sync_at'], '11g. Sync time returned' );
@@ -499,7 +499,7 @@ $request->set_body_params( array(
 	'api_key'             => 'key',
 	'service_auth_secret' => 'secret',
 ) );
-$response = DEF_Core_Connection_Config::receive_connection_config( $request );
+$response = Widrow_AI_Connection_Config::receive_connection_config( $request );
 assert_eq( 422, $response->get_status(), '12a. Revision 0 → 422' );
 
 // =========================================================================
@@ -509,8 +509,8 @@ assert_eq( 422, $response->get_status(), '12a. Revision 0 → 422' );
 echo "13. Connection test transient cleared on push\n";
 
 reset_state();
-set_transient( 'def_core_connection_test', array( 'status' => 'ok' ) );
-assert_true( get_transient( 'def_core_connection_test' ) !== false, '13a. Transient exists before push' );
+set_transient( 'widrow_ai_connection_test', array( 'status' => 'ok' ) );
+assert_true( get_transient( 'widrow_ai_connection_test' ) !== false, '13a. Transient exists before push' );
 
 $request = new WP_REST_Request( 'POST', '/a3-ai/v1/internal/connection-config' );
 $request->set_body_params( array(
@@ -518,8 +518,8 @@ $request->set_body_params( array(
 	'api_key'             => 'key',
 	'service_auth_secret' => 'secret',
 ) );
-DEF_Core_Connection_Config::receive_connection_config( $request );
-assert_false( get_transient( 'def_core_connection_test' ), '13b. Transient cleared after push' );
+Widrow_AI_Connection_Config::receive_connection_config( $request );
+assert_false( get_transient( 'widrow_ai_connection_test' ), '13b. Transient cleared after push' );
 
 // =========================================================================
 // 14. Setup Assistant readonly enforcement
@@ -550,15 +550,15 @@ if ( ! function_exists( 'current_user_can' ) ) {
 }
 
 // Verify the allowlist has readonly flag (by reading class source directly).
-$source = file_get_contents( DEF_CORE_PLUGIN_DIR . 'includes/class-def-core-admin-api.php' );
+$source = file_get_contents( WIDROW_AI_PLUGIN_DIR . 'includes/class-widrow-ai-admin-api.php' );
 assert_true(
-	strpos( $source, "'def_core_staff_ai_api_url' => array(" ) !== false
+	strpos( $source, "'widrow_ai_staff_ai_api_url' => array(" ) !== false
 	&& strpos( $source, "'readonly'  => true," ) !== false,
-	'14a. def_core_staff_ai_api_url has readonly flag'
+	'14a. widrow_ai_staff_ai_api_url has readonly flag'
 );
 assert_true(
-	strpos( $source, "'def_core_api_key' => array(" ) !== false,
-	'14b. def_core_api_key exists in allowlist'
+	strpos( $source, "'widrow_ai_api_key' => array(" ) !== false,
+	'14b. widrow_ai_api_key exists in allowlist'
 );
 // Check readonly enforcement code exists.
 assert_true(
@@ -572,17 +572,17 @@ assert_true(
 
 echo "15. Reconnect clears the encryption-error transient\n";
 
-require_once DEF_CORE_PLUGIN_DIR . 'includes/class-def-core-oauth.php';
+require_once WIDROW_AI_PLUGIN_DIR . 'includes/class-widrow-ai-oauth.php';
 
 reset_state();
 // Post-salt-rotation state: the decrypt-failure transient is set (would show the banner).
-set_transient( DEF_Core_Encryption::TRANSIENT_ENCRYPTION_ERROR, true, 86400 );
+set_transient( Widrow_AI_Encryption::TRANSIENT_ENCRYPTION_ERROR, true, 86400 );
 assert_true(
-	(bool) get_transient( DEF_Core_Encryption::TRANSIENT_ENCRYPTION_ERROR ),
+	(bool) get_transient( Widrow_AI_Encryption::TRANSIENT_ENCRYPTION_ERROR ),
 	'15a. precondition: error transient is set'
 );
 
-$apply = new ReflectionMethod( 'DEF_Core_OAuth', 'apply_connection_config' );
+$apply = new ReflectionMethod( 'Widrow_AI_OAuth', 'apply_connection_config' );
 $apply->setAccessible( true );
 $result = $apply->invoke( null, array(
 	'api_url'             => 'https://api.defho.ai',
@@ -593,12 +593,12 @@ $result = $apply->invoke( null, array(
 
 assert_true( true === $result, '15b. apply_connection_config succeeded' );
 assert_false(
-	(bool) get_transient( DEF_Core_Encryption::TRANSIENT_ENCRYPTION_ERROR ),
+	(bool) get_transient( Widrow_AI_Encryption::TRANSIENT_ENCRYPTION_ERROR ),
 	'15c. error transient cleared on reconnect (else the banner lingers up to 24h)'
 );
 assert_eq(
 	'ak_live_reconnect',
-	DEF_Core_Encryption::get_secret( 'def_core_api_key' ),
+	Widrow_AI_Encryption::get_secret( 'widrow_ai_api_key' ),
 	'15d. api_key re-provisioned + decryptable under the current salts'
 );
 

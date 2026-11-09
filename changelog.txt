@@ -1,5 +1,11 @@
 *** Widrow AI Changelog ***
 
+= 10.0.0 - 2026/11/09 =
+* New - A major release: the plugin's code names, file names and text domain are now Widrow AI. Its folder and main file are now widrow-ai/widrow-ai.php.
+* Tweak - Install this release by hand, not from Updates: deactivate the old plugin, upload widrow-ai.zip and activate it, and only then delete the old plugin. Your settings and your connection are preserved.
+* Tweak - Your stored settings and staff roles move to their new names once, when the plugin is activated or updated.
+* Tweak - Developers: hooks, filters, classes and constants are now named widrow_ai_*, Widrow_AI_* and WIDROW_AI_*. Code that used the def_core_* names needs the new ones.
+
 = 9.8.0 - 2026/11/09 =
 * New - The Staff AI console can run on a page other than WordPress. That page supplies its own sign-in, file links and feature switches, and each release now carries the console as a static copy, staff-ai-console.zip, for it. On a WordPress site the console works exactly as before.
 * New - When a workspace's Staff AI has moved to the Tenant Portal, opening /staff-ai takes you there.

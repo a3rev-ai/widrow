@@ -61,7 +61,7 @@ The Staff AI Channel routes requests to one of two Digital Employees based on us
 ### 4.1 Staff Knowledge Assistant
 
 Used when the user has:
-- `def_staff_access`
+- `widrow_staff_access`
 
 This assistant may access:
 - staff-safe internal documents
@@ -78,7 +78,7 @@ permission model.
 ### 4.2 Management Knowledge Assistant
 
 Used when the user has:
-- `def_management_access`
+- `widrow_management_access`
 
 This assistant may access:
 - all staff-safe content
@@ -118,8 +118,8 @@ At runtime, the backend resolves routing as follows:
 1. Verify the user is authenticated
 2. Check DEF capabilities
 3. Route to:
-   - Management Knowledge Assistant if `def_management_access` is present
-   - Staff Knowledge Assistant if `def_staff_access` is present
+   - Management Knowledge Assistant if `widrow_management_access` is present
+   - Staff Knowledge Assistant if `widrow_staff_access` is present
 4. Deny access if no valid capability exists and do not fall back to customer or public channels.
 
 Routing is enforced by the Python API and cannot be overridden by UI.

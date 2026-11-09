@@ -14,23 +14,23 @@
  * - a person who stores NEITHER level keeps neither, and a level can be cleared
  *   as well as switched. What makes that matter is on the SCREEN side, not here:
  *   a render that invents a level for such a row grants every DEF-Admin-only
- *   user a console seat (see DEF_Core_Staff_Roster: "DEF-Admin alone is NOT a
+ *   user a console seat (see Widrow_AI_Staff_Roster: "DEF-Admin alone is NOT a
  *   roster row"). tests/browser/harness-user-access.js checks 5-8 are what catch
  *   that; this file proves only that the handler can persist the state at all —
  *   which it must, or there would be nothing for the screen to submit.
  * - selected catalog roles round-trip, added and removed
  * - DEF Admin round-trips
- * - a def_role_* capability the browser invents is NOT written: the writable set
+ * - a widrow_role_* capability the browser invents is NOT written: the writable set
  *   is built from the cached catalog server-side, never from the submitted keys
  * - the last-DEF-Admin lockout guard still refuses the save
  * - the Setup Assistant's capability mirror reports what is STORED. Built with
- *   has_cap() it claimed def_staff_access for every DEF Admin, so Sam revoking
+ *   has_cap() it claimed widrow_staff_access for every DEF Admin, so Sam revoking
  *   a seat mirrored it back as still held, the drawer re-ticked it, and the next
  *   Save granted back what Sam had just taken away.
  *
  * Runs standalone (no WordPress bootstrap).
  *
- * @package def-core/tests
+ * @package widrow-ai/tests
  */
 
 declare(strict_types=1);
@@ -38,8 +38,8 @@ declare(strict_types=1);
 if ( ! defined( 'ABSPATH' ) ) {
 	define( 'ABSPATH', dirname( __DIR__ ) . '/' );
 }
-if ( ! defined( 'DEF_CORE_PLUGIN_DIR' ) ) {
-	define( 'DEF_CORE_PLUGIN_DIR', dirname( __DIR__ ) . '/' );
+if ( ! defined( 'WIDROW_AI_PLUGIN_DIR' ) ) {
+	define( 'WIDROW_AI_PLUGIN_DIR', dirname( __DIR__ ) . '/' );
 }
 
 // ── Test state ──────────────────────────────────────────────────────────
@@ -80,7 +80,7 @@ class WP_User_Stub {
 	public $display_name;
 	public $caps;
 	// What WordPress fills from the wp_capabilities meta. map_meta_cap — where
-	// the def_staff_access lie below lives — never touches it, which is exactly
+	// the widrow_staff_access lie below lives — never touches it, which is exactly
 	// why the stored reads use it.
 	public $allcaps = array();
 
@@ -93,13 +93,13 @@ class WP_User_Stub {
 
 	/**
 	 * LIES the way production does: map_def_capabilities() is filtered onto
-	 * map_meta_cap and answers true for def_staff_access on any Management or
+	 * map_meta_cap and answers true for widrow_staff_access on any Management or
 	 * DEF-Admin user. The save must not consult it to decide what to write.
 	 */
 	public function has_cap( string $cap ): bool {
-		if ( 'def_staff_access' === $cap
-			&& ( in_array( 'def_management_access', $this->caps, true )
-				|| in_array( 'def_admin_access', $this->caps, true ) ) ) {
+		if ( 'widrow_staff_access' === $cap
+			&& ( in_array( 'widrow_management_access', $this->caps, true )
+				|| in_array( 'widrow_admin_access', $this->caps, true ) ) ) {
 			return true;
 		}
 		return in_array( $cap, $this->caps, true );
@@ -192,25 +192,25 @@ if ( ! function_exists( 'esc_html__' ) ) {
 
 /**
  * The writable capability set, server-side. This is the production funnel the
- * save reads: the fixed trio plus the CACHED catalog's def_role_* caps. A slug
+ * save reads: the fixed trio plus the CACHED catalog's widrow_role_* caps. A slug
  * the browser invents never reaches it, which is the whole point.
  */
-if ( ! class_exists( 'DEF_Core_Tools' ) ) {
-	class DEF_Core_Tools {
+if ( ! class_exists( 'Widrow_AI_Tools' ) ) {
+	class Widrow_AI_Tools {
 		public static function get_role_caps(): array {
 			$caps = array();
 			foreach ( TEST_CATALOG as $role ) {
-				$caps[] = 'def_role_' . $role['slug'];
+				$caps[] = 'widrow_role_' . $role['slug'];
 			}
 			return $caps;
 		}
 	}
 }
 
-class DEF_Core_Staff_Roster {
+class Widrow_AI_Staff_Roster {
 	public static function schedule_push(): bool {
 		global $_test_cron;
-		$_test_cron[] = 'def_core_push_roster';
+		$_test_cron[] = 'widrow_ai_push_roster';
 		return true;
 	}
 }
@@ -240,10 +240,10 @@ if ( ! function_exists( 'wp_send_json_error' ) ) {
 	}
 }
 
-require_once DEF_CORE_PLUGIN_DIR . 'includes/class-def-core-admin.php';
+require_once WIDROW_AI_PLUGIN_DIR . 'includes/class-widrow-ai-admin.php';
 // Section 6 only: the class carries no load-time code beyond its constants, so
 // requiring it here costs nothing and gives the mirror's stored read directly.
-require_once DEF_CORE_PLUGIN_DIR . 'includes/class-def-core-admin-api.php';
+require_once WIDROW_AI_PLUGIN_DIR . 'includes/class-widrow-ai-admin-api.php';
 
 // ── Tiny assertion helper (house style) ─────────────────────────────────
 
@@ -280,7 +280,7 @@ function assert_equals( $expected, $actual, string $label ): void {
 function save( array $roles ): AjaxHalt {
 	$_POST = array( 'nonce' => 'x', 'roles' => $roles );
 	try {
-		DEF_Core_Admin::ajax_save_user_roles();
+		Widrow_AI_Admin::ajax_save_user_roles();
 	} catch ( AjaxHalt $halt ) {
 		return $halt;
 	}
@@ -290,18 +290,18 @@ function save( array $roles ): AjaxHalt {
 /**
  * The payload the SCREEN submits for one person: every writable capability,
  * '1' or '0', never a subset. That is what both the old checkbox grid and the
- * new chips send — `accessPayload()` walks every .def-core-role-cb on the page.
+ * new chips send — `accessPayload()` walks every .widrow-ai-role-cb on the page.
  */
 function row( string $level, array $roles, bool $admin ): array {
 	// $level of '' is a real submission: the screen renders neither pill selected
 	// for a person who stores neither, and submits both as '0'.
 	$caps = array(
-		'def_staff_access'      => 'staff' === $level ? '1' : '0',
-		'def_management_access' => 'management' === $level ? '1' : '0',
-		'def_admin_access'      => $admin ? '1' : '0',
+		'widrow_staff_access'      => 'staff' === $level ? '1' : '0',
+		'widrow_management_access' => 'management' === $level ? '1' : '0',
+		'widrow_admin_access'      => $admin ? '1' : '0',
 	);
 	foreach ( TEST_CATALOG as $role ) {
-		$caps[ 'def_role_' . $role['slug'] ] = in_array( $role['slug'], $roles, true ) ? '1' : '0';
+		$caps[ 'widrow_role_' . $role['slug'] ] = in_array( $role['slug'], $roles, true ) ? '1' : '0';
 	}
 	return $caps;
 }
@@ -311,7 +311,7 @@ echo "=== User Access save — the capability contract (S3) ===\n";
 // ── 1. The access level round-trips, and is exactly one ─────────────────
 echo "\n[1] Staff / Management round-trips as exactly one capability\n";
 
-seed_user( 10, 'Keeper Kim', array( 'def_admin_access' ) );
+seed_user( 10, 'Keeper Kim', array( 'widrow_admin_access' ) );
 seed_user( 11, 'Staffer Sam', array() );
 
 $r = save( array(
@@ -319,7 +319,7 @@ $r = save( array(
 	11 => row( 'staff', array(), false ),
 ) );
 assert_true( $r->ok, 'the save succeeds' );
-assert_equals( array( 'def_staff_access' ), caps_of( 11 ), 'Staff stores def_staff_access and nothing else' );
+assert_equals( array( 'widrow_staff_access' ), caps_of( 11 ), 'Staff stores widrow_staff_access and nothing else' );
 
 // Staff → Management. The upgrade must REMOVE Staff, not sit alongside it:
 // two stored levels is the ambiguity the two-way control exists to prevent.
@@ -327,24 +327,24 @@ save( array(
 	10 => row( 'staff', array(), true ),
 	11 => row( 'management', array(), false ),
 ) );
-assert_equals( array( 'def_management_access' ), caps_of( 11 ), 'Management replaces Staff — exactly one level is stored' );
+assert_equals( array( 'widrow_management_access' ), caps_of( 11 ), 'Management replaces Staff — exactly one level is stored' );
 
-// Management → Staff. has_cap('def_staff_access') already answers TRUE for a
+// Management → Staff. has_cap('widrow_staff_access') already answers TRUE for a
 // Management user, so a write guarded on it would remove Management and store
 // nothing, locking the user out of the console entirely.
 save( array(
 	10 => row( 'staff', array(), true ),
 	11 => row( 'staff', array(), false ),
 ) );
-assert_equals( array( 'def_staff_access' ), caps_of( 11 ), 'the downgrade back to Staff is stored, and Management is gone' );
+assert_equals( array( 'widrow_staff_access' ), caps_of( 11 ), 'the downgrade back to Staff is stored, and Management is gone' );
 
 // Both submitted at once — a payload the new control cannot produce, kept
 // refused because the wire is not the only thing that can reach this handler.
 save( array(
 	10 => row( 'staff', array(), true ),
-	11 => array( 'def_staff_access' => '1', 'def_management_access' => '1' ),
+	11 => array( 'widrow_staff_access' => '1', 'widrow_management_access' => '1' ),
 ) );
-assert_equals( array( 'def_management_access' ), caps_of( 11 ), 'both levels submitted keeps Management only, never both' );
+assert_equals( array( 'widrow_management_access' ), caps_of( 11 ), 'both levels submitted keeps Management only, never both' );
 
 // ── 1b. Neither level is a level too ────────────────────────────────────
 echo "
@@ -352,20 +352,20 @@ echo "
 ";
 
 // A DEF Admin who administers the settings page and never uses the console is a
-// supported setup, not a gap: DEF_Core_Staff_Roster::build_roster() says so in
+// supported setup, not a gap: Widrow_AI_Staff_Roster::build_roster() says so in
 // as many words ("DEF-Admin alone is NOT a roster row - it is an access grant,
 // not a Staff-AI seat"). The screen must be able to SUBMIT that state, or every
 // such person is handed a console login the first time anyone presses Save.
 $_test_users = array();
-seed_user( 10, 'Keeper Kim', array( 'def_admin_access' ) );
-seed_user( 12, 'Admin Only Ali', array( 'def_admin_access' ) );
+seed_user( 10, 'Keeper Kim', array( 'widrow_admin_access' ) );
+seed_user( 12, 'Admin Only Ali', array( 'widrow_admin_access' ) );
 
 save( array(
 	10 => row( 'staff', array(), true ),
 	12 => row( '', array(), true ),
 ) );
 assert_equals(
-	array( 'def_admin_access' ),
+	array( 'widrow_admin_access' ),
 	caps_of( 12 ),
 	'a DEF Admin with no access level keeps no access level'
 );
@@ -376,7 +376,7 @@ save( array(
 	12 => row( 'management', array(), true ),
 ) );
 assert_equals(
-	array( 'def_admin_access', 'def_management_access' ),
+	array( 'widrow_admin_access', 'widrow_management_access' ),
 	caps_of( 12 ),
 	'and choosing a level for them stores exactly that one'
 );
@@ -385,17 +385,17 @@ assert_equals(
 echo "\n[2] Vault roles round-trip, added and removed\n";
 
 $_test_users = array();
-seed_user( 10, 'Keeper Kim', array( 'def_admin_access' ) );
-seed_user( 20, 'Roleless Ray', array( 'def_staff_access' ) );
+seed_user( 10, 'Keeper Kim', array( 'widrow_admin_access' ) );
+seed_user( 20, 'Roleless Ray', array( 'widrow_staff_access' ) );
 
 save( array(
 	10 => row( 'staff', array(), true ),
 	20 => row( 'staff', array( 'finance', 'legal' ), false ),
 ) );
 assert_equals(
-	array( 'def_role_finance', 'def_role_legal', 'def_staff_access' ),
+	array( 'widrow_role_finance', 'widrow_role_legal', 'widrow_staff_access' ),
 	caps_of( 20 ),
-	'two chips added store both def_role_* caps beside the access level'
+	'two chips added store both widrow_role_* caps beside the access level'
 );
 
 // One chip removed, one kept, one added — the three transitions in one save.
@@ -404,7 +404,7 @@ save( array(
 	20 => row( 'staff', array( 'legal', 'hr' ), false ),
 ) );
 assert_equals(
-	array( 'def_role_hr', 'def_role_legal', 'def_staff_access' ),
+	array( 'widrow_role_hr', 'widrow_role_legal', 'widrow_staff_access' ),
 	caps_of( 20 ),
 	'removing a chip removes its capability; the others are untouched'
 );
@@ -413,7 +413,7 @@ save( array(
 	10 => row( 'staff', array(), true ),
 	20 => row( 'staff', array(), false ),
 ) );
-assert_equals( array( 'def_staff_access' ), caps_of( 20 ), 'removing every chip leaves the access level alone' );
+assert_equals( array( 'widrow_staff_access' ), caps_of( 20 ), 'removing every chip leaves the access level alone' );
 
 // A role and an access level are independent axes: changing one must not
 // disturb the other, which is the claim the two separate columns make.
@@ -422,7 +422,7 @@ save( array(
 	20 => row( 'management', array( 'finance' ), false ),
 ) );
 assert_equals(
-	array( 'def_management_access', 'def_role_finance' ),
+	array( 'widrow_management_access', 'widrow_role_finance' ),
 	caps_of( 20 ),
 	'the level and the roles are written independently in one save'
 );
@@ -431,15 +431,15 @@ assert_equals(
 echo "\n[3] DEF Admin round-trips\n";
 
 $_test_users = array();
-seed_user( 10, 'Keeper Kim', array( 'def_admin_access' ) );
-seed_user( 30, 'Promoted Pat', array( 'def_staff_access' ) );
+seed_user( 10, 'Keeper Kim', array( 'widrow_admin_access' ) );
+seed_user( 30, 'Promoted Pat', array( 'widrow_staff_access' ) );
 
 save( array(
 	10 => row( 'staff', array(), true ),
 	30 => row( 'staff', array( 'hr' ), true ),
 ) );
 assert_equals(
-	array( 'def_admin_access', 'def_role_hr', 'def_staff_access' ),
+	array( 'widrow_admin_access', 'widrow_role_hr', 'widrow_staff_access' ),
 	caps_of( 30 ),
 	'DEF Admin is stored beside the access level and the roles'
 );
@@ -449,7 +449,7 @@ save( array(
 	30 => row( 'staff', array( 'hr' ), false ),
 ) );
 assert_equals(
-	array( 'def_role_hr', 'def_staff_access' ),
+	array( 'widrow_role_hr', 'widrow_staff_access' ),
 	caps_of( 30 ),
 	'clearing DEF Admin removes it and leaves everything else standing'
 );
@@ -464,11 +464,11 @@ assert_true( ! $r->ok, 'dropping the last DEF Admin is refused' );
 assert_equals( $before, caps_of( 10 ), 'and nothing is written — the refusal is before the writes' );
 
 // ── 4. The catalog is authoritative, not the browser ────────────────────
-echo "\n[4] A def_role_* the browser invents is never written\n";
+echo "\n[4] A widrow_role_* the browser invents is never written\n";
 
 $_test_users = array();
-seed_user( 10, 'Keeper Kim', array( 'def_admin_access' ) );
-seed_user( 40, 'Curious Cai', array( 'def_staff_access' ) );
+seed_user( 10, 'Keeper Kim', array( 'widrow_admin_access' ) );
+seed_user( 40, 'Curious Cai', array( 'widrow_staff_access' ) );
 
 // A hand-edited payload: two real slugs, and three that are not in the catalog
 // — one invented, one a reserved slug the catalog sanitizer drops, and one that
@@ -476,33 +476,33 @@ seed_user( 40, 'Curious Cai', array( 'def_staff_access' ) );
 $r = save( array(
 	10 => row( 'staff', array(), true ),
 	40 => array(
-		'def_staff_access'       => '1',
-		'def_management_access'  => '0',
-		'def_admin_access'       => '0',
-		'def_role_finance'       => '1',
-		'def_role_hr'            => '0',
-		'def_role_superuser'     => '1',
-		'def_role_admin'         => '1',
+		'widrow_staff_access'       => '1',
+		'widrow_management_access'  => '0',
+		'widrow_admin_access'       => '0',
+		'widrow_role_finance'       => '1',
+		'widrow_role_hr'            => '0',
+		'widrow_role_superuser'     => '1',
+		'widrow_role_admin'         => '1',
 		'manage_options'         => '1',
 	),
 ) );
 assert_true( $r->ok, 'the save still succeeds — an unknown key is ignored, not an error' );
 assert_equals(
-	array( 'def_role_finance', 'def_staff_access' ),
+	array( 'widrow_role_finance', 'widrow_staff_access' ),
 	caps_of( 40 ),
-	'only the catalog slug is written: def_role_superuser, def_role_admin and manage_options are not'
+	'only the catalog slug is written: widrow_role_superuser, widrow_role_admin and manage_options are not'
 );
 
 // And the reverse direction — the browser cannot REVOKE what it does not know
 // about either, because the loop is over the catalog and not over the payload.
 $_test_users = array();
-seed_user( 10, 'Keeper Kim', array( 'def_admin_access' ) );
-seed_user( 41, 'Legacy Lee', array( 'def_staff_access', 'def_role_finance', 'edit_posts' ) );
+seed_user( 10, 'Keeper Kim', array( 'widrow_admin_access' ) );
+seed_user( 41, 'Legacy Lee', array( 'widrow_staff_access', 'widrow_role_finance', 'edit_posts' ) );
 
 save( array(
 	10 => row( 'staff', array(), true ),
 	41 => array(
-		'def_staff_access' => '1',
+		'widrow_staff_access' => '1',
 		'edit_posts'       => '0',
 	),
 ) );
@@ -510,11 +510,11 @@ assert_true(
 	in_array( 'edit_posts', $_test_users[41]['caps'], true ),
 	'a WordPress capability submitted as 0 is not revoked — the save writes DEF caps only'
 );
-// def_role_finance IS in the catalog, so an omitted key is a cleared chip and
+// widrow_role_finance IS in the catalog, so an omitted key is a cleared chip and
 // the save removes it. That is the grid's contract: the screen submits every
 // writable capability every time, so absent means off.
 assert_true(
-	! in_array( 'def_role_finance', $_test_users[41]['caps'], true ),
+	! in_array( 'widrow_role_finance', $_test_users[41]['caps'], true ),
 	'a catalog role the screen did not submit is cleared — absent means off, as before'
 );
 
@@ -528,15 +528,15 @@ echo "
 // exact inverse of the grant, and the write loop must not treat "absent means
 // off" differently for the access level than for a role.
 $_test_users = array();
-seed_user( 10, 'Keeper Kim', array( 'def_admin_access' ) );
-seed_user( 60, 'Departing Dev', array( 'def_staff_access', 'def_role_finance' ) );
+seed_user( 10, 'Keeper Kim', array( 'widrow_admin_access' ) );
+seed_user( 60, 'Departing Dev', array( 'widrow_staff_access', 'widrow_role_finance' ) );
 
 save( array(
 	10 => row( 'staff', array(), true ),
 	60 => row( '', array( 'finance' ), false ),
 ) );
 assert_equals(
-	array( 'def_role_finance' ),
+	array( 'widrow_role_finance' ),
 	caps_of( 60 ),
 	'clearing the level removes it and leaves the vault role standing'
 );
@@ -546,7 +546,7 @@ echo "\n[5] The save still queues the roster push\n";
 
 $_test_users = array();
 $_test_cron  = array();
-seed_user( 10, 'Keeper Kim', array( 'def_admin_access' ) );
+seed_user( 10, 'Keeper Kim', array( 'widrow_admin_access' ) );
 seed_user( 50, 'Fresh Fran', array() );
 save( array(
 	10 => row( 'staff', array(), true ),
@@ -559,52 +559,52 @@ echo "\n[6] Sam's mirror reports what is stored, not what is implied\n";
 
 // The revoke loop, outside the page renderer. rest_update_user_role() answers
 // with a capability map that the Setup Assistant drawer writes straight onto the
-// User Access row. Built with has_cap(), that map reported def_staff_access as
+// User Access row. Built with has_cap(), that map reported widrow_staff_access as
 // TRUE for anyone holding DEF Admin — so Sam removing Staff from a DEF Admin
 // removed the stored cap, mirrored it back as still present, the drawer re-ticked
 // Staff, and the next Save granted back exactly what Sam had just taken away.
 //
 // The handler itself needs the whole REST/HMAC/rate-limit surface to invoke, so
 // what is exercised here is the READ it performs — the shipped
-// DEF_Core_Admin_API::stored_def_caps(), called directly — and the handler is
+// Widrow_AI_Admin_API::stored_def_caps(), called directly — and the handler is
 // pinned to using it by the source assertions at the end of this section.
 $_test_users = array();
-seed_user( 13, 'Alice Admin', array( 'def_admin_access' ) );
+seed_user( 13, 'Alice Admin', array( 'widrow_admin_access' ) );
 $alice = get_userdata( 13 );
 
 // First: the lie is real. This is the question the mirror used to ask.
 assert_true(
-	$alice->has_cap( 'def_staff_access' ),
-	'has_cap() claims a DEF-Admin-only user holds def_staff_access (the lie)'
+	$alice->has_cap( 'widrow_staff_access' ),
+	'has_cap() claims a DEF-Admin-only user holds widrow_staff_access (the lie)'
 );
 assert_true(
-	! in_array( 'def_staff_access', $_test_users[13]['caps'], true ),
+	! in_array( 'widrow_staff_access', $_test_users[13]['caps'], true ),
 	'while nothing of the sort is stored'
 );
 
 // And the mirror, asked the honest way.
-$mirror = DEF_Core_Admin_API::stored_def_caps( (array) $alice->allcaps );
-assert_equals( false, $mirror['def_staff_access'], 'the mirror reports Staff FALSE for a DEF-Admin-only user' );
-assert_equals( true, $mirror['def_admin_access'], 'and reports DEF Admin TRUE, which IS stored' );
-assert_equals( false, $mirror['def_management_access'], 'and Management false' );
+$mirror = Widrow_AI_Admin_API::stored_def_caps( (array) $alice->allcaps );
+assert_equals( false, $mirror['widrow_staff_access'], 'the mirror reports Staff FALSE for a DEF-Admin-only user' );
+assert_equals( true, $mirror['widrow_admin_access'], 'and reports DEF Admin TRUE, which IS stored' );
+assert_equals( false, $mirror['widrow_management_access'], 'and Management false' );
 
 // A real Staff user still mirrors as Staff — this is a correction, not a
 // blanket false.
-seed_user( 14, 'Sam Staff', array( 'def_staff_access' ) );
-$mirror_staff = DEF_Core_Admin_API::stored_def_caps( (array) get_userdata( 14 )->allcaps );
-assert_equals( true, $mirror_staff['def_staff_access'], 'a stored Staff cap still mirrors as true' );
-assert_equals( false, $mirror_staff['def_admin_access'], 'and DEF Admin false where it is not stored' );
+seed_user( 14, 'Sam Staff', array( 'widrow_staff_access' ) );
+$mirror_staff = Widrow_AI_Admin_API::stored_def_caps( (array) get_userdata( 14 )->allcaps );
+assert_equals( true, $mirror_staff['widrow_staff_access'], 'a stored Staff cap still mirrors as true' );
+assert_equals( false, $mirror_staff['widrow_admin_access'], 'and DEF Admin false where it is not stored' );
 
 // The vault roles ride the same map, out of the same catalog.
-seed_user( 15, 'Rosa Roles', array( 'def_staff_access', 'def_role_finance' ) );
-$mirror_roles = DEF_Core_Admin_API::stored_def_caps( (array) get_userdata( 15 )->allcaps );
-assert_equals( true, $mirror_roles['def_role_finance'], 'a stored vault role mirrors as true' );
-assert_equals( false, $mirror_roles['def_role_hr'], 'and one that is not stored mirrors as false' );
+seed_user( 15, 'Rosa Roles', array( 'widrow_staff_access', 'widrow_role_finance' ) );
+$mirror_roles = Widrow_AI_Admin_API::stored_def_caps( (array) get_userdata( 15 )->allcaps );
+assert_equals( true, $mirror_roles['widrow_role_finance'], 'a stored vault role mirrors as true' );
+assert_equals( false, $mirror_roles['widrow_role_hr'], 'and one that is not stored mirrors as false' );
 
 // The handler is what must USE that read. It cannot be invoked standalone, so
 // it is asserted against its source — the house pattern for code this suite
 // cannot execute (see test-staff-roster.php on maybe_upgrade()).
-$api_src = (string) file_get_contents( DEF_CORE_PLUGIN_DIR . 'includes/class-def-core-admin-api.php' );
+$api_src = (string) file_get_contents( WIDROW_AI_PLUGIN_DIR . 'includes/class-widrow-ai-admin-api.php' );
 assert_true(
 	false !== strpos( $api_src, 'self::stored_def_caps( (array) $user->allcaps )' ),
 	'rest_update_user_role builds its mirror from the stored read'

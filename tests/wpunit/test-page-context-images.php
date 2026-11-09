@@ -8,7 +8,7 @@
  * with its own alt text (else the tag's) and caption. None on an archive, a
  * search, an author page, or a password-protected post.
  *
- * @package def-core
+ * @package widrow-ai
  */
 
 declare(strict_types=1);
@@ -60,7 +60,7 @@ class Test_Page_Context_Images extends WP_UnitTestCase {
 				$this->listed( $inside, 'Lid open', 'Inside the lid' ),
 				array( 'url' => 'https://example.org/plain.jpg', 'alt' => str_repeat( 'a', 200 ), 'caption' => '' ),
 			),
-			DEF_Core_Page_Context::collect_page_images( $post )
+			Widrow_AI_Page_Context::collect_page_images( $post )
 		);
 	}
 
@@ -85,7 +85,7 @@ class Test_Page_Context_Images extends WP_UnitTestCase {
 		);
 		$this->go_to( get_permalink( $post ) );
 
-		$this->assertSame( array( $this->listed( $shown, 'Shown', '' ) ), DEF_Core_Page_Context::collect_page_images( $post ) );
+		$this->assertSame( array( $this->listed( $shown, 'Shown', '' ) ), Widrow_AI_Page_Context::collect_page_images( $post ) );
 	}
 
 	public function test_a_products_gallery_follows_its_featured_image(): void {
@@ -100,7 +100,7 @@ class Test_Page_Context_Images extends WP_UnitTestCase {
 
 		$this->assertSame(
 			array( $this->listed( $front, 'Front', '' ), $this->listed( $side, 'Side', '' ), $this->listed( $back, 'Back', '' ) ),
-			DEF_Core_Page_Context::collect_page_images( $product )
+			Widrow_AI_Page_Context::collect_page_images( $product )
 		);
 		unregister_post_type( 'product' );
 	}
@@ -111,7 +111,7 @@ class Test_Page_Context_Images extends WP_UnitTestCase {
 		set_post_thumbnail( $post, $front );
 		$this->go_to( get_permalink( $post ) );
 
-		$this->assertSame( array( $this->listed( $front, 'Front', '' ) ), DEF_Core_Page_Context::build_payload()['images'] );
+		$this->assertSame( array( $this->listed( $front, 'Front', '' ) ), Widrow_AI_Page_Context::build_payload()['images'] );
 	}
 
 	public function test_a_password_protected_post_lists_none(): void {
@@ -119,7 +119,7 @@ class Test_Page_Context_Images extends WP_UnitTestCase {
 		set_post_thumbnail( $post, $this->picture( 'front.jpg', 'Front' ) );
 		$this->go_to( get_permalink( $post ) );
 
-		$this->assertSame( array(), DEF_Core_Page_Context::collect_page_images( $post ) );
+		$this->assertSame( array(), Widrow_AI_Page_Context::collect_page_images( $post ) );
 	}
 
 	/**
@@ -137,8 +137,8 @@ class Test_Page_Context_Images extends WP_UnitTestCase {
 			'other'            => get_author_posts_url( (int) get_post_field( 'post_author', $post ) ),
 		) as $type => $url ) {
 			$this->go_to( $url );
-			$this->assertSame( $type, DEF_Core_Page_Context::detect_page_type() );
-			$this->assertSame( array(), DEF_Core_Page_Context::collect_page_images( $post ), $type );
+			$this->assertSame( $type, Widrow_AI_Page_Context::detect_page_type() );
+			$this->assertSame( array(), Widrow_AI_Page_Context::collect_page_images( $post ), $type );
 		}
 	}
 }

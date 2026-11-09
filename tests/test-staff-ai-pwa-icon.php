@@ -28,7 +28,7 @@
  * Runs standalone (no WordPress bootstrap), the test-staff-ai-chat-images.php
  * harness pattern.
  *
- * @package def-core/tests
+ * @package widrow-ai/tests
  */
 
 declare(strict_types=1);
@@ -36,14 +36,14 @@ declare(strict_types=1);
 if ( ! defined( 'ABSPATH' ) ) {
 	define( 'ABSPATH', dirname( __DIR__ ) . '/' );
 }
-if ( ! defined( 'DEF_CORE_PLUGIN_DIR' ) ) {
-	define( 'DEF_CORE_PLUGIN_DIR', dirname( __DIR__ ) . '/' );
+if ( ! defined( 'WIDROW_AI_PLUGIN_DIR' ) ) {
+	define( 'WIDROW_AI_PLUGIN_DIR', dirname( __DIR__ ) . '/' );
 }
-if ( ! defined( 'DEF_CORE_PLUGIN_URL' ) ) {
-	define( 'DEF_CORE_PLUGIN_URL', 'https://example.test/wp-content/plugins/def-core/' );
+if ( ! defined( 'WIDROW_AI_PLUGIN_URL' ) ) {
+	define( 'WIDROW_AI_PLUGIN_URL', 'https://example.test/wp-content/plugins/widrow-ai/' );
 }
-if ( ! defined( 'DEF_CORE_VERSION' ) ) {
-	define( 'DEF_CORE_VERSION', '8.2.7' );
+if ( ! defined( 'WIDROW_AI_VERSION' ) ) {
+	define( 'WIDROW_AI_VERSION', '8.2.7' );
 }
 
 require_once __DIR__ . '/wp-stubs.php';
@@ -118,7 +118,7 @@ if ( ! function_exists( 'get_post_mime_type' ) ) {
 	}
 }
 
-require_once dirname( __DIR__ ) . '/includes/class-def-core-staff-ai.php';
+require_once dirname( __DIR__ ) . '/includes/class-widrow-ai-staff-ai.php';
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -137,7 +137,7 @@ function check( bool $cond, string $label ): void {
 }
 
 function call_private( string $method, ...$args ) {
-	$m = new ReflectionMethod( 'DEF_Core_Staff_AI', $method );
+	$m = new ReflectionMethod( 'Widrow_AI_Staff_AI', $method );
 	$m->setAccessible( true );
 	return $m->invoke( null, ...$args );
 }
@@ -157,7 +157,7 @@ function attach( int $id, int $w, int $h, array $sizes = array(), string $mime =
 }
 
 function reset_options(): void {
-	foreach ( array( 'def_core_app_icon_id', 'def_core_logo_id', 'site_icon' ) as $opt ) {
+	foreach ( array( 'widrow_ai_app_icon_id', 'widrow_ai_logo_id', 'site_icon' ) as $opt ) {
 		update_option( $opt, 0 );
 	}
 }
@@ -173,50 +173,50 @@ attach( 22, 800, 800 );          // Branding → logo
 attach( 33, 512, 512 );          // the WordPress site icon
 
 reset_options();
-update_option( 'def_core_app_icon_id', 11 );
-update_option( 'def_core_logo_id', 22 );
+update_option( 'widrow_ai_app_icon_id', 11 );
+update_option( 'widrow_ai_logo_id', 22 );
 update_option( 'site_icon', 33 );
 check( call_private( 'app_icon', 512 )['src'] === 'https://example.test/uploads/att11-full.png', 'the Web App Icon wins when it is set' );
 
-update_option( 'def_core_app_icon_id', 0 );
+update_option( 'widrow_ai_app_icon_id', 0 );
 check( call_private( 'app_icon', 512 )['src'] === 'https://example.test/uploads/att22-full.png', 'no Web App Icon → the Branding logo' );
 
-update_option( 'def_core_logo_id', 0 );
+update_option( 'widrow_ai_logo_id', 0 );
 check( call_private( 'app_icon', 512 )['src'] === 'https://example.test/uploads/att33-full.png', 'no logo → the WordPress site icon' );
 
 update_option( 'site_icon', 0 );
 $icon = call_private( 'app_icon', 512 );
 check(
-	$icon['src'] === DEF_CORE_PLUGIN_URL . 'assets/images/staff-ai-icon-512.png' && $icon['sizes'] === '512x512',
+	$icon['src'] === WIDROW_AI_PLUGIN_URL . 'assets/images/staff-ai-icon-512.png' && $icon['sizes'] === '512x512',
 	'nothing set → the icon bundled with the plugin'
 );
 
 reset_options();
-update_option( 'def_core_app_icon_id', 99 );
-update_option( 'def_core_logo_id', 22 );
+update_option( 'widrow_ai_app_icon_id', 99 );
+update_option( 'widrow_ai_logo_id', 22 );
 check( call_private( 'app_icon', 512 )['src'] === 'https://example.test/uploads/att22-full.png', 'an id with no image behind it does not end the chain' );
 
 reset_options();
 $_wp_test_attachments[ 44 ] = array( 'meta' => array(), 'mime' => 'image/png' ); // no pixel size
-update_option( 'def_core_app_icon_id', 44 );
-update_option( 'def_core_logo_id', 22 );
+update_option( 'widrow_ai_app_icon_id', 44 );
+update_option( 'widrow_ai_logo_id', 22 );
 check( call_private( 'app_icon', 180 )['src'] === 'https://example.test/uploads/att22-full.png', 'an attachment WordPress has no pixel size for moves the chain along' );
 
 // The media picker admits SVGs and wp_attachment_is_image() passes them, so an
 // SVG can arrive here carrying a width and a height — and iOS ignores one.
 reset_options();
 attach( 45, 1024, 1024, array(), 'image/svg+xml' );
-update_option( 'def_core_app_icon_id', 45 );
-update_option( 'def_core_logo_id', 22 );
+update_option( 'widrow_ai_app_icon_id', 45 );
+update_option( 'widrow_ai_logo_id', 22 );
 check( call_private( 'app_icon', 180 )['src'] === 'https://example.test/uploads/att22-full.png', 'an SVG WITH pixel size still moves the chain along — never the apple-touch-icon' );
-update_option( 'def_core_logo_id', 0 );
+update_option( 'widrow_ai_logo_id', 0 );
 $svg_manifest = call_private( 'pwa_manifest' );
 check( 0 === count( preg_grep( '/svg/', array_merge( array_column( $svg_manifest['icons'], 'src' ), array_column( $svg_manifest['icons'], 'type' ) ) ) ), 'and never reaches the manifest either' );
 
 reset_options();
 attach( 46, 1024, 1024, array(), 'image/gif' );
-update_option( 'def_core_app_icon_id', 46 );
-update_option( 'def_core_logo_id', 22 );
+update_option( 'widrow_ai_app_icon_id', 46 );
+update_option( 'widrow_ai_logo_id', 22 );
 check( call_private( 'app_icon', 512 )['src'] === 'https://example.test/uploads/att22-full.png', 'only PNG, JPEG and WebP resolve — anything else moves the chain along' );
 
 // ── 2. The size it declares is the size it is ────────────────────────────
@@ -225,7 +225,7 @@ echo "\n[2] The declared size is read from the attachment, never assumed\n";
 
 reset_options();
 attach( 55, 1024, 1024, array( 'thumbnail' => array( 250, 250 ), 'medium' => array( 300, 300 ) ) );
-update_option( 'def_core_app_icon_id', 55 );
+update_option( 'widrow_ai_app_icon_id', 55 );
 
 $icon = call_private( 'app_icon', 192 );
 check( $icon['sizes'] === '250x250' && $icon['src'] === 'https://example.test/uploads/att55-thumbnail.png', "a3rev's 250×250 thumbnail is declared 250x250, not 192x192" );
@@ -235,18 +235,18 @@ check( $icon['sizes'] === '1024x1024' && $icon['src'] === 'https://example.test/
 
 reset_options();
 attach( 66, 600, 600, array( 'thumbnail' => array( 150, 150 ), 'large' => array( 512, 512 ) ) );
-update_option( 'def_core_app_icon_id', 66 );
+update_option( 'widrow_ai_app_icon_id', 66 );
 $icon = call_private( 'app_icon', 192 );
 check( $icon['sizes'] === '512x512' && $icon['src'] === 'https://example.test/uploads/att66-large.png', 'the SMALLEST cut that is genuinely big enough wins — never one below the size asked for' );
 
-// An attachment too small on EITHER axis is not an icon. def_core_logo_id is a
+// An attachment too small on EITHER axis is not an icon. widrow_ai_logo_id is a
 // wordmark option, so this is its ordinary shape — and offered as both manifest
 // entries it would be two identical icons, none of them 192 square, which is
 // what makes Chrome and Edge withdraw Install.
 reset_options();
 attach( 77, 300, 120, array( 'thumbnail' => array( 150, 60 ) ) );
-update_option( 'def_core_logo_id', 77 );
-check( call_private( 'app_icon', 192 )['src'] === DEF_CORE_PLUGIN_URL . 'assets/images/staff-ai-icon-192.png', 'a 300×120 wordmark cannot serve 192 square, so the chain falls through to the bundled icon' );
+update_option( 'widrow_ai_logo_id', 77 );
+check( call_private( 'app_icon', 192 )['src'] === WIDROW_AI_PLUGIN_URL . 'assets/images/staff-ai-icon-192.png', 'a 300×120 wordmark cannot serve 192 square, so the chain falls through to the bundled icon' );
 
 $oblong = call_private( 'pwa_manifest' )['icons'];
 check(
@@ -258,11 +258,11 @@ check(
 reset_options();
 attach( 78, 150, 150 );
 update_option( 'site_icon', 78 );
-check( call_private( 'app_icon', 192 )['src'] === DEF_CORE_PLUGIN_URL . 'assets/images/staff-ai-icon-192.png', 'a 150×150 site icon falls through at 192 for the same reason' );
+check( call_private( 'app_icon', 192 )['src'] === WIDROW_AI_PLUGIN_URL . 'assets/images/staff-ai-icon-192.png', 'a 150×150 site icon falls through at 192 for the same reason' );
 
 reset_options();
 attach( 88, 900, 900, array(), 'image/jpeg' );
-update_option( 'def_core_app_icon_id', 88 );
+update_option( 'widrow_ai_app_icon_id', 88 );
 check( call_private( 'app_icon', 512 )['type'] === 'image/jpeg', 'the type is the attachment\'s own, not a hard-coded image/png' );
 
 // ── 3. The manifest ──────────────────────────────────────────────────────
@@ -278,7 +278,7 @@ check( 0 === count( preg_grep( '/\.svg$/', array_column( $manifest['icons'], 'sr
 check(
 	$manifest['theme_color'] === '#6366f1' && $manifest['background_color'] === '#ffffff'
 	&& $manifest['display'] === 'standalone' && $manifest['start_url'] === home_url( '/staff-ai/' )
-	&& $manifest['scope'] === home_url( '/staff-ai/' ) && $manifest['version'] === DEF_CORE_VERSION,
+	&& $manifest['scope'] === home_url( '/staff-ai/' ) && $manifest['version'] === WIDROW_AI_VERSION,
 	'the rest of the manifest is untouched'
 );
 
@@ -287,7 +287,7 @@ check(
 echo "\n[4] The bundled PNGs\n";
 
 reset_options();
-check( call_private( 'app_icon', 180 )['src'] === DEF_CORE_PLUGIN_URL . 'assets/images/staff-ai-icon-180.png', 'the size asked for picks the bundled file that fits it — 180 for the apple-touch-icon' );
+check( call_private( 'app_icon', 180 )['src'] === WIDROW_AI_PLUGIN_URL . 'assets/images/staff-ai-icon-180.png', 'the size asked for picks the bundled file that fits it — 180 for the apple-touch-icon' );
 
 
 foreach ( array( 180, 192, 512 ) as $px ) {

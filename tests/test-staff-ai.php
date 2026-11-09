@@ -11,7 +11,7 @@
  *
  * Runs standalone (no WordPress bootstrap).
  *
- * @package def-core/tests
+ * @package widrow-ai/tests
  */
 
 declare(strict_types=1);
@@ -207,20 +207,20 @@ if ( ! function_exists( 'get_user_by' ) ) {
 	}
 }
 
-// Staff AI resolves the backend URL via \DEF_Core::get_def_api_url_internal();
+// Staff AI resolves the backend URL via \Widrow_AI::get_def_api_url_internal();
 // stub it so backend_request() reaches the (stubbed) wp_remote_* layer instead
-// of fataling on a missing DEF_Core class.
-if ( ! class_exists( 'DEF_Core' ) ) {
-	class DEF_Core {
+// of fataling on a missing Widrow_AI class.
+if ( ! class_exists( 'Widrow_AI' ) ) {
+	class Widrow_AI {
 		public static function get_def_api_url_internal(): ?string {
-			return $GLOBALS['_def_test_api_url'] ?? 'https://def-api.test';
+			return $GLOBALS['_widrow_test_api_url'] ?? 'https://def-api.test';
 		}
 	}
 }
 
 // Load the classes under test.
-require_once DEF_CORE_PLUGIN_DIR . 'includes/class-def-core-jwt.php';
-require_once DEF_CORE_PLUGIN_DIR . 'includes/class-def-core-staff-ai.php';
+require_once WIDROW_AI_PLUGIN_DIR . 'includes/class-widrow-ai-jwt.php';
+require_once WIDROW_AI_PLUGIN_DIR . 'includes/class-widrow-ai-staff-ai.php';
 
 $pass = 0;
 $fail = 0;
@@ -249,7 +249,7 @@ echo "=== Staff AI Tests ===\n";
 
 // ── 1. Route registration ───────────────────────────────────────────────
 echo "\n[1] REST route registration\n";
-DEF_Core_Staff_AI::register_rest_routes();
+Widrow_AI_Staff_AI::register_rest_routes();
 
 $expected_routes = array(
 	'a3-ai/v1/staff-ai/conversations',
@@ -325,12 +325,12 @@ $_share_handlers = $_wp_test_rest_routes['a3-ai/v1/staff-ai/documents/(?P<id>[a-
 assert_equals( 'POST', $_share_handlers[0]['methods'] ?? '', 'share handler 0 = POST' );
 assert_equals( 'DELETE', $_share_handlers[1]['methods'] ?? '', 'share handler 1 = DELETE' );
 assert_equals(
-	array( 'DEF_Core_Staff_AI', 'rest_permission_check' ),
+	array( 'Widrow_AI_Staff_AI', 'rest_permission_check' ),
 	$_share_handlers[0]['permission_callback'] ?? null,
 	'Share takes the same permission callback as every other document route'
 );
 assert_equals(
-	array( 'DEF_Core_Staff_AI', 'rest_permission_check' ),
+	array( 'Widrow_AI_Staff_AI', 'rest_permission_check' ),
 	$_share_handlers[1]['permission_callback'] ?? null,
 	'Stop sharing takes it too'
 );
@@ -338,8 +338,8 @@ assert_equals(
 // loading the conversation, relayed by the chat stream's proxy, `after` a required count.
 $_resume = $_wp_test_rest_routes['a3-ai/v1/staff-ai/conversations/(?P<id>[a-zA-Z0-9_-]+)/turns/(?P<turn>[a-zA-Z0-9_-]+)/stream'] ?? array();
 assert_equals( 'GET', $_resume['methods'] ?? '', 'turn resume = GET' );
-assert_equals( array( 'DEF_Core_Staff_AI', 'rest_permission_check' ), $_resume['permission_callback'] ?? null, 'turn resume takes the conversation routes\' permission callback' );
-assert_equals( array( 'DEF_Core_Tools', 'rest_proxy_staff_ai_turn_resume' ), $_resume['callback'] ?? null, 'turn resume is the Tools stream proxy' );
+assert_equals( array( 'Widrow_AI_Staff_AI', 'rest_permission_check' ), $_resume['permission_callback'] ?? null, 'turn resume takes the conversation routes\' permission callback' );
+assert_equals( array( 'Widrow_AI_Tools', 'rest_proxy_staff_ai_turn_resume' ), $_resume['callback'] ?? null, 'turn resume is the Tools stream proxy' );
 assert_equals( array( 'type' => 'integer', 'required' => true, 'minimum' => 0 ), $_resume['args']['after'] ?? null, 'turn resume: `after` is a required non-negative integer' );
 assert_equals( 'GET', $_wp_test_rest_routes['a3-ai/v1/staff-ai/memories']['methods'], 'memories = GET' );
 assert_equals( 'DELETE', $_wp_test_rest_routes['a3-ai/v1/staff-ai/memories/(?P<id>[a-zA-Z0-9-]+)']['methods'], 'memories delete = DELETE' );
@@ -370,7 +370,7 @@ assert_equals( 'POST', $_task_run_now[0]['methods'] ?? '', 'task run-now = POST'
 echo "\n[4] Permission check — unauthenticated\n";
 $_wp_test_current_user = null;
 $_wp_test_user_caps    = array();
-$result = DEF_Core_Staff_AI::rest_permission_check();
+$result = Widrow_AI_Staff_AI::rest_permission_check();
 assert_true( is_wp_error( $result ), 'unauthenticated returns WP_Error' );
 assert_equals( 'rest_not_logged_in', $result->get_error_code(), 'error code is rest_not_logged_in' );
 $data = $result->get_error_data();
@@ -381,7 +381,7 @@ echo "\n[5] Permission check — no staff_ai capability\n";
 $_wp_test_current_user     = new WP_User( 1 );
 $_wp_test_current_user->ID = 1;
 $_wp_test_user_caps        = array(); // No capabilities.
-$result = DEF_Core_Staff_AI::rest_permission_check();
+$result = Widrow_AI_Staff_AI::rest_permission_check();
 assert_true( is_wp_error( $result ), 'no capability returns WP_Error' );
 // 5.7.7: the capability refusal carries a DISTINCT named code so callers can
 // tell the gate from every other 403 (was the generic rest_forbidden).
@@ -390,29 +390,29 @@ $data = $result->get_error_data();
 assert_equals( 403, $data['status'], 'HTTP status is 403' );
 
 // ── 6. Permission check: authenticated with capability → true ───────────
-echo "\n[6] Permission check — with def_staff_access\n";
-$_wp_test_user_caps = array( 'def_staff_access' );
-$result = DEF_Core_Staff_AI::rest_permission_check();
+echo "\n[6] Permission check — with widrow_staff_access\n";
+$_wp_test_user_caps = array( 'widrow_staff_access' );
+$result = Widrow_AI_Staff_AI::rest_permission_check();
 assert_equals( true, $result, 'staff_access capability grants access' );
 
 // ── 7. Permission check: management access also works ───────────────────
-echo "\n[7] Permission check — with def_management_access\n";
-$_wp_test_user_caps = array( 'def_management_access' );
-$result = DEF_Core_Staff_AI::rest_permission_check();
-assert_equals( true, $result, 'def_management_access capability grants access' );
+echo "\n[7] Permission check — with widrow_management_access\n";
+$_wp_test_user_caps = array( 'widrow_management_access' );
+$result = Widrow_AI_Staff_AI::rest_permission_check();
+assert_equals( true, $result, 'widrow_management_access capability grants access' );
 
 // ── 8. Error responses don't leak secrets ───────────────────────────────
 echo "\n[8] Error message safety\n";
 // Backend not configured → should not expose internal paths.
 $_wp_test_current_user     = new WP_User( 1 );
 $_wp_test_current_user->ID = 1;
-$_wp_test_user_caps        = array( 'def_staff_access' );
-update_option( 'def_core_staff_ai_api_url', '' ); // Not configured.
+$_wp_test_user_caps        = array( 'widrow_staff_access' );
+update_option( 'widrow_ai_staff_ai_api_url', '' ); // Not configured.
 
 // Send message without backend URL.
 $request = new WP_REST_Request( 'POST', '/staff-ai/chat' );
 $request->set_body_params( array( 'message' => 'test' ) );
-$result = DEF_Core_Staff_AI::rest_send_message( $request );
+$result = Widrow_AI_Staff_AI::rest_send_message( $request );
 assert_true( is_wp_error( $result ), 'no backend URL returns WP_Error' );
 $msg = $result->get_error_message();
 assert_true( strpos( $msg, 'not configured' ) !== false, 'error mentions configuration needed' );
@@ -421,10 +421,10 @@ assert_true( strpos( $msg, 'password' ) === false, 'no passwords in error' );
 
 // ── 9. Empty message validation ─────────────────────────────────────────
 echo "\n[9] Empty message validation\n";
-update_option( 'def_core_staff_ai_api_url', 'http://localhost:8000' );
+update_option( 'widrow_ai_staff_ai_api_url', 'http://localhost:8000' );
 $request = new WP_REST_Request( 'POST', '/staff-ai/chat' );
 $request->set_body_params( array( 'message' => '' ) );
-$result = DEF_Core_Staff_AI::rest_send_message( $request );
+$result = Widrow_AI_Staff_AI::rest_send_message( $request );
 assert_true( is_wp_error( $result ), 'empty message returns WP_Error' );
 assert_equals( 'invalid_message', $result->get_error_code(), 'error code is invalid_message' );
 $data = $result->get_error_data();
@@ -434,7 +434,7 @@ assert_equals( 400, $data['status'], 'HTTP status is 400' );
 echo "\n[10] Missing message field\n";
 $request = new WP_REST_Request( 'POST', '/staff-ai/chat' );
 $request->set_body_params( array() ); // No message field.
-$result = DEF_Core_Staff_AI::rest_send_message( $request );
+$result = Widrow_AI_Staff_AI::rest_send_message( $request );
 assert_true( is_wp_error( $result ), 'missing message returns WP_Error' );
 assert_equals( 'invalid_message', $result->get_error_code(), 'error code is invalid_message' );
 
@@ -461,8 +461,8 @@ assert_true( ! isset( $_wp_test_rest_routes[ $file_route ] ), 'REST file-downloa
 echo "\n[13] Upload init — valid input\n";
 $_wp_test_current_user     = new WP_User( 1 );
 $_wp_test_current_user->ID = 1;
-$_wp_test_user_caps        = array( 'def_staff_access' );
-update_option( 'def_core_staff_ai_api_url', 'http://localhost:8000' );
+$_wp_test_user_caps        = array( 'widrow_staff_access' );
+update_option( 'widrow_ai_staff_ai_api_url', 'http://localhost:8000' );
 
 $request = new WP_REST_Request( 'POST', '/staff-ai/uploads/init' );
 $request->set_body_params( array(
@@ -473,7 +473,7 @@ $request->set_body_params( array(
 ) );
 // This will try to reach the backend and fail, but we verify pre-validation passes.
 // The error should come from backend_request(), not from validation.
-$result = DEF_Core_Staff_AI::rest_upload_init( $request );
+$result = Widrow_AI_Staff_AI::rest_upload_init( $request );
 // If backend is down, it returns WP_Error but NOT from our validation.
 if ( is_wp_error( $result ) ) {
 	assert_true(
@@ -492,7 +492,7 @@ $request->set_body_params( array(
 	'mime_type'  => 'application/pdf',
 	'size_bytes' => 1024,
 ) );
-$result = DEF_Core_Staff_AI::rest_upload_init( $request );
+$result = Widrow_AI_Staff_AI::rest_upload_init( $request );
 assert_true( is_wp_error( $result ), 'empty filename returns WP_Error' );
 assert_equals( 'invalid_filename', $result->get_error_code(), 'error code is invalid_filename' );
 $data = $result->get_error_data();
@@ -506,7 +506,7 @@ $request->set_body_params( array(
 	'mime_type'  => 'application/x-msdownload',
 	'size_bytes' => 1024,
 ) );
-$result = DEF_Core_Staff_AI::rest_upload_init( $request );
+$result = Widrow_AI_Staff_AI::rest_upload_init( $request );
 assert_true( is_wp_error( $result ), 'unsupported MIME returns WP_Error' );
 assert_equals( 'unsupported_media_type', $result->get_error_code(), 'error code is unsupported_media_type' );
 $data = $result->get_error_data();
@@ -525,7 +525,7 @@ $request->set_body_params( array(
 	'mime_type'  => 'application/pdf',
 	'size_bytes' => 0,
 ) );
-$result = DEF_Core_Staff_AI::rest_upload_init( $request );
+$result = Widrow_AI_Staff_AI::rest_upload_init( $request );
 assert_true( is_wp_error( $result ), 'zero size returns WP_Error' );
 assert_equals( 'invalid_size', $result->get_error_code(), 'zero size is refused as malformed (400), not as over-limit' );
 
@@ -533,7 +533,7 @@ assert_equals( 'invalid_size', $result->get_error_code(), 'zero size is refused 
 echo "\n[18] Upload commit — valid file_id\n";
 $request = new WP_REST_Request( 'POST', '/staff-ai/uploads/commit' );
 $request->set_body_params( array( 'file_id' => 'upload_abc123def456' ) );
-$result = DEF_Core_Staff_AI::rest_upload_commit( $request );
+$result = Widrow_AI_Staff_AI::rest_upload_commit( $request );
 // Valid file_id passes validation — error comes from backend_request, not validation.
 if ( is_wp_error( $result ) ) {
 	assert_true(
@@ -546,7 +546,7 @@ if ( is_wp_error( $result ) ) {
 echo "\n[19] Upload commit — empty file_id\n";
 $request = new WP_REST_Request( 'POST', '/staff-ai/uploads/commit' );
 $request->set_body_params( array( 'file_id' => '' ) );
-$result = DEF_Core_Staff_AI::rest_upload_commit( $request );
+$result = Widrow_AI_Staff_AI::rest_upload_commit( $request );
 assert_true( is_wp_error( $result ), 'empty file_id returns WP_Error' );
 assert_equals( 'invalid_file_id', $result->get_error_code(), 'error code is invalid_file_id' );
 $data = $result->get_error_data();
@@ -565,7 +565,7 @@ $malformed_ids = array(
 foreach ( $malformed_ids as $bad_id ) {
 	$request = new WP_REST_Request( 'POST', '/staff-ai/uploads/commit' );
 	$request->set_body_params( array( 'file_id' => $bad_id ) );
-	$result = DEF_Core_Staff_AI::rest_upload_commit( $request );
+	$result = Widrow_AI_Staff_AI::rest_upload_commit( $request );
 	assert_true( is_wp_error( $result ), "malformed file_id '$bad_id' returns WP_Error" );
 	assert_equals( 'invalid_file_id', $result->get_error_code(), "malformed file_id '$bad_id' code is invalid_file_id" );
 }
@@ -577,13 +577,13 @@ assert_equals( 'POST', $_wp_test_rest_routes['a3-ai/v1/staff-ai/uploads/commit']
 
 // ── 22. Chat with file_ids — empty message allowed ────────────────────
 echo "\n[22] Chat with file_ids — empty message allowed\n";
-update_option( 'def_core_staff_ai_api_url', 'http://localhost:8000' );
+update_option( 'widrow_ai_staff_ai_api_url', 'http://localhost:8000' );
 $request = new WP_REST_Request( 'POST', '/staff-ai/chat' );
 $request->set_body_params( array(
 	'message'  => '',
 	'file_ids' => array( 'upload_abc123' ),
 ) );
-$result = DEF_Core_Staff_AI::rest_send_message( $request );
+$result = Widrow_AI_Staff_AI::rest_send_message( $request );
 // Should NOT be invalid_message since files are present.
 if ( is_wp_error( $result ) ) {
 	assert_true(
@@ -599,7 +599,7 @@ $request->set_body_params( array(
 	'message'  => '',
 	'file_ids' => array( 'bad_id', '../etc/passwd' ),
 ) );
-$result = DEF_Core_Staff_AI::rest_send_message( $request );
+$result = Widrow_AI_Staff_AI::rest_send_message( $request );
 // All file_ids are invalid → no valid files → empty message → invalid_message.
 assert_true( is_wp_error( $result ), 'all-invalid file_ids with empty message returns WP_Error' );
 assert_equals( 'invalid_message', $result->get_error_code(), 'invalid file_ids dropped, falls back to empty-message check' );
@@ -613,7 +613,7 @@ $request->set_body_params( array(
 	'mime_type'  => 'application/x-msdownload',
 	'size_bytes' => 2048,
 ) );
-$result = DEF_Core_Staff_AI::rest_upload_init( $request );
+$result = Widrow_AI_Staff_AI::rest_upload_init( $request );
 assert_true( is_wp_error( $result ), 'spoofed MIME rejected' );
 assert_equals( 'unsupported_media_type', $result->get_error_code(), 'spoofed MIME returns unsupported_media_type' );
 
@@ -624,7 +624,7 @@ $request->set_body_params( array(
 	'mime_type'  => 'application/octet-stream',
 	'size_bytes' => 5000,
 ) );
-$result = DEF_Core_Staff_AI::rest_upload_init( $request );
+$result = Widrow_AI_Staff_AI::rest_upload_init( $request );
 assert_true( is_wp_error( $result ), 'octet-stream MIME rejected' );
 assert_equals( 'unsupported_media_type', $result->get_error_code(), 'octet-stream MIME returns unsupported_media_type' );
 
@@ -648,7 +648,7 @@ foreach ( $allowed as $mime ) {
 		'mime_type'  => $mime,
 		'size_bytes' => 1024,
 	) );
-	$result = DEF_Core_Staff_AI::rest_upload_init( $request );
+	$result = Widrow_AI_Staff_AI::rest_upload_init( $request );
 	if ( is_wp_error( $result ) ) {
 		assert_true(
 			$result->get_error_code() !== 'unsupported_media_type',
@@ -664,13 +664,13 @@ foreach ( $allowed as $mime ) {
 // only, so the wp_remote_* layer is first defined at this point (guarded).
 echo "\n[27] rest_list_documents q= forwarding\n";
 
-// The REAL DEF_Core_Encryption is loaded by wp-stubs.php; its get_secret
+// The REAL Widrow_AI_Encryption is loaded by wp-stubs.php; its get_secret
 // legacy-plaintext path returns a seeded option value as-is.
-$_wp_test_options['def_core_api_key'] = 'test-api-key';
+$_wp_test_options['widrow_ai_api_key'] = 'test-api-key';
 
-if ( ! class_exists( 'DEF_Core_Tools' ) ) {
-	class DEF_Core_Tools {
-		public static function get_user_def_capabilities( $user ): array { return array( 'def_staff_access' ); }
+if ( ! class_exists( 'Widrow_AI_Tools' ) ) {
+	class Widrow_AI_Tools {
+		public static function get_user_def_capabilities( $user ): array { return array( 'widrow_staff_access' ); }
 	}
 }
 if ( ! function_exists( 'get_bloginfo' ) ) {
@@ -678,11 +678,11 @@ if ( ! function_exists( 'get_bloginfo' ) ) {
 }
 if ( ! function_exists( 'wp_remote_get' ) ) {
 	function wp_remote_get( string $url, array $args = array() ) {
-		$GLOBALS['_def_test_last_get_url'] = $url;
+		$GLOBALS['_widrow_test_last_get_url'] = $url;
 		return array(
 			// Code is settable so a backend failure (e.g. DEF's 503) can be driven.
-			'response' => array( 'code' => $GLOBALS['_def_test_get_code'] ?? 200 ),
-			'body'     => $GLOBALS['_def_test_get_body'] ?? '{"success":true,"documents":[]}',
+			'response' => array( 'code' => $GLOBALS['_widrow_test_get_code'] ?? 200 ),
+			'body'     => $GLOBALS['_widrow_test_get_body'] ?? '{"success":true,"documents":[]}',
 		);
 	}
 }
@@ -701,20 +701,20 @@ $_wp_test_current_user->ID = 1;
 
 $req = new WP_REST_Request();
 $req->set_param( 'q', '  Progress: 100%  ' );
-DEF_Core_Staff_AI::rest_list_documents( $req );
+Widrow_AI_Staff_AI::rest_list_documents( $req );
 assert_equals(
 	'https://def-api.test/api/staff-ai/documents?q=Progress%3A%20100%25',
-	$GLOBALS['_def_test_last_get_url'] ?? '',
+	$GLOBALS['_widrow_test_last_get_url'] ?? '',
 	'q is trimmed + rawurlencoded onto the DEF path'
 );
 
-$GLOBALS['_def_test_last_get_url'] = '';
+$GLOBALS['_widrow_test_last_get_url'] = '';
 $req = new WP_REST_Request();
 $req->set_param( 'q', '   ' );
-DEF_Core_Staff_AI::rest_list_documents( $req );
+Widrow_AI_Staff_AI::rest_list_documents( $req );
 assert_equals(
 	'https://def-api.test/api/staff-ai/documents',
-	$GLOBALS['_def_test_last_get_url'] ?? '',
+	$GLOBALS['_widrow_test_last_get_url'] ?? '',
 	'whitespace-only q adds no query string'
 );
 
@@ -725,8 +725,8 @@ assert_equals(
 // either input form (normalize-then-encode; version-skew-safe both directions).
 echo "\n[28] rest_list_documents download_url normalize-then-encode\n";
 
-function _def_test_panel_download_url( string $backend_download_url ): string {
-	$GLOBALS['_def_test_get_body'] = json_encode( array(
+function _widrow_test_panel_download_url( string $backend_download_url ): string {
+	$GLOBALS['_widrow_test_get_body'] = json_encode( array(
 		'success'   => true,
 		'documents' => array( array(
 			'document_id'  => 'abc123-def',
@@ -738,8 +738,8 @@ function _def_test_panel_download_url( string $backend_download_url ): string {
 			'download_url' => $backend_download_url,
 		) ),
 	) );
-	$resp = DEF_Core_Staff_AI::rest_list_documents( new WP_REST_Request() );
-	unset( $GLOBALS['_def_test_get_body'] );
+	$resp = Widrow_AI_Staff_AI::rest_list_documents( new WP_REST_Request() );
+	unset( $GLOBALS['_widrow_test_get_body'] );
 	$data = is_object( $resp ) ? $resp->data : $resp;
 	return $data['documents'][0]['download_url'] ?? '';
 }
@@ -750,17 +750,17 @@ function _def_test_panel_download_url( string $backend_download_url ): string {
 // field are Downloads, so it is built in rather than added at each link.
 assert_equals(
 	'https://test.example.com/staff-ai-download/tenant-a/My%20Report.md?staff_ai_save=1',
-	_def_test_panel_download_url( '/api/files/tenant-a/My Report.md' ),
+	_widrow_test_panel_download_url( '/api/files/tenant-a/My Report.md' ),
 	'raw DEF form (pre-#836) → single-encoded, and asks to save'
 );
 assert_equals(
 	'https://test.example.com/staff-ai-download/tenant-a/My%20Report.md?staff_ai_save=1',
-	_def_test_panel_download_url( '/api/files/tenant-a/My%20Report.md' ),
+	_widrow_test_panel_download_url( '/api/files/tenant-a/My%20Report.md' ),
 	'encoded DEF form (post-#836) → still single-encoded, no double-encode'
 );
 assert_equals(
 	'https://test.example.com/staff-ai-download/tenant-a/100%25%20Done.md?staff_ai_save=1',
-	_def_test_panel_download_url( '/api/files/tenant-a/100% Done.md' ),
+	_widrow_test_panel_download_url( '/api/files/tenant-a/100% Done.md' ),
 	'literal % in a raw name survives normalization (invalid %-sequence passes through rawurldecode)'
 );
 
@@ -768,8 +768,8 @@ assert_equals(
 // it can be reached by reload or by a link with no opener to hand it one — the
 // field is what makes Download present however the reader arrived. Same helper,
 // so the same normalization is asserted here rather than assumed from above.
-function _def_test_content_download_url( string $backend_download_url ) {
-	$GLOBALS['_def_test_get_body'] = json_encode( array(
+function _widrow_test_content_download_url( string $backend_download_url ) {
+	$GLOBALS['_widrow_test_get_body'] = json_encode( array(
 		'success'  => true,
 		'document' => array(
 			'document_id'  => 'abc123-def',
@@ -782,27 +782,27 @@ function _def_test_content_download_url( string $backend_download_url ) {
 	) );
 	$request = new WP_REST_Request();
 	$request->set_param( 'id', 'abc123-def' );
-	$resp = DEF_Core_Staff_AI::rest_document_content( $request );
-	unset( $GLOBALS['_def_test_get_body'] );
+	$resp = Widrow_AI_Staff_AI::rest_document_content( $request );
+	unset( $GLOBALS['_widrow_test_get_body'] );
 	$data = is_object( $resp ) ? $resp->data : $resp;
 	return $data['document']['download_url'] ?? null;
 }
 
 assert_equals(
 	'https://test.example.com/staff-ai-download/tenant-a/My%20Report.md?staff_ai_save=1',
-	_def_test_content_download_url( '/api/files/tenant-a/My Report.md' ),
+	_widrow_test_content_download_url( '/api/files/tenant-a/My Report.md' ),
 	'content endpoint carries the download link, normalized the same way'
 );
 assert_equals(
 	'',
-	_def_test_content_download_url( 'https://evil.example.com/api/files/t/x.md' ),
+	_widrow_test_content_download_url( 'https://evil.example.com/api/files/t/x.md' ),
 	'a download_url that is not a DEF /api/files path yields nothing, never an off-site link'
 );
 
 // A picture (8.1.0, images runsheet I-4): DEF's `kind` rides the response as one of
 // two values, so the viewer shows a picture and reads everything else.
-function _def_test_content_kind( $kind ) {
-	$GLOBALS['_def_test_get_body'] = json_encode( array(
+function _widrow_test_content_kind( $kind ) {
+	$GLOBALS['_widrow_test_get_body'] = json_encode( array(
 		'success'  => true,
 		'document' => array( 'document_id' => 'abc123-def', 'title' => 'Garden', 'file_type' => 'png', 'version' => 1,
 			'download_url' => '/api/files/tenant-a/garden.png' ),
@@ -811,14 +811,14 @@ function _def_test_content_kind( $kind ) {
 	) );
 	$request = new WP_REST_Request();
 	$request->set_param( 'id', 'abc123-def' );
-	$resp = DEF_Core_Staff_AI::rest_document_content( $request );
-	unset( $GLOBALS['_def_test_get_body'] );
+	$resp = Widrow_AI_Staff_AI::rest_document_content( $request );
+	unset( $GLOBALS['_widrow_test_get_body'] );
 	$data = is_object( $resp ) ? $resp->data : $resp;
 	return $data['kind'] ?? null;
 }
-assert_equals( 'image', _def_test_content_kind( 'image' ), 'a picture\'s kind rides the content response' );
-assert_equals( 'text', _def_test_content_kind( 'weird' ), 'any other kind is text - the viewer reads it' );
-assert_equals( 'text', _def_test_content_kind( null ), 'no kind at all (an older DEF) is text' );
+assert_equals( 'image', _widrow_test_content_kind( 'image' ), 'a picture\'s kind rides the content response' );
+assert_equals( 'text', _widrow_test_content_kind( 'weird' ), 'any other kind is text - the viewer reads it' );
+assert_equals( 'text', _widrow_test_content_kind( null ), 'no kind at all (an older DEF) is text' );
 
 // ── 28b. Artifacts A-3 (D-A7): `share` rides both document responses ────
 // The two handlers rebuild their responses field by field, so a field DEF adds
@@ -828,7 +828,7 @@ assert_equals( 'text', _def_test_content_kind( null ), 'no kind at all (an older
 // public address out of this value.
 echo "\n[28b] rest_list_documents / rest_document_content forward `share`\n";
 
-function _def_test_list_share( $share ) {
+function _widrow_test_list_share( $share ) {
 	$row = array(
 		'document_id' => 'abc123-def',
 		'title'       => 'Style kit',
@@ -840,9 +840,9 @@ function _def_test_list_share( $share ) {
 	if ( null !== $share ) {
 		$row['share'] = $share;
 	}
-	$GLOBALS['_def_test_get_body'] = json_encode( array( 'success' => true, 'documents' => array( $row ) ) );
-	$resp = DEF_Core_Staff_AI::rest_list_documents( new WP_REST_Request() );
-	unset( $GLOBALS['_def_test_get_body'] );
+	$GLOBALS['_widrow_test_get_body'] = json_encode( array( 'success' => true, 'documents' => array( $row ) ) );
+	$resp = Widrow_AI_Staff_AI::rest_list_documents( new WP_REST_Request() );
+	unset( $GLOBALS['_widrow_test_get_body'] );
 	$data = is_object( $resp ) ? $resp->data : $resp;
 	return $data['documents'][0];
 }
@@ -850,15 +850,15 @@ function _def_test_list_share( $share ) {
 $_live = array( 'token' => 'Kf3xQ9zL2mNpR7sTvW1yZa', 'created_at' => '2026-09-16T04:00:00Z' );
 assert_equals(
 	$_live,
-	_def_test_list_share( $_live )['share'],
+	_widrow_test_list_share( $_live )['share'],
 	'a live share rides each row — the globe mark (D-A4)'
 );
-$_row = _def_test_list_share( null );
+$_row = _widrow_test_list_share( null );
 assert_true(
 	array_key_exists( 'share', $_row ) && null === $_row['share'],
 	'a row DEF sent no share for carries share = null — the lock mark, never a missing key'
 );
-assert_equals( null, _def_test_list_share( array( 'token' => null ) )['share'], 'an explicit null share stays null' );
+assert_equals( null, _widrow_test_list_share( array( 'token' => null ) )['share'], 'an explicit null share stays null' );
 foreach ( array(
 	'short'                       => 'tooshort',
 	'over-long'                   => 'Kf3xQ9zL2mNpR7sTvW1yZaXX',
@@ -867,17 +867,17 @@ foreach ( array(
 ) as $why => $bad ) {
 	assert_equals(
 		null,
-		_def_test_list_share( array( 'token' => $bad, 'created_at' => 'x' ) )['share'],
+		_widrow_test_list_share( array( 'token' => $bad, 'created_at' => 'x' ) )['share'],
 		"a token that is $why is no share at all"
 	);
 }
 assert_equals(
 	array( 'token' => 'Kf3xQ9zL2mNpR7sTvW1yZa', 'created_at' => '' ),
-	_def_test_list_share( array( 'token' => 'Kf3xQ9zL2mNpR7sTvW1yZa', 'created_at' => array( 'nope' ) ) )['share'],
+	_widrow_test_list_share( array( 'token' => 'Kf3xQ9zL2mNpR7sTvW1yZa', 'created_at' => array( 'nope' ) ) )['share'],
 	'a created_at that is not a string is dropped, and the token still rides'
 );
 
-$GLOBALS['_def_test_get_body'] = json_encode( array(
+$GLOBALS['_widrow_test_get_body'] = json_encode( array(
 	'success'  => true,
 	'document' => array( 'document_id' => 'abc123-def', 'title' => 'Style kit', 'file_type' => 'html',
 		'version' => 1, 'share' => $_live ),
@@ -885,8 +885,8 @@ $GLOBALS['_def_test_get_body'] = json_encode( array(
 ) );
 $_request = new WP_REST_Request();
 $_request->set_param( 'id', 'abc123-def' );
-$_resp = DEF_Core_Staff_AI::rest_document_content( $_request );
-unset( $GLOBALS['_def_test_get_body'] );
+$_resp = Widrow_AI_Staff_AI::rest_document_content( $_request );
+unset( $GLOBALS['_widrow_test_get_body'] );
 $_data = is_object( $_resp ) ? $_resp->data : $_resp;
 assert_equals( $_live, $_data['document']['share'], 'the document page opens on the share state DEF reported' );
 
@@ -898,15 +898,15 @@ assert_equals( $_live, $_data['document']['share'], 'the document page opens on 
 // them out if a future backend adds them back.
 echo "\n[29] rest_list_memories field allowlist\n";
 
-function _def_test_memories( array $rows ): array {
-	$GLOBALS['_def_test_get_body'] = json_encode( array( 'success' => true, 'memories' => $rows ) );
-	$resp = DEF_Core_Staff_AI::rest_list_memories();
-	unset( $GLOBALS['_def_test_get_body'] );
+function _widrow_test_memories( array $rows ): array {
+	$GLOBALS['_widrow_test_get_body'] = json_encode( array( 'success' => true, 'memories' => $rows ) );
+	$resp = Widrow_AI_Staff_AI::rest_list_memories();
+	unset( $GLOBALS['_widrow_test_get_body'] );
 	$data = is_object( $resp ) ? $resp->data : $resp;
 	return $data['memories'] ?? array();
 }
 
-$rows = _def_test_memories( array(
+$rows = _widrow_test_memories( array(
 	array(
 		'entry_id'         => '8f14e45f-ceea-467a-9e2f-6b2c40f5e1a3',
 		'category'         => 'preferences',
@@ -935,15 +935,15 @@ assert_equals( '2026-08-08T02:00:00', $rows[0]['updated_at'], 'updated_at passes
 // route could never accept is dropped rather than rendered undeletable.
 assert_equals(
 	0,
-	count( _def_test_memories( array( array( 'entry_id' => 'not$a/uuid', 'content' => 'x' ) ) ) ),
+	count( _widrow_test_memories( array( array( 'entry_id' => 'not$a/uuid', 'content' => 'x' ) ) ) ),
 	'row with an unroutable entry_id is skipped'
 );
 assert_equals(
 	0,
-	count( _def_test_memories( array( array( 'category' => 'role', 'content' => 'x' ) ) ) ),
+	count( _widrow_test_memories( array( array( 'category' => 'role', 'content' => 'x' ) ) ) ),
 	'row with no entry_id is skipped'
 );
-$rows = _def_test_memories( array( array( 'entry_id' => 'abc-123', 'category' => array( 'role' ) ) ) );
+$rows = _widrow_test_memories( array( array( 'entry_id' => 'abc-123', 'category' => array( 'role' ) ) ) );
 assert_equals( '', $rows[0]['category'], 'non-string category coerces to empty, not to a PHP array' );
 
 // ── 30. rest_list_memories — a backend failure is an ERROR, not an empty list ──
@@ -951,9 +951,9 @@ assert_equals( '', $rows[0]['category'], 'non-string category coerces to empty, 
 // "it has forgotten you" — a lie about the user's own data.
 echo "\n[30] rest_list_memories 503 surfaces as an error\n";
 
-$GLOBALS['_def_test_get_code'] = 503;
-$result = DEF_Core_Staff_AI::rest_list_memories();
-unset( $GLOBALS['_def_test_get_code'] );
+$GLOBALS['_widrow_test_get_code'] = 503;
+$result = Widrow_AI_Staff_AI::rest_list_memories();
+unset( $GLOBALS['_widrow_test_get_code'] );
 $is_err = is_wp_error( $result );
 assert_true( $is_err, '503 returns WP_Error, not a 200 response' );
 // Guarded: a mutation that returns a response here must FAIL these two, not
@@ -968,9 +968,9 @@ assert_true(
 // A 404 means DEF does not serve this route (version skew / rollback), and that
 // branch of backend_request interpolates the INTERNAL backend URL. The panel
 // renders the message verbatim, so it must be replaced — while staying an error.
-$GLOBALS['_def_test_get_code'] = 404;
-$result = DEF_Core_Staff_AI::rest_list_memories();
-unset( $GLOBALS['_def_test_get_code'] );
+$GLOBALS['_widrow_test_get_code'] = 404;
+$result = Widrow_AI_Staff_AI::rest_list_memories();
+unset( $GLOBALS['_widrow_test_get_code'] );
 $is_err = is_wp_error( $result );
 assert_true( $is_err, '404 stays an error, not an empty list' );
 assert_equals( 404, $is_err ? ( $result->get_error_data()['status'] ?? 0 ) : 0, '404 status preserved' );
@@ -984,26 +984,26 @@ echo "\n[31] rest_delete_memory\n";
 
 if ( ! function_exists( 'wp_remote_request' ) ) {
 	function wp_remote_request( string $url, array $args = array() ) {
-		$GLOBALS['_def_test_last_request'] = array( 'url' => $url, 'method' => $args['method'] ?? '', 'body' => $args['body'] ?? '' );
+		$GLOBALS['_widrow_test_last_request'] = array( 'url' => $url, 'method' => $args['method'] ?? '', 'body' => $args['body'] ?? '' );
 		return array(
-			'response' => array( 'code' => $GLOBALS['_def_test_request_code'] ?? 200 ),
-			'body'     => $GLOBALS['_def_test_request_body'] ?? '{"success":true}',
+			'response' => array( 'code' => $GLOBALS['_widrow_test_request_code'] ?? 200 ),
+			'body'     => $GLOBALS['_widrow_test_request_body'] ?? '{"success":true}',
 		);
 	}
 }
 
 $req = new WP_REST_Request();
 $req->set_param( 'id', '8f14e45f-ceea-467a-9e2f-6b2c40f5e1a3' );
-$resp = DEF_Core_Staff_AI::rest_delete_memory( $req );
+$resp = Widrow_AI_Staff_AI::rest_delete_memory( $req );
 assert_equals(
 	'https://def-api.test/api/staff-ai/memories/8f14e45f-ceea-467a-9e2f-6b2c40f5e1a3',
-	$GLOBALS['_def_test_last_request']['url'] ?? '',
+	$GLOBALS['_widrow_test_last_request']['url'] ?? '',
 	'entry id is forwarded on the DEF path — nothing user-scoped alongside it'
 );
-assert_equals( 'DELETE', $GLOBALS['_def_test_last_request']['method'] ?? '', 'verb is DELETE' );
+assert_equals( 'DELETE', $GLOBALS['_widrow_test_last_request']['method'] ?? '', 'verb is DELETE' );
 assert_true( ! is_wp_error( $resp ), 'a successful delete returns a response' );
 
-$result = DEF_Core_Staff_AI::rest_delete_memory( new WP_REST_Request() );
+$result = Widrow_AI_Staff_AI::rest_delete_memory( new WP_REST_Request() );
 $is_err = is_wp_error( $result );
 assert_true( $is_err, 'missing id is rejected' );
 assert_equals( 'invalid_memory_id', $is_err ? $result->get_error_code() : '', 'missing id → invalid_memory_id' );
@@ -1011,17 +1011,17 @@ assert_equals( 'invalid_memory_id', $is_err ? $result->get_error_code() : '', 'm
 // get_param() resolves JSON → POST → GET → URL, so a query string outranks the
 // path segment the route regex matched: an id that never passed the pattern can
 // still reach get_param(). The handler must charset-check it itself.
-$GLOBALS['_def_test_last_request'] = array();
+$GLOBALS['_widrow_test_last_request'] = array();
 foreach ( array( '../../anything', 'abc 123', 'abc/def', '' ) as $bad_id ) {
 	$req = new WP_REST_Request();
 	$req->set_param( 'id', $bad_id );
-	$result = DEF_Core_Staff_AI::rest_delete_memory( $req );
+	$result = Widrow_AI_Staff_AI::rest_delete_memory( $req );
 	$is_err = is_wp_error( $result );
 	assert_equals( 'invalid_memory_id', $is_err ? $result->get_error_code() : '', "id '$bad_id' is refused by the handler" );
 }
 assert_equals(
 	array(),
-	$GLOBALS['_def_test_last_request'],
+	$GLOBALS['_widrow_test_last_request'],
 	'no refused id ever reached the backend'
 );
 
@@ -1029,11 +1029,11 @@ assert_equals(
 // both must return plain copy — backend_request's diagnostic string carries the
 // internal backend URL.
 foreach ( array( 404 => 'staff_ai_not_found', 409 => 'staff_ai_conflict' ) as $code => $expected_error ) {
-	$GLOBALS['_def_test_request_code'] = $code;
+	$GLOBALS['_widrow_test_request_code'] = $code;
 	$req = new WP_REST_Request();
 	$req->set_param( 'id', 'abc-123' );
-	$result = DEF_Core_Staff_AI::rest_delete_memory( $req );
-	unset( $GLOBALS['_def_test_request_code'] );
+	$result = Widrow_AI_Staff_AI::rest_delete_memory( $req );
+	unset( $GLOBALS['_widrow_test_request_code'] );
 	$is_err = is_wp_error( $result );
 	assert_true( $is_err, "$code returns WP_Error" );
 	assert_equals( $expected_error, $is_err ? $result->get_error_code() : '', "$code → $expected_error" );
@@ -1047,29 +1047,29 @@ foreach ( array( 404 => 'staff_ai_not_found', 409 => 'staff_ai_conflict' ) as $c
 // ── 31b. Artifacts A-3: the two share buttons on the DEF rail ───────────
 echo "\n[31b] rest_share_document / rest_unshare_document\n";
 
-$GLOBALS['_def_test_request_body'] = json_encode( array(
+$GLOBALS['_widrow_test_request_body'] = json_encode( array(
 	'success' => true, 'channel' => 'staff_ai',
 	'share'   => array( 'token' => 'Kf3xQ9zL2mNpR7sTvW1yZa', 'created_at' => '2026-09-16T04:00:00Z' ),
 ) );
 $req = new WP_REST_Request();
 $req->set_param( 'id', 'abc123-def' );
-$resp = DEF_Core_Staff_AI::rest_share_document( $req );
+$resp = Widrow_AI_Staff_AI::rest_share_document( $req );
 assert_equals(
 	'https://def-api.test/api/staff-ai/documents/abc123-def/share',
-	$GLOBALS['_def_test_last_request']['url'] ?? '',
+	$GLOBALS['_widrow_test_last_request']['url'] ?? '',
 	'Share posts to DEF\'s own share route for that document'
 );
-assert_equals( 'POST', $GLOBALS['_def_test_last_request']['method'] ?? '', 'Share = POST' );
+assert_equals( 'POST', $GLOBALS['_widrow_test_last_request']['method'] ?? '', 'Share = POST' );
 assert_equals(
 	array( 'token' => 'Kf3xQ9zL2mNpR7sTvW1yZa', 'created_at' => '2026-09-16T04:00:00Z' ),
 	( is_object( $resp ) ? $resp->data : $resp )['share'] ?? null,
 	'the token DEF minted reaches the console'
 );
 
-$GLOBALS['_def_test_request_body'] = json_encode( array( 'success' => true, 'channel' => 'staff_ai', 'share' => null ) );
-$resp = DEF_Core_Staff_AI::rest_unshare_document( $req );
-unset( $GLOBALS['_def_test_request_body'] );
-assert_equals( 'DELETE', $GLOBALS['_def_test_last_request']['method'] ?? '', 'Stop sharing = DELETE, same path' );
+$GLOBALS['_widrow_test_request_body'] = json_encode( array( 'success' => true, 'channel' => 'staff_ai', 'share' => null ) );
+$resp = Widrow_AI_Staff_AI::rest_unshare_document( $req );
+unset( $GLOBALS['_widrow_test_request_body'] );
+assert_equals( 'DELETE', $GLOBALS['_widrow_test_last_request']['method'] ?? '', 'Stop sharing = DELETE, same path' );
 // array_key_exists, not ??: the null-coalesce treats a present null and an absent
 // key identically, and "the share is gone" is exactly a present null.
 $_unshared = is_object( $resp ) ? $resp->data : $resp;
@@ -1080,12 +1080,12 @@ assert_true(
 
 // The id is charset-checked in the HANDLER, not only in the route pattern:
 // get_param() resolves a query string ahead of the path segment the regex matched.
-$GLOBALS['_def_test_last_request'] = array();
+$GLOBALS['_widrow_test_last_request'] = array();
 foreach ( array( '../../anything', 'abc 123', 'abc/def', '' ) as $bad_id ) {
 	$req = new WP_REST_Request();
 	$req->set_param( 'id', $bad_id );
 	foreach ( array( 'rest_share_document', 'rest_unshare_document' ) as $handler ) {
-		$result = DEF_Core_Staff_AI::$handler( $req );
+		$result = Widrow_AI_Staff_AI::$handler( $req );
 		assert_equals(
 			'invalid_document_id',
 			is_wp_error( $result ) ? $result->get_error_code() : '',
@@ -1093,19 +1093,19 @@ foreach ( array( '../../anything', 'abc 123', 'abc/def', '' ) as $bad_id ) {
 		);
 	}
 }
-assert_equals( array(), $GLOBALS['_def_test_last_request'], 'no refused id ever reached the backend' );
+assert_equals( array(), $GLOBALS['_widrow_test_last_request'], 'no refused id ever reached the backend' );
 
 // DEF's 409 is user-facing copy (the non-artifact refusal), so it rides through
 // with its status intact; only the 404 is rewritten, because backend_request's
 // carries the internal DEF URL.
-$GLOBALS['_def_test_request_code'] = 409;
-$GLOBALS['_def_test_request_body'] = json_encode( array(
+$GLOBALS['_widrow_test_request_code'] = 409;
+$GLOBALS['_widrow_test_request_body'] = json_encode( array(
 	'detail' => 'Only an artifact can be shared by link. Other documents are files — send one as an attachment instead.',
 ) );
 $req = new WP_REST_Request();
 $req->set_param( 'id', 'abc123-def' );
-$result = DEF_Core_Staff_AI::rest_share_document( $req );
-unset( $GLOBALS['_def_test_request_code'], $GLOBALS['_def_test_request_body'] );
+$result = Widrow_AI_Staff_AI::rest_share_document( $req );
+unset( $GLOBALS['_widrow_test_request_code'], $GLOBALS['_widrow_test_request_body'] );
 assert_true( is_wp_error( $result ), 'a non-artifact is refused' );
 assert_equals( 409, is_wp_error( $result ) ? ( $result->get_error_data()['status'] ?? 0 ) : 0, '409 status preserved' );
 assert_true(
@@ -1113,9 +1113,9 @@ assert_true(
 	'DEF\'s own sentence is what the console shows'
 );
 
-$GLOBALS['_def_test_request_code'] = 404;
-$result = DEF_Core_Staff_AI::rest_share_document( $req );
-unset( $GLOBALS['_def_test_request_code'] );
+$GLOBALS['_widrow_test_request_code'] = 404;
+$result = Widrow_AI_Staff_AI::rest_share_document( $req );
+unset( $GLOBALS['_widrow_test_request_code'] );
 assert_equals( 'staff_ai_not_found', is_wp_error( $result ) ? $result->get_error_code() : '', 'a foreign or vanished id is the uniform 404' );
 assert_true(
 	false === strpos( is_wp_error( $result ) ? $result->get_error_message() : '', 'def-api.test' ),
@@ -1131,28 +1131,28 @@ $_wp_test_user_caps    = array();
 // UPLOAD_MAX_FILE_MB is the one ceiling, and its refusal must surface
 // LEGIBLY through the BFF reshaping seam — asserted on the surfaced
 // message, not just the status (the ten-bounds rider). Runs here because
-// the success-path stubs (wp_remote_request, DEF_Core_Tools) exist from
+// the success-path stubs (wp_remote_request, Widrow_AI_Tools) exist from
 // section 27 on.
 echo "\n[31] Upload init — over-size reaches the server; the refusal surfaces legibly\n";
 
-$_wp_test_options['def_core_api_key'] = 'test-api-key';
+$_wp_test_options['widrow_ai_api_key'] = 'test-api-key';
 $_wp_test_current_user     = new WP_User( 1 );
 $_wp_test_current_user->ID = 1;
 
-// (a) def-core no longer refuses: a 20MB init that used to 413 client-side
+// (a) widrow-ai no longer refuses: a 20MB init that used to 413 client-side
 // now succeeds end-to-end against a healthy backend stub.
-$GLOBALS['_def_test_request_code'] = 200;
-$GLOBALS['_def_test_request_body'] = '{"success":true,"file_id":"upload_ok"}';
+$GLOBALS['_widrow_test_request_code'] = 200;
+$GLOBALS['_widrow_test_request_body'] = '{"success":true,"file_id":"upload_ok"}';
 $request = new WP_REST_Request( 'POST', '/staff-ai/uploads/init' );
 $request->set_body_params( array(
 	'filename'   => 'big.pdf',
 	'mime_type'  => 'application/pdf',
 	'size_bytes' => 20000000, // 20MB — was refused client-side before 5.7.11.
 ) );
-$result = DEF_Core_Staff_AI::rest_upload_init( $request );
-assert_true( ! is_wp_error( $result ), '20MB init passes def-core — no client-side ceiling' );
+$result = Widrow_AI_Staff_AI::rest_upload_init( $request );
+assert_true( ! is_wp_error( $result ), '20MB init passes widrow-ai — no client-side ceiling' );
 
-// (b) the deleted boundary: 10MB and 10MB+1 are indistinguishable to def-core.
+// (b) the deleted boundary: 10MB and 10MB+1 are indistinguishable to widrow-ai.
 foreach ( array( 10485760, 10485761 ) as $boundary_probe ) {
 	$request = new WP_REST_Request( 'POST', '/staff-ai/uploads/init' );
 	$request->set_body_params( array(
@@ -1160,8 +1160,8 @@ foreach ( array( 10485760, 10485761 ) as $boundary_probe ) {
 		'mime_type'  => 'application/pdf',
 		'size_bytes' => $boundary_probe,
 	) );
-	$result = DEF_Core_Staff_AI::rest_upload_init( $request );
-	assert_true( ! is_wp_error( $result ), "size $boundary_probe passes def-core (no boundary at the old 10MB)" );
+	$result = Widrow_AI_Staff_AI::rest_upload_init( $request );
+	assert_true( ! is_wp_error( $result ), "size $boundary_probe passes widrow-ai (no boundary at the old 10MB)" );
 }
 
 // (c) BFF legibility, pinned against the LIVE PRODUCER's shapes — not an
@@ -1170,9 +1170,9 @@ foreach ( array( 10485760, 10485761 ) as $boundary_probe ) {
 // version of this pin stubbed 413 + a string detail — a shape DEF never
 // produces — and stayed green while the real dict stringified to "Array"
 // (#277 security leg). The wire-the-live-producer lesson, applied to itself.
-$GLOBALS['_def_test_request_code'] = 400;
-$GLOBALS['_def_test_request_body'] = '{"detail":{"error":"validation_failed","message":"File size exceeds maximum of 50.0MB"}}';
-$result = DEF_Core_Staff_AI::rest_upload_init( $request );
+$GLOBALS['_widrow_test_request_code'] = 400;
+$GLOBALS['_widrow_test_request_body'] = '{"detail":{"error":"validation_failed","message":"File size exceeds maximum of 50.0MB"}}';
+$result = Widrow_AI_Staff_AI::rest_upload_init( $request );
 assert_true( is_wp_error( $result ), 'server 400 surfaces as an error' );
 assert_equals( 'staff_ai_http_400', $result->get_error_code(), 'the 400 keeps its identity through the seam' );
 $data = $result->get_error_data();
@@ -1187,9 +1187,9 @@ assert_true( false === strpos( $msg, 'def-api.test' ), 'the internal DEF URL is 
 
 // (d) the 422-list shape (Pydantic) — DEF's count/validation refusals: the
 // entry msgs flatten into the user-facing message.
-$GLOBALS['_def_test_request_code'] = 422;
-$GLOBALS['_def_test_request_body'] = '{"detail":[{"loc":["body","urls"],"msg":"ensure this value has at most 5 items","type":"value_error.list.max_items"}]}';
-$result = DEF_Core_Staff_AI::rest_upload_init( $request );
+$GLOBALS['_widrow_test_request_code'] = 422;
+$GLOBALS['_widrow_test_request_body'] = '{"detail":[{"loc":["body","urls"],"msg":"ensure this value has at most 5 items","type":"value_error.list.max_items"}]}';
+$result = Widrow_AI_Staff_AI::rest_upload_init( $request );
 assert_true( is_wp_error( $result ), 'server 422 surfaces as an error' );
 $msg = $result->get_error_message();
 assert_true(
@@ -1197,15 +1197,15 @@ assert_true(
 	'a Pydantic 422 list flattens to its msg strings'
 );
 assert_true( false === strpos( $msg, 'Array' ), 'the list never stringifies to "Array"' );
-$GLOBALS['_def_test_request_code'] = 200;
-$GLOBALS['_def_test_request_body'] = '{"success":true}';
+$GLOBALS['_widrow_test_request_code'] = 200;
+$GLOBALS['_widrow_test_request_body'] = '{"success":true}';
 
 // ── Triage schedule (S4b): GET allowlist, 503-honesty, PUT full-replace ──
 // The card is the Staff-AI channel's first per-user WRITE-back settings
 // surface; the shapes pinned here are the ones the next such route will copy.
 echo "\n[TS-1] rest_get_triage_schedule field allowlist\n";
 
-$GLOBALS['_def_test_get_body'] = json_encode( array(
+$GLOBALS['_widrow_test_get_body'] = json_encode( array(
 	'success'  => true,
 	'schedule' => array(
 		'enabled'           => true,
@@ -1216,8 +1216,8 @@ $GLOBALS['_def_test_get_body'] = json_encode( array(
 		'internal_field'    => 'must-not-pass',
 	),
 ) );
-$resp = DEF_Core_Staff_AI::rest_get_triage_schedule();
-unset( $GLOBALS['_def_test_get_body'] );
+$resp = Widrow_AI_Staff_AI::rest_get_triage_schedule();
+unset( $GLOBALS['_widrow_test_get_body'] );
 $data     = is_object( $resp ) ? $resp->data : $resp;
 $schedule = $data['schedule'] ?? array();
 $keys     = array_keys( $schedule );
@@ -1236,13 +1236,13 @@ assert_true( true === $schedule['search_correspondent_mail'], 'an absent mail-se
 // hardcoded to true passes every assertion above. Then a user who unticks the box
 // reopens the form to find it ticked, and their next send-time edit full-replaces
 // ON over the stored OFF - this PR's own governing failure, on the read side.
-$GLOBALS['_def_test_get_body'] = json_encode( array( 'success' => true, 'schedule' => array(
+$GLOBALS['_widrow_test_get_body'] = json_encode( array( 'success' => true, 'schedule' => array(
 	'enabled' => true, 'send_hour_local' => 7, 'send_minute_local' => 0,
 	'timezone' => 'UTC', 'destinations' => array( 'email' ),
 	'search_correspondent_mail' => false,
 ) ) );
-$off = DEF_Core_Staff_AI::rest_get_triage_schedule();
-unset( $GLOBALS['_def_test_get_body'] );
+$off = Widrow_AI_Staff_AI::rest_get_triage_schedule();
+unset( $GLOBALS['_widrow_test_get_body'] );
 $off = ( is_object( $off ) ? $off->data : $off )['schedule'] ?? array();
 assert_true( false === $off['search_correspondent_mail'], 'a stored OFF reads as OFF' );
 assert_equals( array( 'email', 'slack' ), $schedule['destinations'], 'unknown destination types are dropped' );
@@ -1250,15 +1250,15 @@ assert_equals( 'Australia/Brisbane', $schedule['timezone'], 'timezone passes thr
 assert_equals( 30, $schedule['send_minute_local'], 'minute passes through' );
 
 echo "\n[TS-2] rest_get_triage_schedule 503 surfaces as an error, never defaults\n";
-$GLOBALS['_def_test_get_code'] = 503;
-$result = DEF_Core_Staff_AI::rest_get_triage_schedule();
-unset( $GLOBALS['_def_test_get_code'] );
+$GLOBALS['_widrow_test_get_code'] = 503;
+$result = Widrow_AI_Staff_AI::rest_get_triage_schedule();
+unset( $GLOBALS['_widrow_test_get_code'] );
 assert_true( is_wp_error( $result ), 'a backend 503 is an error, not disabled-defaults' );
 $msg = is_wp_error( $result ) ? $result->get_error_message() : '';
 assert_true( false === strpos( $msg, 'def-api.test' ), 'the internal DEF URL is not shown to the user' );
 
 echo "\n[TS-3] rest_put_triage_schedule refuses bad shapes before the backend\n";
-$GLOBALS['_def_test_last_request'] = array();
+$GLOBALS['_widrow_test_last_request'] = array();
 $bad_bodies = array(
 	'missing enabled'   => array( 'send_hour_local' => 7, 'send_minute_local' => 0, 'timezone' => 'UTC', 'destinations' => array( 'email' ) ),
 	'hour out of range' => array( 'enabled' => true, 'send_hour_local' => 24, 'send_minute_local' => 0, 'timezone' => 'UTC', 'destinations' => array( 'email' ) ),
@@ -1277,14 +1277,14 @@ foreach ( $bad_bodies as $label => $body ) {
 	foreach ( $body as $k => $v ) {
 		$req->set_param( $k, $v );
 	}
-	$result = DEF_Core_Staff_AI::rest_put_triage_schedule( $req );
+	$result = Widrow_AI_Staff_AI::rest_put_triage_schedule( $req );
 	$is_err = is_wp_error( $result );
 	assert_equals( 'def_triage_schedule_invalid', $is_err ? $result->get_error_code() : '', "PUT refused: $label" );
 }
-assert_equals( array(), $GLOBALS['_def_test_last_request'], 'no refused body ever reached the backend' );
+assert_equals( array(), $GLOBALS['_widrow_test_last_request'], 'no refused body ever reached the backend' );
 
 echo "\n[TS-4] rest_put_triage_schedule forwards the FULL object (full-replace)\n";
-$GLOBALS['_def_test_request_body'] = json_encode( array(
+$GLOBALS['_widrow_test_request_body'] = json_encode( array(
 	'success'  => true,
 	'schedule' => array(
 		'enabled'           => true,
@@ -1300,16 +1300,16 @@ $req->set_param( 'send_hour_local', 7 );
 $req->set_param( 'send_minute_local', 0 );
 $req->set_param( 'timezone', 'Australia/Brisbane' );
 $req->set_param( 'destinations', array( 'email', 'slack', 'teams', 'slack' ) );
-$resp = DEF_Core_Staff_AI::rest_put_triage_schedule( $req );
-unset( $GLOBALS['_def_test_request_body'] );
+$resp = Widrow_AI_Staff_AI::rest_put_triage_schedule( $req );
+unset( $GLOBALS['_widrow_test_request_body'] );
 assert_true( ! is_wp_error( $resp ), 'a valid PUT succeeds' );
-assert_equals( 'PUT', $GLOBALS['_def_test_last_request']['method'] ?? '', 'verb is PUT' );
+assert_equals( 'PUT', $GLOBALS['_widrow_test_last_request']['method'] ?? '', 'verb is PUT' );
 assert_equals(
 	'https://def-api.test/api/staff-ai/triage-schedule',
-	$GLOBALS['_def_test_last_request']['url'] ?? '',
+	$GLOBALS['_widrow_test_last_request']['url'] ?? '',
 	'the DEF path carries nothing user-scoped'
 );
-$sent = json_decode( $GLOBALS['_def_test_last_request']['body'] ?? '', true );
+$sent = json_decode( $GLOBALS['_widrow_test_last_request']['body'] ?? '', true );
 $sent_keys = array_keys( is_array( $sent ) ? $sent : array() );
 sort( $sent_keys );
 assert_equals(
@@ -1330,7 +1330,7 @@ echo "\n[TS-4b] the mail-search flag survives OFF, and refuses a non-boolean\n";
 // The default is ON everywhere, which makes OFF the state a mistake would
 // silently lose: a truthy default, a dropped forward, or a mirror reading
 // absence as on would all still pass TS-4 and leave the switch inoperative.
-$GLOBALS['_def_test_request_body'] = json_encode( array( 'success' => true, 'schedule' => array() ) );
+$GLOBALS['_widrow_test_request_body'] = json_encode( array( 'success' => true, 'schedule' => array() ) );
 $req = new WP_REST_Request();
 $req->set_param( 'enabled', true );
 $req->set_param( 'send_hour_local', 7 );
@@ -1338,24 +1338,24 @@ $req->set_param( 'send_minute_local', 0 );
 $req->set_param( 'timezone', 'UTC' );
 $req->set_param( 'destinations', array( 'email' ) );
 $req->set_param( 'search_correspondent_mail', false );
-$resp = DEF_Core_Staff_AI::rest_put_triage_schedule( $req );
-unset( $GLOBALS['_def_test_request_body'] );
+$resp = Widrow_AI_Staff_AI::rest_put_triage_schedule( $req );
+unset( $GLOBALS['_widrow_test_request_body'] );
 assert_true( ! is_wp_error( $resp ), 'switching the mail search off is a valid save' );
-$sent = json_decode( $GLOBALS['_def_test_last_request']['body'] ?? '', true );
+$sent = json_decode( $GLOBALS['_widrow_test_last_request']['body'] ?? '', true );
 assert_true( false === ( $sent['search_correspondent_mail'] ?? null ), 'OFF reaches DEF as false, not dropped and not re-defaulted' );
 
 echo "\n[TS-5] rest_run_now_triage_schedule asks DEF, carrying nothing user-scoped\n";
-$GLOBALS['_def_test_request_body'] = json_encode( array( 'success' => true, 'run_now' => array() ) );
-$resp = DEF_Core_Staff_AI::rest_run_now_triage_schedule();
-unset( $GLOBALS['_def_test_request_body'] );
+$GLOBALS['_widrow_test_request_body'] = json_encode( array( 'success' => true, 'run_now' => array() ) );
+$resp = Widrow_AI_Staff_AI::rest_run_now_triage_schedule();
+unset( $GLOBALS['_widrow_test_request_body'] );
 assert_true( ! is_wp_error( $resp ), 'run-now succeeds' );
-assert_equals( 'POST', $GLOBALS['_def_test_last_request']['method'] ?? '', 'verb is POST' );
+assert_equals( 'POST', $GLOBALS['_widrow_test_last_request']['method'] ?? '', 'verb is POST' );
 assert_equals(
 	'https://def-api.test/api/staff-ai/triage-schedule/run-now',
-	$GLOBALS['_def_test_last_request']['url'] ?? '',
+	$GLOBALS['_widrow_test_last_request']['url'] ?? '',
 	'the DEF path carries nothing user-scoped - the owner comes from the forwarded identity'
 );
-$run_sent = json_decode( $GLOBALS['_def_test_last_request']['body'] ?? '', true );
+$run_sent = json_decode( $GLOBALS['_widrow_test_last_request']['body'] ?? '', true );
 assert_equals(
 	array(),
 	is_array( $run_sent ) ? $run_sent : array( 'unexpected' ),
@@ -1363,9 +1363,9 @@ assert_equals(
 );
 
 echo "\n[TS-6] rest_run_now_triage_schedule refuses a switched-off schedule, actionably\n";
-$GLOBALS['_def_test_request_code'] = 409;
-$resp = DEF_Core_Staff_AI::rest_run_now_triage_schedule();
-unset( $GLOBALS['_def_test_request_code'] );
+$GLOBALS['_widrow_test_request_code'] = 409;
+$resp = Widrow_AI_Staff_AI::rest_run_now_triage_schedule();
+unset( $GLOBALS['_widrow_test_request_code'] );
 assert_true( is_wp_error( $resp ), 'a switched-off schedule is refused' );
 assert_true(
 	false !== strpos( is_wp_error( $resp ) ? $resp->get_error_message() : '', 'Turn on' ),
@@ -1373,28 +1373,28 @@ assert_true(
 );
 
 echo "\n[TS-7] rest_run_now_triage_schedule surfaces a DEF failure, never a silent no-op\n";
-$GLOBALS['_def_test_request_code'] = 503;
-$resp = DEF_Core_Staff_AI::rest_run_now_triage_schedule();
-unset( $GLOBALS['_def_test_request_code'] );
+$GLOBALS['_widrow_test_request_code'] = 503;
+$resp = Widrow_AI_Staff_AI::rest_run_now_triage_schedule();
+unset( $GLOBALS['_widrow_test_request_code'] );
 assert_true( is_wp_error( $resp ), 'a DEF failure is an error, not a cheerful success' );
 $run_msg = is_wp_error( $resp ) ? $resp->get_error_message() : '';
 assert_true( false === strpos( $run_msg, 'def-api.test' ), 'the internal DEF URL is not shown to the user' );
 
 echo "\n[TS-9] rest_delete_triage_schedule retires the SETUP, carrying nothing user-scoped\n";
-$GLOBALS['_def_test_request_body'] = json_encode( array( 'success' => true, 'deleted' => true ) );
-$resp = DEF_Core_Staff_AI::rest_delete_triage_schedule();
-unset( $GLOBALS['_def_test_request_body'] );
+$GLOBALS['_widrow_test_request_body'] = json_encode( array( 'success' => true, 'deleted' => true ) );
+$resp = Widrow_AI_Staff_AI::rest_delete_triage_schedule();
+unset( $GLOBALS['_widrow_test_request_body'] );
 assert_true( ! is_wp_error( $resp ), 'delete succeeds' );
-assert_equals( 'DELETE', $GLOBALS['_def_test_last_request']['method'] ?? '', 'verb is DELETE' );
+assert_equals( 'DELETE', $GLOBALS['_widrow_test_last_request']['method'] ?? '', 'verb is DELETE' );
 assert_equals(
 	'https://def-api.test/api/staff-ai/triage-schedule',
-	$GLOBALS['_def_test_last_request']['url'] ?? '',
+	$GLOBALS['_widrow_test_last_request']['url'] ?? '',
 	'the DEF path carries nothing user-scoped - the owner comes from the forwarded identity'
 );
 assert_true( true === ( $resp->get_data()['deleted'] ?? null ), 'the deleted flag is passed through' );
 
 echo "\n[TS-10] the last-run summary is allowlisted to status and time - never the digest\n";
-$GLOBALS['_def_test_get_body'] = json_encode( array(
+$GLOBALS['_widrow_test_get_body'] = json_encode( array(
 	'success'  => true,
 	'schedule' => array( 'enabled' => true ),
 	// A backend that grew fields must not leak them into the card. The digest
@@ -1405,8 +1405,8 @@ $GLOBALS['_def_test_get_body'] = json_encode( array(
 		'digest' => array( 'mailbox' => 'owner@example.com', 'items' => array( 'secret subject' ) ),
 	),
 ) );
-$resp = DEF_Core_Staff_AI::rest_get_triage_schedule();
-unset( $GLOBALS['_def_test_get_body'] );
+$resp = Widrow_AI_Staff_AI::rest_get_triage_schedule();
+unset( $GLOBALS['_widrow_test_get_body'] );
 $last = $resp->get_data()['last_run'] ?? array();
 assert_equals( array( 'status', 'at' ), array_keys( $last ), 'exactly status and at' );
 assert_equals( 'failed', $last['status'] ?? '', 'status passed through' );
@@ -1416,7 +1416,7 @@ assert_true(
 );
 
 echo "\n[TS-10b] the delivery facts pass through when DEF sends them, typed - nothing else rides along\n";
-$GLOBALS['_def_test_get_body'] = json_encode( array(
+$GLOBALS['_widrow_test_get_body'] = json_encode( array(
 	'success'  => true,
 	'schedule' => array( 'enabled' => true ),
 	'last_run' => array(
@@ -1427,8 +1427,8 @@ $GLOBALS['_def_test_get_body'] = json_encode( array(
 		'digest'       => array( 'items' => array( 'secret subject' ) ),
 	),
 ) );
-$resp = DEF_Core_Staff_AI::rest_get_triage_schedule();
-unset( $GLOBALS['_def_test_get_body'] );
+$resp = Widrow_AI_Staff_AI::rest_get_triage_schedule();
+unset( $GLOBALS['_widrow_test_get_body'] );
 $last = $resp->get_data()['last_run'] ?? array();
 assert_equals( array( 'status', 'at', 'delivered', 'delivered_at' ), array_keys( $last ), 'status, at and the two delivery facts' );
 assert_true( true === ( $last['delivered'] ?? null ), 'delivered stays a boolean' );
@@ -1436,11 +1436,11 @@ assert_equals( '2026-09-24T13:30:38+00:00', $last['delivered_at'] ?? '', 'delive
 assert_true( false === strpos( json_encode( $resp->get_data() ), 'secret subject' ), 'the digest still never rides along' );
 
 echo "\n[TS-11] no runs yet reads as null, never an invented status\n";
-$GLOBALS['_def_test_get_body'] = json_encode( array(
+$GLOBALS['_widrow_test_get_body'] = json_encode( array(
 	'success' => true, 'schedule' => array( 'enabled' => true ), 'last_run' => null,
 ) );
-$resp = DEF_Core_Staff_AI::rest_get_triage_schedule();
-unset( $GLOBALS['_def_test_get_body'] );
+$resp = Widrow_AI_Staff_AI::rest_get_triage_schedule();
+unset( $GLOBALS['_widrow_test_get_body'] );
 // array_key_exists, not ??: the null-coalesce treats a present null and an
 // absent key identically, so `?? 'missing'` could never distinguish them.
 $_data = $resp->get_data();
@@ -1451,7 +1451,7 @@ assert_true(
 
 // ── Phase 4a: the mailbox picker's BFF route ─────────────────────────────
 echo "\n[TS-16] rest_mail_connections allowlists rows and carries setup_required\n";
-$GLOBALS['_def_test_get_body'] = json_encode( array(
+$GLOBALS['_widrow_test_get_body'] = json_encode( array(
 	'success'        => true,
 	'setup_required' => false,
 	'connections'    => array(
@@ -1463,8 +1463,8 @@ $GLOBALS['_def_test_get_body'] = json_encode( array(
 		array( 'toolkit' => 'gmail' ), // no id - not a bindable row, dropped
 	),
 ) );
-$resp = DEF_Core_Staff_AI::rest_mail_connections();
-unset( $GLOBALS['_def_test_get_body'] );
+$resp = Widrow_AI_Staff_AI::rest_mail_connections();
+unset( $GLOBALS['_widrow_test_get_body'] );
 $data = is_object( $resp ) ? $resp->data : $resp;
 assert_equals(
 	array(
@@ -1478,22 +1478,22 @@ assert_true( false === strpos( json_encode( $data ), 'MUST-NOT-PASS' ), 'no extr
 assert_equals( false, $data['setup_required'], 'setup_required rides through' );
 
 echo "\n[TS-17] rest_mail_connections surfaces a DEF fault, never an empty picker\n";
-$GLOBALS['_def_test_get_code'] = 502;
-$result = DEF_Core_Staff_AI::rest_mail_connections();
-unset( $GLOBALS['_def_test_get_code'] );
+$GLOBALS['_widrow_test_get_code'] = 502;
+$result = Widrow_AI_Staff_AI::rest_mail_connections();
+unset( $GLOBALS['_widrow_test_get_code'] );
 assert_true( is_wp_error( $result ), 'an aggregator fault is an error - an empty list would read as "no other mailbox"' );
 
 // ── Slice 4-A (v6.6.0): the chat primary-mailbox BFF routes ──────────────
 echo "\n[TS-4A-1] rest_set_primary_mailbox forwards the pick and allowlists DEF's answer\n";
-$GLOBALS['_def_test_request_body'] = json_encode( array(
+$GLOBALS['_widrow_test_request_body'] = json_encode( array(
 	'success' => true,
 	'primary' => array( 'toolkit' => 'outlook', 'connected_account_id' => 'ca_2',
 	                    'future_extra' => 'MUST-NOT-PASS' ),
 ) );
 $request = new WP_REST_Request( 'PUT', '/staff-ai/primary-mailbox' );
 $request->set_param( 'connected_account_id', 'ca_2' );
-$resp = DEF_Core_Staff_AI::rest_set_primary_mailbox( $request );
-unset( $GLOBALS['_def_test_request_body'] );
+$resp = Widrow_AI_Staff_AI::rest_set_primary_mailbox( $request );
+unset( $GLOBALS['_widrow_test_request_body'] );
 $data = is_object( $resp ) ? $resp->data : $resp;
 assert_equals(
 	array( 'toolkit' => 'outlook', 'connected_account_id' => 'ca_2' ),
@@ -1504,32 +1504,32 @@ assert_true( false === strpos( json_encode( $data ), 'MUST-NOT-PASS' ), 'no extr
 
 echo "\n[TS-4A-2] rest_set_primary_mailbox refuses an empty pick without calling DEF\n";
 $request = new WP_REST_Request( 'PUT', '/staff-ai/primary-mailbox' );
-$result = DEF_Core_Staff_AI::rest_set_primary_mailbox( $request );
+$result = Widrow_AI_Staff_AI::rest_set_primary_mailbox( $request );
 assert_true( is_wp_error( $result ), 'no connected_account_id refuses 422 by name' );
 
 echo "\n[TS-4A-3] rest_clear_primary_mailbox clears one provider, refuses none\n";
-$GLOBALS['_def_test_request_body'] = json_encode( array( 'success' => true, 'cleared' => 'outlook' ) );
+$GLOBALS['_widrow_test_request_body'] = json_encode( array( 'success' => true, 'cleared' => 'outlook' ) );
 $request = new WP_REST_Request( 'DELETE', '/staff-ai/primary-mailbox' );
 $request->set_param( 'toolkit', 'outlook' );
-$resp = DEF_Core_Staff_AI::rest_clear_primary_mailbox( $request );
-unset( $GLOBALS['_def_test_request_body'] );
+$resp = Widrow_AI_Staff_AI::rest_clear_primary_mailbox( $request );
+unset( $GLOBALS['_widrow_test_request_body'] );
 $data = is_object( $resp ) ? $resp->data : $resp;
 assert_equals( 'outlook', $data['cleared'], 'the cleared provider is named back' );
 $request = new WP_REST_Request( 'DELETE', '/staff-ai/primary-mailbox' );
-$result = DEF_Core_Staff_AI::rest_clear_primary_mailbox( $request );
+$result = Widrow_AI_Staff_AI::rest_clear_primary_mailbox( $request );
 assert_true( is_wp_error( $result ), 'no toolkit refuses 422 by name' );
 
 echo "\n[TS-4A-4] a DEF fault on the primary PUT surfaces as an error, never a silent no-op\n";
-$GLOBALS['_def_test_request_code'] = 502;
+$GLOBALS['_widrow_test_request_code'] = 502;
 $request = new WP_REST_Request( 'PUT', '/staff-ai/primary-mailbox' );
 $request->set_param( 'connected_account_id', 'ca_2' );
-$result = DEF_Core_Staff_AI::rest_set_primary_mailbox( $request );
-unset( $GLOBALS['_def_test_request_code'] );
+$result = Widrow_AI_Staff_AI::rest_set_primary_mailbox( $request );
+unset( $GLOBALS['_widrow_test_request_code'] );
 assert_true( is_wp_error( $result ), 'a DEF fault is an error - the picker must not pretend it saved' );
 
 // ── Free-text tasks (Phase 3): allowlist exactness, refusals, forwarding ──
 echo "\n[FT-1] rest_list_tasks allowlists each task - owner_email NEVER passes\n";
-$GLOBALS['_def_test_get_body'] = json_encode( array(
+$GLOBALS['_widrow_test_get_body'] = json_encode( array(
 	'success' => true,
 	'tasks'   => array( array(
 		'id'                => 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
@@ -1550,8 +1550,8 @@ $GLOBALS['_def_test_get_body'] = json_encode( array(
 		'owner_email'       => 'must-not-pass@example.com',
 	) ),
 ) );
-$resp = DEF_Core_Staff_AI::rest_list_tasks();
-unset( $GLOBALS['_def_test_get_body'] );
+$resp = Widrow_AI_Staff_AI::rest_list_tasks();
+unset( $GLOBALS['_widrow_test_get_body'] );
 $task = $resp->get_data()['tasks'][0] ?? array();
 $keys = array_keys( $task );
 sort( $keys );
@@ -1571,7 +1571,7 @@ assert_true(
 );
 
 echo "\n[FT-2] rest_create_task refuses bad shapes before the backend\n";
-$GLOBALS['_def_test_last_request'] = array();
+$GLOBALS['_widrow_test_last_request'] = array();
 $_ft_valid = array(
 	'name'              => 'Daily brief',
 	'instruction'       => 'Write my checklist.',
@@ -1607,13 +1607,13 @@ foreach ( $_ft_bad as $label => $body ) {
 	foreach ( $body as $k => $v ) {
 		$req->set_param( $k, $v );
 	}
-	$result = DEF_Core_Staff_AI::rest_create_task( $req );
+	$result = Widrow_AI_Staff_AI::rest_create_task( $req );
 	assert_equals( 'def_task_invalid', is_wp_error( $result ) ? $result->get_error_code() : '', "create refused: $label" );
 }
-assert_equals( array(), $GLOBALS['_def_test_last_request'], 'no refused body ever reached the backend' );
+assert_equals( array(), $GLOBALS['_widrow_test_last_request'], 'no refused body ever reached the backend' );
 
 echo "\n[FT-3] rest_create_task forwards the complete whitelisted object only\n";
-$GLOBALS['_def_test_request_body'] = json_encode( array( 'success' => true, 'task' => $_ft_valid + array( 'id' => 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' ) ) );
+$GLOBALS['_widrow_test_request_body'] = json_encode( array( 'success' => true, 'task' => $_ft_valid + array( 'id' => 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' ) ) );
 $req = new WP_REST_Request();
 foreach ( $_ft_valid as $k => $v ) {
 	$req->set_param( $k, $v );
@@ -1622,16 +1622,16 @@ foreach ( $_ft_valid as $k => $v ) {
 // or its delivery - at another user. The whitelist simply never reads them.
 $req->set_param( 'owner_email', 'attacker@evil.example' );
 $req->set_param( 'actor_sub', 'user-999' );
-$resp = DEF_Core_Staff_AI::rest_create_task( $req );
-unset( $GLOBALS['_def_test_request_body'] );
+$resp = Widrow_AI_Staff_AI::rest_create_task( $req );
+unset( $GLOBALS['_widrow_test_request_body'] );
 assert_true( ! is_wp_error( $resp ), 'a valid create succeeds' );
-assert_equals( 'POST', $GLOBALS['_def_test_last_request']['method'] ?? '', 'verb is POST' );
+assert_equals( 'POST', $GLOBALS['_widrow_test_last_request']['method'] ?? '', 'verb is POST' );
 assert_equals(
 	'https://def-api.test/api/staff-ai/tasks',
-	$GLOBALS['_def_test_last_request']['url'] ?? '',
+	$GLOBALS['_widrow_test_last_request']['url'] ?? '',
 	'the DEF path carries nothing user-scoped'
 );
-$sent = json_decode( $GLOBALS['_def_test_last_request']['body'] ?? '', true );
+$sent = json_decode( $GLOBALS['_widrow_test_last_request']['body'] ?? '', true );
 $sent_keys = array_keys( is_array( $sent ) ? $sent : array() );
 sort( $sent_keys );
 assert_equals(
@@ -1651,42 +1651,42 @@ assert_equals( '', $sent['model'] ?? 'MISSING', 'absent model forwards as empty 
 assert_equals( 'custom', $sent['kind'] ?? '', 'absent kind forwards as custom (cached-page compatibility)' );
 
 echo "\n[FT-W21] a Notes to Staff AI task: kind passes, name and instruction are DEF's\n";
-$GLOBALS['_def_test_request_body'] = json_encode( array( 'success' => true, 'task' => array( 'id' => 'dddddddd-dddd-4ddd-8ddd-dddddddddddd', 'kind' => 'slack_notes' ) ) );
+$GLOBALS['_widrow_test_request_body'] = json_encode( array( 'success' => true, 'task' => array( 'id' => 'dddddddd-dddd-4ddd-8ddd-dddddddddddd', 'kind' => 'slack_notes' ) ) );
 $req = new WP_REST_Request();
 foreach ( array_diff_key( $_ft_valid, array( 'name' => 1, 'instruction' => 1 ) ) as $k => $v ) {
 	$req->set_param( $k, $v );
 }
 $req->set_param( 'kind', 'slack_notes' );
 $req->set_param( 'cadence', 'hourly' );
-$resp = DEF_Core_Staff_AI::rest_create_task( $req );
-unset( $GLOBALS['_def_test_request_body'] );
+$resp = Widrow_AI_Staff_AI::rest_create_task( $req );
+unset( $GLOBALS['_widrow_test_request_body'] );
 assert_true( ! is_wp_error( $resp ), 'a Notes create with no name or instruction succeeds' );
-$sent = json_decode( $GLOBALS['_def_test_last_request']['body'] ?? '', true );
+$sent = json_decode( $GLOBALS['_widrow_test_last_request']['body'] ?? '', true );
 assert_equals( 'slack_notes', $sent['kind'] ?? '', 'the kind forwards to DEF' );
 assert_equals( 'slack_notes', $resp->get_data()['task']['kind'] ?? '', 'and rides the allowlist back' );
 $req = new WP_REST_Request();
 foreach ( array_merge( $_ft_valid, array( 'kind' => 'webhook_notes' ) ) as $k => $v ) {
 	$req->set_param( $k, $v );
 }
-$result = DEF_Core_Staff_AI::rest_create_task( $req );
+$result = Widrow_AI_Staff_AI::rest_create_task( $req );
 assert_equals( 'def_task_invalid', is_wp_error( $result ) ? $result->get_error_code() : '', 'an unknown kind is refused' );
 $req = new WP_REST_Request();
 foreach ( array_diff_key( $_ft_valid, array( 'instruction' => 1 ) ) as $k => $v ) {
 	$req->set_param( $k, $v );
 }
-$result = DEF_Core_Staff_AI::rest_create_task( $req );
+$result = Widrow_AI_Staff_AI::rest_create_task( $req );
 assert_equals( 'def_task_invalid', is_wp_error( $result ) ? $result->get_error_code() : '', 'a custom task still needs its instruction' );
-$GLOBALS['_def_test_get_body'] = json_encode( array( 'success' => true, 'tasks' => array(), 'address_as' => 'Sue' ) );
-$resp = DEF_Core_Staff_AI::rest_list_tasks();
-unset( $GLOBALS['_def_test_get_body'] );
+$GLOBALS['_widrow_test_get_body'] = json_encode( array( 'success' => true, 'tasks' => array(), 'address_as' => 'Sue' ) );
+$resp = Widrow_AI_Staff_AI::rest_list_tasks();
+unset( $GLOBALS['_widrow_test_get_body'] );
 assert_equals( 'Sue', $resp->get_data()['address_as'] ?? '', 'the list carries the word a note starts with' );
 
 echo "\n[FT-4] rest_run_now_task maps DEF's two actionable refusals\n";
-$GLOBALS['_def_test_request_code'] = 409;
+$GLOBALS['_widrow_test_request_code'] = 409;
 $req = new WP_REST_Request();
 $req->set_param( 'task_id', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' );
-$result = DEF_Core_Staff_AI::rest_run_now_task( $req );
-unset( $GLOBALS['_def_test_request_code'] );
+$result = Widrow_AI_Staff_AI::rest_run_now_task( $req );
+unset( $GLOBALS['_widrow_test_request_code'] );
 assert_true( is_wp_error( $result ), 'a 409 surfaces as an error' );
 assert_true(
 	false !== strpos( is_wp_error( $result ) ? $result->get_error_message() : '', 'Turn this task on' ),
@@ -1694,11 +1694,11 @@ assert_true(
 );
 
 echo "\n[FT-4b] rest_run_now_task surfaces a vanished task actionably\n";
-$GLOBALS['_def_test_request_code'] = 404;
+$GLOBALS['_widrow_test_request_code'] = 404;
 $req = new WP_REST_Request();
 $req->set_param( 'task_id', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' );
-$result = DEF_Core_Staff_AI::rest_run_now_task( $req );
-unset( $GLOBALS['_def_test_request_code'] );
+$result = Widrow_AI_Staff_AI::rest_run_now_task( $req );
+unset( $GLOBALS['_widrow_test_request_code'] );
 assert_true( is_wp_error( $result ), 'a 404 surfaces as an error' );
 assert_true(
 	false !== strpos( is_wp_error( $result ) ? $result->get_error_message() : '', 'no longer exists' ),
@@ -1706,24 +1706,24 @@ assert_true(
 );
 
 echo "\n[FT-6] rest_update_task forwards PUT to the encoded task path\n";
-$GLOBALS['_def_test_request_body'] = json_encode( array( 'success' => true, 'task' => $_ft_valid + array( 'id' => 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' ) ) );
+$GLOBALS['_widrow_test_request_body'] = json_encode( array( 'success' => true, 'task' => $_ft_valid + array( 'id' => 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' ) ) );
 $req = new WP_REST_Request();
 foreach ( $_ft_valid as $k => $v ) {
 	$req->set_param( $k, $v );
 }
 $req->set_param( 'task_id', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' );
-$resp = DEF_Core_Staff_AI::rest_update_task( $req );
-unset( $GLOBALS['_def_test_request_body'] );
+$resp = Widrow_AI_Staff_AI::rest_update_task( $req );
+unset( $GLOBALS['_widrow_test_request_body'] );
 assert_true( ! is_wp_error( $resp ), 'a valid update succeeds' );
-assert_equals( 'PUT', $GLOBALS['_def_test_last_request']['method'] ?? '', 'verb is PUT' );
+assert_equals( 'PUT', $GLOBALS['_widrow_test_last_request']['method'] ?? '', 'verb is PUT' );
 assert_equals(
 	'https://def-api.test/api/staff-ai/tasks/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-	$GLOBALS['_def_test_last_request']['url'] ?? '',
+	$GLOBALS['_widrow_test_last_request']['url'] ?? '',
 	'the task id rides the encoded item path'
 );
 
 echo "\n[FT-7] a multibyte name is measured in CHARACTERS, never bytes\n";
-$GLOBALS['_def_test_request_body'] = json_encode( array( 'success' => true, 'task' => $_ft_valid + array( 'id' => 'cccccccc-cccc-4ccc-8ccc-cccccccccccc' ) ) );
+$GLOBALS['_widrow_test_request_body'] = json_encode( array( 'success' => true, 'task' => $_ft_valid + array( 'id' => 'cccccccc-cccc-4ccc-8ccc-cccccccccccc' ) ) );
 $req = new WP_REST_Request();
 foreach ( $_ft_valid as $k => $v ) {
 	$req->set_param( $k, $v );
@@ -1732,33 +1732,33 @@ foreach ( $_ft_valid as $k => $v ) {
 // characters. strlen here would refuse a name DEF accepts - the 5.7.5
 // display-name byte-cut class, pinned so it cannot ship a third time.
 $req->set_param( 'name', str_repeat( "\u{6F22}", 50 ) );
-$resp = DEF_Core_Staff_AI::rest_create_task( $req );
-unset( $GLOBALS['_def_test_request_body'] );
+$resp = Widrow_AI_Staff_AI::rest_create_task( $req );
+unset( $GLOBALS['_widrow_test_request_body'] );
 assert_true( ! is_wp_error( $resp ), 'a 50-character CJK name is accepted (150 bytes is irrelevant)' );
 
 echo "\n[FT-8] a weekly task's cadence and day ride the forward intact (6.1.0)\n";
-$GLOBALS['_def_test_request_body'] = json_encode( array( 'success' => true, 'task' => $_ft_valid + array( 'id' => 'cccccccc-cccc-4ccc-8ccc-cccccccccccc' ) ) );
+$GLOBALS['_widrow_test_request_body'] = json_encode( array( 'success' => true, 'task' => $_ft_valid + array( 'id' => 'cccccccc-cccc-4ccc-8ccc-cccccccccccc' ) ) );
 $req = new WP_REST_Request();
 foreach ( array_merge( $_ft_valid, array( 'cadence' => 'weekly', 'send_weekday' => 4 ) ) as $k => $v ) {
 	$req->set_param( $k, $v );
 }
-$resp = DEF_Core_Staff_AI::rest_create_task( $req );
-unset( $GLOBALS['_def_test_request_body'] );
+$resp = Widrow_AI_Staff_AI::rest_create_task( $req );
+unset( $GLOBALS['_widrow_test_request_body'] );
 assert_true( ! is_wp_error( $resp ), 'a weekly create succeeds' );
-$sent = json_decode( $GLOBALS['_def_test_last_request']['body'] ?? '', true );
+$sent = json_decode( $GLOBALS['_widrow_test_last_request']['body'] ?? '', true );
 assert_equals( 'weekly', $sent['cadence'] ?? '', 'cadence forwards as chosen' );
 assert_equals( 4, $sent['send_weekday'] ?? -1, 'the chosen day forwards untouched' );
 
 echo "\n[FT-8b] a cadence DEF never sent defaults to daily at the allowlist\n";
-$GLOBALS['_def_test_get_body'] = json_encode( array(
+$GLOBALS['_widrow_test_get_body'] = json_encode( array(
 	'success' => true,
 	'tasks'   => array(
 		array( 'id' => 'dddddddd-dddd-4ddd-8ddd-dddddddddddd', 'name' => 'X', 'instruction' => 'Y', 'enabled' => true, 'cadence' => 'fortnightly', 'send_weekday' => 99 ),
 		array( 'id' => 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', 'name' => 'X', 'instruction' => 'Y', 'enabled' => true, 'cadence' => 'weekly', 'send_weekday' => -1 ),
 	),
 ) );
-$resp = DEF_Core_Staff_AI::rest_list_tasks();
-unset( $GLOBALS['_def_test_get_body'] );
+$resp = Widrow_AI_Staff_AI::rest_list_tasks();
+unset( $GLOBALS['_widrow_test_get_body'] );
 $task = $resp->get_data()['tasks'][0] ?? array();
 assert_equals( 'daily', $task['cadence'] ?? '', 'an unknown cadence renders as daily, never raw' );
 assert_equals( 0, $task['send_weekday'] ?? -1, 'an out-of-range weekday renders as 0' );
@@ -1768,53 +1768,53 @@ $task2 = $resp->get_data()['tasks'][1] ?? array();
 assert_equals( 0, $task2['send_weekday'] ?? -1, 'a negative weekday clamps to 0, never reaches the badge' );
 
 echo "\n[FT-5] rest_delete_task forwards DELETE to the task path\n";
-$GLOBALS['_def_test_request_body'] = json_encode( array( 'success' => true, 'deleted' => true ) );
+$GLOBALS['_widrow_test_request_body'] = json_encode( array( 'success' => true, 'deleted' => true ) );
 $req = new WP_REST_Request();
 $req->set_param( 'task_id', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' );
-$resp = DEF_Core_Staff_AI::rest_delete_task( $req );
-unset( $GLOBALS['_def_test_request_body'] );
+$resp = Widrow_AI_Staff_AI::rest_delete_task( $req );
+unset( $GLOBALS['_widrow_test_request_body'] );
 assert_true( ! is_wp_error( $resp ), 'delete succeeds' );
-assert_equals( 'DELETE', $GLOBALS['_def_test_last_request']['method'] ?? '', 'verb is DELETE' );
+assert_equals( 'DELETE', $GLOBALS['_widrow_test_last_request']['method'] ?? '', 'verb is DELETE' );
 assert_equals(
 	'https://def-api.test/api/staff-ai/tasks/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-	$GLOBALS['_def_test_last_request']['url'] ?? '',
+	$GLOBALS['_widrow_test_last_request']['url'] ?? '',
 	'the task id rides the path, nothing else user-scoped'
 );
 assert_true( true === ( $resp->get_data()['deleted'] ?? null ), 'the deleted flag is passed through' );
 
 echo "\n[TS-12] rest_user_integration_disconnect ends the caller's own access\n";
-$GLOBALS['_def_test_request_body'] = json_encode( array( 'requested' => 1, 'failed' => 0 ) );
+$GLOBALS['_widrow_test_request_body'] = json_encode( array( 'requested' => 1, 'failed' => 0 ) );
 $req = new WP_REST_Request();
 $req->set_param( 'server_id', 'srv-1' );
-$resp = DEF_Core_Staff_AI::rest_user_integration_disconnect( $req );
-unset( $GLOBALS['_def_test_request_body'] );
+$resp = Widrow_AI_Staff_AI::rest_user_integration_disconnect( $req );
+unset( $GLOBALS['_widrow_test_request_body'] );
 assert_true( ! is_wp_error( $resp ), 'disconnect succeeds' );
-assert_equals( 'POST', $GLOBALS['_def_test_last_request']['method'] ?? '', 'verb is POST' );
+assert_equals( 'POST', $GLOBALS['_widrow_test_last_request']['method'] ?? '', 'verb is POST' );
 assert_equals(
 	'https://def-api.test/api/staff-ai/user/integrations/srv-1/disconnect',
-	$GLOBALS['_def_test_last_request']['url'] ?? '',
+	$GLOBALS['_widrow_test_last_request']['url'] ?? '',
 	'the server_id is the ONLY thing scoped in the URL - the user comes from the forwarded identity'
 );
 assert_equals( 1, $resp->get_data()['requested'] ?? -1, 'requested count passed through' );
 
 echo "\n[TS-13] a grant the provider would not end is REPORTED, never smoothed over\n";
-$GLOBALS['_def_test_request_body'] = json_encode( array( 'requested' => 0, 'failed' => 1 ) );
+$GLOBALS['_widrow_test_request_body'] = json_encode( array( 'requested' => 0, 'failed' => 1 ) );
 $req = new WP_REST_Request();
 $req->set_param( 'server_id', 'srv-1' );
-$resp = DEF_Core_Staff_AI::rest_user_integration_disconnect( $req );
-unset( $GLOBALS['_def_test_request_body'] );
+$resp = Widrow_AI_Staff_AI::rest_user_integration_disconnect( $req );
+unset( $GLOBALS['_widrow_test_request_body'] );
 assert_equals( 1, $resp->get_data()['failed'] ?? -1, 'the surviving grant is surfaced so the UI cannot claim a clean disconnect' );
 
 echo "\n[TS-14] a missing server_id refuses before reaching the backend\n";
 $req = new WP_REST_Request();
 $req->set_param( 'server_id', '' );
-$resp = DEF_Core_Staff_AI::rest_user_integration_disconnect( $req );
+$resp = Widrow_AI_Staff_AI::rest_user_integration_disconnect( $req );
 assert_true( is_wp_error( $resp ), 'empty server_id is refused' );
 
 echo "
 [TS-15] has_grant rides through so the Disconnect control cannot go missing
 ";
-$GLOBALS['_def_test_get_body'] = json_encode( array(
+$GLOBALS['_widrow_test_get_body'] = json_encode( array(
 	'configured' => true,
 	'apps'       => array(
 		// The a3rev Gmail case: NOT authorized (the tool rows point at a newer server that
@@ -1824,8 +1824,8 @@ $GLOBALS['_def_test_get_body'] = json_encode( array(
 	),
 ) );
 $req  = new WP_REST_Request();
-$resp = DEF_Core_Staff_AI::rest_user_integrations( $req );
-unset( $GLOBALS['_def_test_get_body'] );
+$resp = Widrow_AI_Staff_AI::rest_user_integrations( $req );
+unset( $GLOBALS['_widrow_test_get_body'] );
 $_app = $resp->get_data()['apps'][0] ?? array();
 assert_true(
 	true === ( $_app['has_grant'] ?? null ) && false === ( $_app['authorized'] ?? null ),
@@ -1833,22 +1833,22 @@ assert_true(
 );
 
 echo "\n[TS-15b] a connected Google row's label rides through as given; anything but a string becomes ''\n";
-$GLOBALS['_def_test_get_body'] = json_encode( array(
+$GLOBALS['_widrow_test_get_body'] = json_encode( array(
 	'configured' => true,
 	'apps'       => array(
 		array( 'server_id' => 'srv-ads', 'category' => 'googleads', 'authorized' => true, 'label' => 'Acme & Co (123-456-7890)' ),
 		array( 'server_id' => 'srv-ga', 'category' => 'google_analytics', 'authorized' => true, 'label' => array( 'x' ) ),
 	),
 ) );
-$resp = DEF_Core_Staff_AI::rest_user_integrations( new WP_REST_Request() );
-unset( $GLOBALS['_def_test_get_body'] );
+$resp = Widrow_AI_Staff_AI::rest_user_integrations( new WP_REST_Request() );
+unset( $GLOBALS['_widrow_test_get_body'] );
 $_apps = $resp->get_data()['apps'] ?? array();
 assert_equals( 'Acme & Co (123-456-7890)', $_apps[0]['label'] ?? null, 'the label survives the allowlist unescaped - the panel sets it as textContent' );
 assert_equals( '', $_apps[1]['label'] ?? null, 'a non-string label is dropped to an empty string' );
 
 // ── Phase 4a (v6.4.0): the plural triage surface ─────────────────────────
 echo "\n[TS-18] rest_list_triage_schedules allowlists each row\n";
-$GLOBALS['_def_test_get_body'] = json_encode( array(
+$GLOBALS['_widrow_test_get_body'] = json_encode( array(
 	'success'   => true,
 	'schedules' => array( array(
 		'schedule_id'          => 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
@@ -1862,8 +1862,8 @@ $GLOBALS['_def_test_get_body'] = json_encode( array(
 		'future_extra'         => 'MUST-NOT-PASS',
 	) ),
 ) );
-$resp = DEF_Core_Staff_AI::rest_list_triage_schedules();
-unset( $GLOBALS['_def_test_get_body'] );
+$resp = Widrow_AI_Staff_AI::rest_list_triage_schedules();
+unset( $GLOBALS['_widrow_test_get_body'] );
 $data = is_object( $resp ) ? $resp->data : $resp;
 $row  = $data['schedules'][0] ?? array();
 $keys = array_keys( $row );
@@ -1878,8 +1878,8 @@ assert_equals( 'succeeded', $row['last_run']['status'], 'each row carries its ow
 assert_true( false === strpos( json_encode( $data ), 'MUST-NOT-PASS' ), 'no extra field reaches the browser' );
 
 echo "\n[TS-19] plural create forwards the full object and maps the two refusals\n";
-$GLOBALS['_def_test_last_request'] = array();
-$GLOBALS['_def_test_request_body'] = json_encode( array( 'success' => true, 'schedule' => array( 'schedule_id' => 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' ) ) );
+$GLOBALS['_widrow_test_last_request'] = array();
+$GLOBALS['_widrow_test_request_body'] = json_encode( array( 'success' => true, 'schedule' => array( 'schedule_id' => 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' ) ) );
 $req = new WP_REST_Request();
 $req->set_param( 'enabled', true );
 $req->set_param( 'send_hour_local', 7 );
@@ -1887,30 +1887,30 @@ $req->set_param( 'send_minute_local', 0 );
 $req->set_param( 'timezone', 'UTC' );
 $req->set_param( 'destinations', array( 'email' ) );
 $req->set_param( 'connected_account_id', 'ca_2' );
-$resp = DEF_Core_Staff_AI::rest_create_triage_schedule( $req );
-unset( $GLOBALS['_def_test_request_body'] );
+$resp = Widrow_AI_Staff_AI::rest_create_triage_schedule( $req );
+unset( $GLOBALS['_widrow_test_request_body'] );
 assert_true( ! is_wp_error( $resp ), 'a valid create succeeds' );
-assert_equals( 'POST', $GLOBALS['_def_test_last_request']['method'] ?? '', 'verb is POST' );
-$sent = json_decode( $GLOBALS['_def_test_last_request']['body'] ?? '', true );
+assert_equals( 'POST', $GLOBALS['_widrow_test_last_request']['method'] ?? '', 'verb is POST' );
+$sent = json_decode( $GLOBALS['_widrow_test_last_request']['body'] ?? '', true );
 assert_equals( 'ca_2', $sent['connected_account_id'] ?? '', 'the binding is forwarded' );
 
 // DEF's 422 surfaces DEF's OWN message (panel C2): mailbox_required and
 // validation_failed are different refusals, and a fixed mailbox caption
 // would mislead on the second (reachable via browser/server tzdata skew).
-$GLOBALS['_def_test_request_code'] = 422;
-$GLOBALS['_def_test_request_body'] = json_encode( array( 'detail' => array(
+$GLOBALS['_widrow_test_request_code'] = 422;
+$GLOBALS['_widrow_test_request_body'] = json_encode( array( 'detail' => array(
 	'error' => 'mailbox_required',
 	'message' => 'A second schedule must say which mailbox it reads - pick one.' ) ) );
-$result = DEF_Core_Staff_AI::rest_create_triage_schedule( $req );
+$result = Widrow_AI_Staff_AI::rest_create_triage_schedule( $req );
 assert_true( is_wp_error( $result ), 'DEF 422 surfaces as an error' );
 assert_true(
 	false !== strpos( $result->get_error_message(), 'which mailbox it reads' ),
 	'the mailbox_required refusal keeps DEF\'s actionable message'
 );
-$GLOBALS['_def_test_request_body'] = json_encode( array( 'detail' => array(
+$GLOBALS['_widrow_test_request_body'] = json_encode( array( 'detail' => array(
 	'error' => 'validation_failed', 'message' => 'unknown timezone: Foo/Bar' ) ) );
-$result = DEF_Core_Staff_AI::rest_create_triage_schedule( $req );
-unset( $GLOBALS['_def_test_request_code'], $GLOBALS['_def_test_request_body'] );
+$result = Widrow_AI_Staff_AI::rest_create_triage_schedule( $req );
+unset( $GLOBALS['_widrow_test_request_code'], $GLOBALS['_widrow_test_request_body'] );
 assert_true(
 	is_wp_error( $result )
 	&& false !== strpos( $result->get_error_message(), 'unknown timezone' )
@@ -1919,9 +1919,9 @@ assert_true(
 );
 
 // DEF's 409 (one setup per mailbox) becomes its own sentence.
-$GLOBALS['_def_test_request_code'] = 409;
-$result = DEF_Core_Staff_AI::rest_create_triage_schedule( $req );
-unset( $GLOBALS['_def_test_request_code'] );
+$GLOBALS['_widrow_test_request_code'] = 409;
+$result = Widrow_AI_Staff_AI::rest_create_triage_schedule( $req );
+unset( $GLOBALS['_widrow_test_request_code'] );
 assert_true(
 	is_wp_error( $result )
 	&& false !== strpos( $result->get_error_message(), 'already reads that mailbox' ),
@@ -1929,39 +1929,39 @@ assert_true(
 );
 
 echo "\n[TS-20] plural update/delete/run-now hit the id-scoped DEF paths\n";
-$GLOBALS['_def_test_request_body'] = json_encode( array( 'success' => true, 'schedule' => array( 'schedule_id' => 'cccc' ) ) );
+$GLOBALS['_widrow_test_request_body'] = json_encode( array( 'success' => true, 'schedule' => array( 'schedule_id' => 'cccc' ) ) );
 $req->set_param( 'schedule_id', 'cccc-dddd' );
-DEF_Core_Staff_AI::rest_update_triage_schedule_by_id( $req );
+Widrow_AI_Staff_AI::rest_update_triage_schedule_by_id( $req );
 assert_true(
-	false !== strpos( $GLOBALS['_def_test_last_request']['url'] ?? '', '/api/staff-ai/triage-schedules/cccc-dddd' ),
+	false !== strpos( $GLOBALS['_widrow_test_last_request']['url'] ?? '', '/api/staff-ai/triage-schedules/cccc-dddd' ),
 	'update targets the named setup'
 );
-$GLOBALS['_def_test_request_body'] = json_encode( array( 'success' => true, 'deleted' => true ) );
-DEF_Core_Staff_AI::rest_delete_triage_schedule_by_id( $req );
+$GLOBALS['_widrow_test_request_body'] = json_encode( array( 'success' => true, 'deleted' => true ) );
+Widrow_AI_Staff_AI::rest_delete_triage_schedule_by_id( $req );
 assert_true(
-	false !== strpos( $GLOBALS['_def_test_last_request']['url'] ?? '', '/api/staff-ai/triage-schedules/cccc-dddd' ),
+	false !== strpos( $GLOBALS['_widrow_test_last_request']['url'] ?? '', '/api/staff-ai/triage-schedules/cccc-dddd' ),
 	'delete targets the named setup'
 );
-$GLOBALS['_def_test_request_body'] = json_encode( array( 'success' => true, 'run_now' => array() ) );
-DEF_Core_Staff_AI::rest_run_now_triage_by_id( $req );
+$GLOBALS['_widrow_test_request_body'] = json_encode( array( 'success' => true, 'run_now' => array() ) );
+Widrow_AI_Staff_AI::rest_run_now_triage_by_id( $req );
 assert_true(
-	false !== strpos( $GLOBALS['_def_test_last_request']['url'] ?? '', '/api/staff-ai/triage-schedules/cccc-dddd/run-now' ),
+	false !== strpos( $GLOBALS['_widrow_test_last_request']['url'] ?? '', '/api/staff-ai/triage-schedules/cccc-dddd/run-now' ),
 	'run-now targets the named setup'
 );
-unset( $GLOBALS['_def_test_request_body'] );
+unset( $GLOBALS['_widrow_test_request_body'] );
 
 // ── Summary ─────────────────────────────────────────────────────────────
 
 // ── Slice 4-B (v6.7.0): connect-another + per-account disconnect proxies ──
 echo "\n[TS-4B-1] rest_user_connect_another forwards and allowlists the link answer\n";
-$GLOBALS['_def_test_request_body'] = json_encode( array(
+$GLOBALS['_widrow_test_request_body'] = json_encode( array(
 	'success' => true, 'status' => 'awaiting_authorization',
 	'redirect_url' => 'https://connect.composio.dev/x', 'future_extra' => 'MUST-NOT-PASS',
 ) );
 $request = new WP_REST_Request( 'POST', '/staff-ai/user/integrations/srv-1/connect-another' );
 $request->set_param( 'server_id', 'srv-1' );
-$resp = DEF_Core_Staff_AI::rest_user_connect_another( $request );
-unset( $GLOBALS['_def_test_request_body'] );
+$resp = Widrow_AI_Staff_AI::rest_user_connect_another( $request );
+unset( $GLOBALS['_widrow_test_request_body'] );
 $data = is_object( $resp ) ? $resp->data : $resp;
 assert_equals( 'awaiting_authorization', $data['status'], 'status rides through' );
 assert_equals( 'https://connect.composio.dev/x', $data['redirect_url'], 'the link rides through' );
@@ -1969,18 +1969,18 @@ assert_true( false === strpos( json_encode( $data ), 'MUST-NOT-PASS' ), 'no extr
 
 echo "\n[TS-4B-2] rest_user_connect_another refuses a missing server_id without calling DEF\n";
 $request = new WP_REST_Request( 'POST', '/staff-ai/user/integrations//connect-another' );
-$result = DEF_Core_Staff_AI::rest_user_connect_another( $request );
+$result = Widrow_AI_Staff_AI::rest_user_connect_another( $request );
 assert_true( is_wp_error( $result ), 'no server_id refuses by name' );
 
 echo "\n[TS-4B-3] rest_user_account_disconnect forwards both ids and reports counts\n";
-$GLOBALS['_def_test_request_body'] = json_encode( array(
+$GLOBALS['_widrow_test_request_body'] = json_encode( array(
 	'success' => true, 'requested' => 1, 'failed' => 0, 'category' => 'outlook',
 ) );
 $request = new WP_REST_Request( 'POST', '/staff-ai/user/integrations/srv-1/accounts/ca_2/disconnect' );
 $request->set_param( 'server_id', 'srv-1' );
 $request->set_param( 'account_id', 'ca_2' );
-$resp = DEF_Core_Staff_AI::rest_user_account_disconnect( $request );
-unset( $GLOBALS['_def_test_request_body'] );
+$resp = Widrow_AI_Staff_AI::rest_user_account_disconnect( $request );
+unset( $GLOBALS['_widrow_test_request_body'] );
 $data = is_object( $resp ) ? $resp->data : $resp;
 assert_equals( 1, $data['requested'], 'requested count rides through' );
 assert_equals( 0, $data['failed'], 'failed count rides through' );
@@ -1989,14 +1989,14 @@ assert_true( ! array_key_exists( 'category', $data ), 'a DEF extra never transit
 echo "\n[TS-4B-4] rest_user_account_disconnect refuses missing params; surfaces a DEF fault\n";
 $request = new WP_REST_Request( 'POST', '/staff-ai/user/integrations/srv-1/accounts//disconnect' );
 $request->set_param( 'server_id', 'srv-1' );
-$result = DEF_Core_Staff_AI::rest_user_account_disconnect( $request );
+$result = Widrow_AI_Staff_AI::rest_user_account_disconnect( $request );
 assert_true( is_wp_error( $result ), 'no account_id refuses by name' );
-$GLOBALS['_def_test_request_code'] = 502;
+$GLOBALS['_widrow_test_request_code'] = 502;
 $request = new WP_REST_Request( 'POST', '/staff-ai/user/integrations/srv-1/accounts/ca_2/disconnect' );
 $request->set_param( 'server_id', 'srv-1' );
 $request->set_param( 'account_id', 'ca_2' );
-$result = DEF_Core_Staff_AI::rest_user_account_disconnect( $request );
-unset( $GLOBALS['_def_test_request_code'] );
+$result = Widrow_AI_Staff_AI::rest_user_account_disconnect( $request );
+unset( $GLOBALS['_widrow_test_request_code'] );
 assert_true( is_wp_error( $result ), 'a DEF fault is an error - the row must not pretend it disconnected' );
 
 
@@ -2004,27 +2004,27 @@ assert_true( is_wp_error( $result ), 'a DEF fault is an error - the row must not
 echo "\nProjects P-A - BFF routes\n";
 
 // list_documents forwards a charset-valid project_id and DROPS an invalid one.
-$GLOBALS['_def_test_last_get_url'] = '';
+$GLOBALS['_widrow_test_last_get_url'] = '';
 $req = new WP_REST_Request();
 $req->set_param( 'project_id', 'abc-123-DEF' );
-DEF_Core_Staff_AI::rest_list_documents( $req );
+Widrow_AI_Staff_AI::rest_list_documents( $req );
 assert_equals(
 	'https://def-api.test/api/staff-ai/documents?project_id=abc-123-DEF',
-	$GLOBALS['_def_test_last_get_url'] ?? '',
+	$GLOBALS['_widrow_test_last_get_url'] ?? '',
 	'valid project_id filter forwarded to DEF'
 );
-$GLOBALS['_def_test_last_get_url'] = '';
+$GLOBALS['_widrow_test_last_get_url'] = '';
 $req = new WP_REST_Request();
 $req->set_param( 'project_id', '../../etc' );
-DEF_Core_Staff_AI::rest_list_documents( $req );
+Widrow_AI_Staff_AI::rest_list_documents( $req );
 assert_equals(
 	'https://def-api.test/api/staff-ai/documents',
-	$GLOBALS['_def_test_last_get_url'] ?? '',
+	$GLOBALS['_widrow_test_last_get_url'] ?? '',
 	'invalid project_id filter dropped, never forwarded'
 );
 
 // rest_list_projects allowlists rows: bad-charset id dropped, status normalized.
-$GLOBALS['_def_test_get_body'] = json_encode( array(
+$GLOBALS['_widrow_test_get_body'] = json_encode( array(
 	'success'  => true,
 	'projects' => array(
 		array( 'project_id' => 'p-1', 'name' => 'Alpha', 'status' => 'archived',
@@ -2037,7 +2037,7 @@ $GLOBALS['_def_test_get_body'] = json_encode( array(
 	),
 ) );
 $req    = new WP_REST_Request();
-$result = DEF_Core_Staff_AI::rest_list_projects( $req );
+$result = Widrow_AI_Staff_AI::rest_list_projects( $req );
 $data   = $result->get_data();
 assert_equals( 3, count( $data['projects'] ), 'bad-charset project row dropped' );
 assert_equals( 'archived', $data['projects'][0]['status'], 'archived status survives' );
@@ -2050,24 +2050,24 @@ assert_true( false === $data['projects'][1]['is_hub'], 'a row without is_hub is 
 assert_equals( '', $data['projects'][1]['description'], 'a row without a description gets an empty one' );
 assert_true( false === $data['projects'][2]['is_hub'], 'is_hub "yes" is not the Hub' );
 assert_equals( '', $data['projects'][2]['description'], 'a non-string description becomes empty' );
-$GLOBALS['_def_test_get_body'] = '{"success":true,"documents":[]}';
+$GLOBALS['_widrow_test_get_body'] = '{"success":true,"documents":[]}';
 
 // rest_create_project refuses an empty name before any backend call.
 $req = new WP_REST_Request();
 $req->set_param( 'name', '   ' );
-$result = DEF_Core_Staff_AI::rest_create_project( $req );
+$result = Widrow_AI_Staff_AI::rest_create_project( $req );
 assert_true( is_wp_error( $result ), 'blank project name refused' );
 assert_equals( 422, $result->get_error_data()['status'] ?? 0, 'blank name is 422' );
 
 // rest_update_project refuses an empty change set; unknown status never forwards.
 $req = new WP_REST_Request();
 $req->set_param( 'project_id', 'p-1' );
-$result = DEF_Core_Staff_AI::rest_update_project( $req );
+$result = Widrow_AI_Staff_AI::rest_update_project( $req );
 assert_true( is_wp_error( $result ), 'empty update refused' );
 $req = new WP_REST_Request();
 $req->set_param( 'project_id', 'p-1' );
 $req->set_param( 'status', 'paused' );
-$result = DEF_Core_Staff_AI::rest_update_project( $req );
+$result = Widrow_AI_Staff_AI::rest_update_project( $req );
 assert_true( is_wp_error( $result ), 'unknown status never forwarded' );
 
 // rest_assign_document_project: slot whitelist + project-id charset, refused locally.
@@ -2075,30 +2075,30 @@ $req = new WP_REST_Request();
 $req->set_param( 'id', 'doc-1' );
 $req->set_param( 'project_id', 'p-1' );
 $req->set_param( 'slot', 'chapter' );
-$result = DEF_Core_Staff_AI::rest_assign_document_project( $req );
+$result = Widrow_AI_Staff_AI::rest_assign_document_project( $req );
 assert_true( is_wp_error( $result ), 'unknown slot refused' );
 assert_equals( 422, $result->get_error_data()['status'] ?? 0, 'unknown slot is 422' );
 $req = new WP_REST_Request();
 $req->set_param( 'id', 'doc-1' );
 $req->set_param( 'project_id', 'p/../1' );
-$result = DEF_Core_Staff_AI::rest_assign_document_project( $req );
+$result = Widrow_AI_Staff_AI::rest_assign_document_project( $req );
 assert_true( is_wp_error( $result ), 'bad-charset project id refused' );
 assert_equals( 404, $result->get_error_data()['status'] ?? 0, 'bad-charset project id is 404, no oracle' );
 
 // The happy assign forwards exactly {project_id, slot} as PUT to the document path.
-$GLOBALS['_def_test_last_request'] = array();
+$GLOBALS['_widrow_test_last_request'] = array();
 $req = new WP_REST_Request();
 $req->set_param( 'id', 'doc-1' );
 $req->set_param( 'project_id', 'p-1' );
 $req->set_param( 'slot', 'runsheet' );
-DEF_Core_Staff_AI::rest_assign_document_project( $req );
+Widrow_AI_Staff_AI::rest_assign_document_project( $req );
 assert_equals(
 	'https://def-api.test/api/staff-ai/documents/doc-1/project',
-	$GLOBALS['_def_test_last_request']['url'] ?? '',
+	$GLOBALS['_widrow_test_last_request']['url'] ?? '',
 	'assign PUTs the document project path'
 );
-assert_equals( 'PUT', $GLOBALS['_def_test_last_request']['method'] ?? '', 'assign verb is PUT' );
-$assign_body = json_decode( (string) ( $GLOBALS['_def_test_last_request']['body'] ?? '' ), true );
+assert_equals( 'PUT', $GLOBALS['_widrow_test_last_request']['method'] ?? '', 'assign verb is PUT' );
+$assign_body = json_decode( (string) ( $GLOBALS['_widrow_test_last_request']['body'] ?? '' ), true );
 assert_equals( 'p-1', $assign_body['project_id'] ?? '', 'project_id rides the body' );
 assert_equals( 'runsheet', $assign_body['slot'] ?? '', 'slot rides the body' );
 
@@ -2106,14 +2106,14 @@ assert_equals( 'runsheet', $assign_body['slot'] ?? '', 'slot rides the body' );
 echo "\nProjects P-B - chat project binding\n";
 
 // A UUID project_id rides the chat body to DEF (which owner-validates it).
-$GLOBALS['_def_test_last_request'] = array();
+$GLOBALS['_widrow_test_last_request'] = array();
 $req = new WP_REST_Request( 'POST', '/staff-ai/chat' );
 $req->set_body_params( array(
 	'message'    => 'hello',
 	'project_id' => '8f14e45f-ceea-467a-9e2f-6b2c40f5e1a3',
 ) );
-DEF_Core_Staff_AI::rest_send_message( $req );
-$chat_body = json_decode( (string) ( $GLOBALS['_def_test_last_request']['body'] ?? '' ), true );
+Widrow_AI_Staff_AI::rest_send_message( $req );
+$chat_body = json_decode( (string) ( $GLOBALS['_widrow_test_last_request']['body'] ?? '' ), true );
 assert_equals(
 	'8f14e45f-ceea-467a-9e2f-6b2c40f5e1a3',
 	$chat_body['project_id'] ?? '',
@@ -2121,21 +2121,21 @@ assert_equals(
 );
 
 // A non-UUID project_id is dropped before the wire — DEF never sees it.
-$GLOBALS['_def_test_last_request'] = array();
+$GLOBALS['_widrow_test_last_request'] = array();
 $req = new WP_REST_Request( 'POST', '/staff-ai/chat' );
 $req->set_body_params( array(
 	'message'    => 'hello',
 	'project_id' => '../../etc/passwd',
 ) );
-DEF_Core_Staff_AI::rest_send_message( $req );
-$chat_body = json_decode( (string) ( $GLOBALS['_def_test_last_request']['body'] ?? '' ), true );
+Widrow_AI_Staff_AI::rest_send_message( $req );
+$chat_body = json_decode( (string) ( $GLOBALS['_widrow_test_last_request']['body'] ?? '' ), true );
 assert_true( ! isset( $chat_body['project_id'] ), 'non-UUID project_id never forwarded' );
 
 // ── Usage panel proxy (Usage & Budgets D-U7) ───────────────────────────
 echo "\n[Usage] own-week proxy passthrough\n";
 
-$GLOBALS['_def_test_get_code'] = 200;
-$GLOBALS['_def_test_get_body'] = wp_json_encode( array(
+$GLOBALS['_widrow_test_get_code'] = 200;
+$GLOBALS['_widrow_test_get_body'] = wp_json_encode( array(
 	'success'       => true,
 	'channel'       => 'staff_ai',
 	'week'          => '2026-W35',
@@ -2150,7 +2150,7 @@ $GLOBALS['_def_test_get_body'] = wp_json_encode( array(
 	// A field the panel does not render must not reach the browser.
 	'internal_note' => 'should never surface',
 ) );
-$usage = DEF_Core_Staff_AI::rest_get_usage();
+$usage = Widrow_AI_Staff_AI::rest_get_usage();
 $data  = $usage->get_data();
 assert_equals( '2026-W35', $data['week'] ?? '', 'week passes through' );
 assert_equals( '2026-08-31T00:00:00+00:00', $data['resets_at'] ?? '', 'resets_at passes through as the ISO instant' );
@@ -2162,7 +2162,7 @@ assert_true( ! isset( $data['internal_note'] ), 'unrecognised DEF fields are all
 assert_equals( 'claude-opus-5', $data['family_top_model'] ?? '', 'family_top_model passes through — the model bar 2 is pinned to' );
 assert_equals(
 	'https://def-api.test/api/staff-ai/usage',
-	$GLOBALS['_def_test_last_get_url'] ?? '',
+	$GLOBALS['_widrow_test_last_get_url'] ?? '',
 	'usage reads DEF with no parameters — nothing that could name another user'
 );
 
@@ -2176,12 +2176,12 @@ foreach ( array(
 	'empty string' => array( 'family_top_model' => '' ),
 	'non-string'   => array( 'family_top_model' => 42 ),
 ) as $case => $extra ) {
-	$GLOBALS['_def_test_get_body'] = wp_json_encode( array_merge( array(
+	$GLOBALS['_widrow_test_get_body'] = wp_json_encode( array_merge( array(
 		'success'      => true,
 		'budget_known' => true,
 		'current_week' => array( 'total' => 10, 'per_model' => array( 'claude-opus-5' => 10 ) ),
 	), $extra ) );
-	$data = DEF_Core_Staff_AI::rest_get_usage()->get_data();
+	$data = Widrow_AI_Staff_AI::rest_get_usage()->get_data();
 	assert_true(
 		array_key_exists( 'family_top_model', $data ) && null === $data['family_top_model'],
 		"family_top_model $case becomes null — no pin, never a nameless bar"
@@ -2202,7 +2202,7 @@ assert_true(
 
 // budget_tokens null is UNLIMITED, not zero. Coercing it would turn "no budget"
 // into "a budget of nothing" and paint a full bar.
-$GLOBALS['_def_test_get_body'] = wp_json_encode( array(
+$GLOBALS['_widrow_test_get_body'] = wp_json_encode( array(
 	'success'       => true,
 	'week'          => '2026-W35',
 	'resets_at'     => '2026-08-31T00:00:00+00:00',
@@ -2210,12 +2210,12 @@ $GLOBALS['_def_test_get_body'] = wp_json_encode( array(
 	'budget_tokens' => null,
 	'current_week'  => array( 'total' => 42, 'per_model' => array( 'claude-opus-5' => 42 ) ),
 ) );
-$data = DEF_Core_Staff_AI::rest_get_usage()->get_data();
+$data = Widrow_AI_Staff_AI::rest_get_usage()->get_data();
 assert_true( null === $data['budget_tokens'], 'null budget stays null (unlimited, never zero)' );
 assert_true( true === $data['budget_known'], 'budget_known true with a null budget = an ANSWER' );
 
 // budget_known false is an OUTAGE, and must stay distinguishable from "no budget".
-$GLOBALS['_def_test_get_body'] = wp_json_encode( array(
+$GLOBALS['_widrow_test_get_body'] = wp_json_encode( array(
 	'success'       => true,
 	'week'          => '2026-W35',
 	'resets_at'     => '2026-08-31T00:00:00+00:00',
@@ -2223,11 +2223,11 @@ $GLOBALS['_def_test_get_body'] = wp_json_encode( array(
 	'budget_tokens' => null,
 	'current_week'  => array( 'total' => 0, 'per_model' => array() ),
 ) );
-$data = DEF_Core_Staff_AI::rest_get_usage()->get_data();
+$data = Widrow_AI_Staff_AI::rest_get_usage()->get_data();
 assert_true( false === $data['budget_known'], 'budget_known false survives — the page shows "checking", not "unlimited"' );
 
 // A malformed per-model value is dropped, not coerced to a wrong-length bar.
-$GLOBALS['_def_test_get_body'] = wp_json_encode( array(
+$GLOBALS['_widrow_test_get_body'] = wp_json_encode( array(
 	'success'      => true,
 	'budget_known' => true,
 	'current_week' => array(
@@ -2235,17 +2235,17 @@ $GLOBALS['_def_test_get_body'] = wp_json_encode( array(
 		'per_model' => array( 'good-model' => 10, 'bad-model' => 'lots', 'negative-model' => -5 ),
 	),
 ) );
-$data = DEF_Core_Staff_AI::rest_get_usage()->get_data();
+$data = Widrow_AI_Staff_AI::rest_get_usage()->get_data();
 assert_equals( 10, $data['current_week']['per_model']['good-model'] ?? 0, 'numeric per-model row kept' );
 assert_true( ! isset( $data['current_week']['per_model']['bad-model'] ), 'non-numeric per-model row dropped' );
 assert_true( ! isset( $data['current_week']['per_model']['negative-model'] ), 'negative per-model row dropped' );
 
 // DEF 503 (store unreachable) is an error, never a zeroed week.
-$GLOBALS['_def_test_get_code'] = 503;
-$GLOBALS['_def_test_get_body'] = '{"detail":"Usage unavailable"}';
-$err = DEF_Core_Staff_AI::rest_get_usage();
+$GLOBALS['_widrow_test_get_code'] = 503;
+$GLOBALS['_widrow_test_get_body'] = '{"detail":"Usage unavailable"}';
+$err = Widrow_AI_Staff_AI::rest_get_usage();
 assert_true( is_wp_error( $err ), 'a DEF 503 surfaces as an error, not an empty week' );
-$GLOBALS['_def_test_get_code'] = 200;
+$GLOBALS['_widrow_test_get_code'] = 200;
 
 // ── TS-20. The `once` cadence (row 9 / S-O3) ────────────────────────────
 // This door mirrors DEF's so an older backend never sees a shape it refuses,
@@ -2268,17 +2268,17 @@ function def_test_task_body( array $over, ?int $code = null, string $detail = ''
 	foreach ( array_merge( $base, $over ) as $key => $value ) {
 		$req->set_param( $key, $value );
 	}
-	$GLOBALS['_def_test_last_request'] = array();
-	$GLOBALS['_def_test_request_code'] = $code ?? 200;
-	$GLOBALS['_def_test_request_body'] = ( null === $code )
+	$GLOBALS['_widrow_test_last_request'] = array();
+	$GLOBALS['_widrow_test_request_code'] = $code ?? 200;
+	$GLOBALS['_widrow_test_request_body'] = ( null === $code )
 		? json_encode( array(
 			'success' => true,
 			'task'    => array( 'id' => 't1', 'cadence' => 'once', 'send_date_local' => '2026-12-24' ),
 		) )
 		: json_encode( array( 'detail' => $detail ) );
-	$resp = DEF_Core_Staff_AI::rest_create_task( $req );
-	unset( $GLOBALS['_def_test_request_body'], $GLOBALS['_def_test_request_code'] );
-	return array( $resp, json_decode( $GLOBALS['_def_test_last_request']['body'] ?? 'null', true ) );
+	$resp = Widrow_AI_Staff_AI::rest_create_task( $req );
+	unset( $GLOBALS['_widrow_test_request_body'], $GLOBALS['_widrow_test_request_code'] );
+	return array( $resp, json_decode( $GLOBALS['_widrow_test_last_request']['body'] ?? 'null', true ) );
 }
 
 list( $resp, $sent ) = def_test_task_body( array( 'cadence' => 'once', 'send_date_local' => '2026-12-24' ) );
@@ -2363,20 +2363,20 @@ foreach ( array( 'yes', 1, null ) as $bad ) {
 	assert_true( is_wp_error( $resp ), 'skip_next that is not true or false is refused: ' . var_export( $bad, true ) );
 }
 
-$GLOBALS['_def_test_get_body'] = json_encode( array(
+$GLOBALS['_widrow_test_get_body'] = json_encode( array(
 	'success' => true,
 	'tasks'   => array( array( 'id' => 't1', 'cadence' => 'weekly', 'paused_until' => '2026-11-03', 'skip_next' => true ) ),
 ) );
-$listed = DEF_Core_Staff_AI::rest_list_tasks()->get_data()['tasks'][0] ?? array();
-unset( $GLOBALS['_def_test_get_body'] );
+$listed = Widrow_AI_Staff_AI::rest_list_tasks()->get_data()['tasks'][0] ?? array();
+unset( $GLOBALS['_widrow_test_get_body'] );
 assert_equals( '2026-11-03', $listed['paused_until'] ?? '', 'the card reads the pause date DEF serves' );
 assert_true( true === ( $listed['skip_next'] ?? null ), 'and the skip' );
 
 // Stop (W82): a POST behind the turn resume's gate, relayed to DEF by the Tools proxy.
 $_stop = $_wp_test_rest_routes['a3-ai/v1/staff-ai/conversations/(?P<id>[a-zA-Z0-9_-]+)/turns/(?P<turn>[a-zA-Z0-9_-]+)/stop'] ?? array();
 assert_equals( 'POST', $_stop['methods'] ?? '', 'turn stop = POST' );
-assert_equals( array( 'DEF_Core_Staff_AI', 'rest_permission_check' ), $_stop['permission_callback'] ?? null, 'turn stop takes the conversation routes\' permission callback' );
-assert_equals( array( 'DEF_Core_Tools', 'rest_proxy_staff_ai_turn_stop' ), $_stop['callback'] ?? null, 'turn stop is the Tools proxy' );
+assert_equals( array( 'Widrow_AI_Staff_AI', 'rest_permission_check' ), $_stop['permission_callback'] ?? null, 'turn stop takes the conversation routes\' permission callback' );
+assert_equals( array( 'Widrow_AI_Tools', 'rest_proxy_staff_ai_turn_stop' ), $_stop['callback'] ?? null, 'turn stop is the Tools proxy' );
 
 echo "\n--- Staff AI Tests: $pass passed, $fail failed ---\n";
 exit( $fail > 0 ? 1 : 0 );

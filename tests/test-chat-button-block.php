@@ -1,6 +1,6 @@
 <?php
 /**
- * Tests for DEF_Core_Chat_Button_Block::render() — the Chat Button block's front-end
+ * Tests for Widrow_AI_Chat_Button_Block::render() — the Chat Button block's front-end
  * markup (8.7.0): core button classes for the theme's styling, the loader's trigger
  * attributes for the behaviour, the shortcode's label fallback, everything escaped.
  */
@@ -31,7 +31,7 @@ if ( ! function_exists( 'get_block_wrapper_attributes' ) ) {
 	}
 }
 
-require_once __DIR__ . '/../includes/class-def-core-chat-button-block.php';
+require_once __DIR__ . '/../includes/class-widrow-ai-chat-button-block.php';
 
 $passed = 0;
 $failed = 0;
@@ -49,29 +49,29 @@ function assert_test( bool $condition, string $name ): void {
 	}
 }
 
-echo "=== DEF_Core_Chat_Button_Block::render ===\n\n";
+echo "=== Widrow_AI_Chat_Button_Block::render ===\n\n";
 
 _wp_test_reset_options();
 
-$html = DEF_Core_Chat_Button_Block::render( array( 'label' => 'Ask Joe', 'prompt' => 'What could Widrow do for my business?' ) );
+$html = Widrow_AI_Chat_Button_Block::render( array( 'label' => 'Ask Joe', 'prompt' => 'What could Widrow do for my business?' ) );
 assert_test( false !== strpos( $html, 'class="wp-block-button' ), 'the wrapper carries the core button class' );
 assert_test( false !== strpos( $html, '<button type="button" class="wp-block-button__link wp-element-button"' ), 'a button element with the core button link classes' );
 assert_test( false !== strpos( $html, ' data-def-chat-trigger' ), 'the button is a chat trigger' );
 assert_test( false !== strpos( $html, 'data-def-chat-prompt="What could Widrow do for my business?"' ), 'the question rides as the prompt attribute' );
 assert_test( false !== strpos( $html, '>Ask Joe</button>' ), 'the label is the button text' );
 
-$html = DEF_Core_Chat_Button_Block::render( array( 'label' => 'Ask Joe', 'prompt' => '' ) );
+$html = Widrow_AI_Chat_Button_Block::render( array( 'label' => 'Ask Joe', 'prompt' => '' ) );
 assert_test( false === strpos( $html, 'data-def-chat-prompt' ), 'a blank question sends nothing: no prompt attribute' );
-$html = DEF_Core_Chat_Button_Block::render( array( 'label' => 'Ask Joe', 'prompt' => "  \n " ) );
+$html = Widrow_AI_Chat_Button_Block::render( array( 'label' => 'Ask Joe', 'prompt' => "  \n " ) );
 assert_test( false === strpos( $html, 'data-def-chat-prompt' ), 'a whitespace-only question counts as blank' );
 
-$html = DEF_Core_Chat_Button_Block::render( array() );
+$html = Widrow_AI_Chat_Button_Block::render( array() );
 assert_test( false !== strpos( $html, '>Chat</button>' ), 'no label and no option: the built-in "Chat"' );
-update_option( 'def_core_chat_button_label', 'Talk to Sid' );
-$html = DEF_Core_Chat_Button_Block::render( array( 'label' => '   ' ) );
+update_option( 'widrow_ai_chat_button_label', 'Talk to Sid' );
+$html = Widrow_AI_Chat_Button_Block::render( array( 'label' => '   ' ) );
 assert_test( false !== strpos( $html, '>Talk to Sid</button>' ), 'a blank label falls back to the Chat Settings button label' );
 
-$html = DEF_Core_Chat_Button_Block::render( array( 'label' => '<b>Ask</b>', 'prompt' => 'a" onmouseover="x() <script>' ) );
+$html = Widrow_AI_Chat_Button_Block::render( array( 'label' => '<b>Ask</b>', 'prompt' => 'a" onmouseover="x() <script>' ) );
 assert_test( false === strpos( $html, '<b>' ) && false !== strpos( $html, '&lt;b&gt;Ask&lt;/b&gt;' ), 'markup in the label is escaped' );
 assert_test( false !== strpos( $html, 'data-def-chat-prompt="a&quot; onmouseover=&quot;x() &lt;script&gt;"' ), 'the question cannot break out of its attribute' );
 

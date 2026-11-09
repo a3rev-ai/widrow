@@ -37,7 +37,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 // ── Customer Chat ────────────────────────────────────────────────────────────
 const MODULE = extract.customerChatSource();
 const VENDOR = ['assets/js/def-persona.js', 'assets/js/vendor/marked.min.js', 'assets/js/vendor/purify.min.js',
-  'assets/js/def-core-product-cards.js'].map(f => fs.readFileSync(path.join(extract.REPO, f), 'utf8'));
+  'assets/js/widrow-ai-product-cards.js'].map(f => fs.readFileSync(path.join(extract.REPO, f), 'utf8'));
 const CC = {
   apiBaseUrl: 'https://api.example.test',
   chatStreamUrl: 'https://shop.test/wp-json/def-core/v1/chat/stream',
@@ -448,7 +448,7 @@ async function bootStaff(opts) {
   // ── The voice module's log ─────────────────────────────────────────────────
   {
     const dom = new JSDOM('<!doctype html>', { runScripts: 'outside-only' });
-    dom.window.eval(fs.readFileSync(path.join(extract.REPO, 'assets/js/def-core-voice.js'), 'utf8'));
+    dom.window.eval(fs.readFileSync(path.join(extract.REPO, 'assets/js/widrow-ai-voice.js'), 'utf8'));
     dom.window.DefVoice.note('stream direct 0.42s');
     check('DefVoice.note() writes a line on the same log the mic\'s long-press reads', /^\d\d:\d\d stream direct 0\.42s$/.test(dom.window.DefVoice.log().slice(-1)[0]),
       show(dom.window.DefVoice.log()));

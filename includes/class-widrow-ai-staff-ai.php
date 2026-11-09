@@ -1,0 +1,6491 @@
+<?php
+
+/**
+ * Class Widrow_AI_Staff_AI
+ *
+ * Staff AI frontend endpoint handler.
+ *
+ * @package widrow-ai
+ * @since 1.1.0
+ */
+
+declare(strict_types=1);
+
+if (! defined('ABSPATH')) {
+	exit;
+}
+
+/**
+ * Handles the /staff-ai endpoint rendering.
+ */
+final class Widrow_AI_Staff_AI
+{
+	/**
+	 * The endpoint slug.
+	 */
+	const ENDPOINT_SLUG = 'staff-ai';
+
+	// Share attachments: refuse politely above these — mail hosts commonly
+	// cap around 20-25MB total; both are attack ceilings, not product limits.
+	const SHARE_MAX_ATTACHMENT_COUNT = 10;
+	const SHARE_MAX_ATTACHMENT_BYTES = 15728640; // 15MB
+
+	/**
+	 * Allowed MIME types for file uploads.
+	 * UX-layer filtering only — DEF backend performs authoritative content validation.
+	 */
+	const UPLOAD_ALLOWED_MIME_TYPES = array(
+		'image/png',
+		'image/jpeg',
+		'image/gif',
+		'image/webp',
+		'application/pdf',
+		'text/plain',
+		'text/markdown',
+		'text/csv',
+		'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+		'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+	);
+
+
+	/**
+	 * "Create with reference sources" acceptance bounds (Engine 2.5). DEF
+	 * re-validates authoritatively; these refuse oversize PAYLOADS (decoded
+	 * bytes, pasted text) with a clear 400. The per-item COUNT caps that sat
+	 * here were deleted in 5.7.11 — counts ration a management user's own
+	 * references, and DEF's budget owns that decision.
+	 */
+	const CREATE_MAX_REFERENCE_FILE_BYTES = 10485760; // 10MB total decoded.
+	const CREATE_MAX_REFERENCE_TEXT       = 20000;
+	const CREATE_ALLOWED_FILE_EXT         = array( 'pdf', 'docx', 'txt', 'csv', 'xlsx' );
+
+	/**
+	 * The Creator's name when the tenant has not given her another one. DEF's
+	 * own default for the content_creator employee — the Content Drafts page
+	 * renders it before any list response has arrived.
+	 */
+	const CREATOR_DEFAULT_NAME = 'Carol';
+
+	/**
+	 * Longest creator name the page will show. DEF already bounds it; this is
+	 * the BFF's own floor so the title can never grow without limit.
+	 */
+	const CREATOR_NAME_MAX = 100;
+
+	/**
+	 * Initialize the Staff AI endpoint.
+	 */
+	public static function init(): void
+	{
+		add_action('init', array(__CLASS__, 'add_rewrite_rules'));
+		add_action('wp_loaded', array(__CLASS__, 'maybe_flush_rewrite_rules'));
+		add_action('template_redirect', array(__CLASS__, 'handle_endpoint'));
+		add_filter('query_vars', array(__CLASS__, 'add_query_vars'));
+		add_action('rest_api_init', array(__CLASS__, 'register_rest_routes'));
+
+		// Prevent trailing slash redirect for file downloads
+		add_filter('redirect_canonical', array(__CLASS__, 'prevent_download_redirect'), 10, 2);
+	}
+
+	/**
+	 * Prevent trailing slash redirects for file download URLs.
+	 *
+	 * @param string $redirect_url The redirect URL.
+	 * @param string $requested_url The requested URL.
+	 * @return string|false The redirect URL or false to prevent redirect.
+	 */
+	public static function prevent_download_redirect($redirect_url, $requested_url)
+	{
+		// Don't redirect if this is a file download or PWA asset request.
+		if (get_query_var('staff_ai_download') || get_query_var('staff_ai_pwa') || get_query_var('staff_ai_attachment')) {
+			return false;
+		}
+		return $redirect_url;
+	}
+
+	/**
+	 * Register REST API routes for Staff AI adapter.
+	 *
+	 * @since 1.1.0
+	 */
+	public static function register_rest_routes(): void
+	{
+		// List conversations.
+		register_rest_route(
+			WIDROW_AI_API_NAME_SPACE,
+			'/staff-ai/conversations',
+			array(
+				'methods'             => 'GET',
+				'permission_callback' => array(__CLASS__, 'rest_permission_check'),
+				'callback'            => array(__CLASS__, 'rest_list_conversations'),
+			)
+		);
+
+		// Load single conversation + Chat Options (the sidebar's ⋮ menu):
+		// rename and delete. DEF owns ownership - a foreign, deleted or unknown
+		// id is one uniform 404 (DEF #1047).
+		register_rest_route(
+			WIDROW_AI_API_NAME_SPACE,
+			'/staff-ai/conversations/(?P<id>[a-zA-Z0-9_-]+)',
+			array(
+				array(
+					'methods'             => 'GET',
+					'permission_callback' => array(__CLASS__, 'rest_permission_check'),
+					'callback'            => array(__CLASS__, 'rest_load_conversation'),
+				),
+				array(
+					'methods'             => 'PATCH',
+					'permission_callback' => array(__CLASS__, 'rest_permission_check'),
+					'callback'            => array(__CLASS__, 'rest_rename_conversation'),
+				),
+				array(
+					'methods'             => 'DELETE',
+					'permission_callback' => array(__CLASS__, 'rest_permission_check'),
+					'callback'            => array(__CLASS__, 'rest_delete_conversation'),
+				),
+			)
+		);
+
+		// The turn resume (8.7.14): the console re-attaches to a reply still being written,
+		// from the last frame it saw (`after`). Relayed by the chat stream's own proxy.
+		register_rest_route(
+			WIDROW_AI_API_NAME_SPACE,
+			'/staff-ai/conversations/(?P<id>[a-zA-Z0-9_-]+)/turns/(?P<turn>[a-zA-Z0-9_-]+)/stream',
+			array(
+				'methods'             => 'GET',
+				'permission_callback' => array(__CLASS__, 'rest_permission_check'),
+				'callback'            => array('Widrow_AI_Tools', 'rest_proxy_staff_ai_turn_resume'),
+				'args'                => array(
+					'after' => array(
+						'type'     => 'integer',
+						'required' => true,
+						'minimum'  => 0,
+					),
+				),
+			)
+		);
+
+		// Stop (W82): the console asks DEF to stop a reply still being written. Relayed as
+		// the resume is; DEF checks the thread is this user's and the turn is its reply.
+		register_rest_route(
+			WIDROW_AI_API_NAME_SPACE,
+			'/staff-ai/conversations/(?P<id>[a-zA-Z0-9_-]+)/turns/(?P<turn>[a-zA-Z0-9_-]+)/stop',
+			array(
+				'methods'             => 'POST',
+				'permission_callback' => array(__CLASS__, 'rest_permission_check'),
+				'callback'            => array('Widrow_AI_Tools', 'rest_proxy_staff_ai_turn_stop'),
+			)
+		);
+
+		// Chat Options: move a chat into / out of one of the caller's projects.
+		register_rest_route(
+			WIDROW_AI_API_NAME_SPACE,
+			'/staff-ai/conversations/(?P<id>[a-zA-Z0-9_-]+)/project',
+			array(
+				'methods'             => 'PUT',
+				'permission_callback' => array(__CLASS__, 'rest_permission_check'),
+				'callback'            => array(__CLASS__, 'rest_set_conversation_project'),
+			)
+		);
+
+		// Send message (creates conversation if needed).
+		register_rest_route(
+			WIDROW_AI_API_NAME_SPACE,
+			'/staff-ai/chat',
+			array(
+				'methods'             => 'POST',
+				'permission_callback' => array(__CLASS__, 'rest_permission_check'),
+				'callback'            => array(__CLASS__, 'rest_send_message'),
+			)
+		);
+
+		// Share settings (proxy to escalation settings for Staff AI auth context).
+		register_rest_route(
+			WIDROW_AI_API_NAME_SPACE,
+			'/staff-ai/share-settings',
+			array(
+				'methods'             => 'GET',
+				'permission_callback' => array(__CLASS__, 'rest_permission_check'),
+				'callback'            => array(__CLASS__, 'rest_share_settings'),
+			)
+		);
+
+		// Share send (proxy to escalation send-email for Staff AI auth context).
+		register_rest_route(
+			WIDROW_AI_API_NAME_SPACE,
+			'/staff-ai/share-send',
+			array(
+				'methods'             => 'POST',
+				'permission_callback' => array(__CLASS__, 'rest_permission_check'),
+				'callback'            => array(__CLASS__, 'rest_share_send'),
+			)
+		);
+
+		// Store share event (persists share confirmation in conversation).
+		register_rest_route(
+			WIDROW_AI_API_NAME_SPACE,
+			'/staff-ai/conversations/(?P<id>[a-zA-Z0-9_-]+)/share-event',
+			array(
+				'methods'             => 'POST',
+				'permission_callback' => array(__CLASS__, 'rest_permission_check'),
+				'callback'            => array(__CLASS__, 'rest_store_share_event'),
+			)
+		);
+
+		// Upload init — proxy to DEF backend presigned URL generation.
+		register_rest_route(
+			WIDROW_AI_API_NAME_SPACE,
+			'/staff-ai/uploads/init',
+			array(
+				'methods'             => 'POST',
+				'permission_callback' => array(__CLASS__, 'rest_permission_check'),
+				'callback'            => array(__CLASS__, 'rest_upload_init'),
+			)
+		);
+
+		// Upload commit — proxy to DEF backend upload finalization.
+		register_rest_route(
+			WIDROW_AI_API_NAME_SPACE,
+			'/staff-ai/uploads/commit',
+			array(
+				'methods'             => 'POST',
+				'permission_callback' => array(__CLASS__, 'rest_permission_check'),
+				'callback'            => array(__CLASS__, 'rest_upload_commit'),
+			)
+		);
+
+		// Summarize conversation (AI-generated subject + summary for Share form).
+		register_rest_route(
+			WIDROW_AI_API_NAME_SPACE,
+			'/staff-ai/conversations/(?P<id>[a-zA-Z0-9_-]+)/summarize',
+			array(
+				'methods'             => 'POST',
+				'permission_callback' => array(__CLASS__, 'rest_permission_check'),
+				'callback'            => array(__CLASS__, 'rest_summarize_conversation'),
+			)
+		);
+
+		// Status/test endpoint for debugging connection issues.
+		// Uses manage_options cap so admins can diagnose without needing staff_ai access.
+		// NOTE: this shares the path GET /staff-ai/status with the BFF passthrough in
+		// Widrow_AI_Routes (which registers first and therefore wins dispatch — see the
+		// note there). This diagnostic handler is effectively shadowed at that path; it
+		// returns a richer debug payload (api_url, token_generation) and is intentionally
+		// NOT the one the Staff-AI UI consumes for the model switcher's available_models.
+		register_rest_route(
+			WIDROW_AI_API_NAME_SPACE,
+			'/staff-ai/status',
+			array(
+				'methods'             => 'GET',
+				'permission_callback' => function () {
+					return current_user_can('manage_options') || self::user_has_staff_ai_access();
+				},
+				'callback'            => array(__CLASS__, 'rest_status'),
+			)
+		);
+
+		// List available tools.
+		register_rest_route(
+			WIDROW_AI_API_NAME_SPACE,
+			'/staff-ai/tools',
+			array(
+				'methods'             => 'GET',
+				'permission_callback' => array(__CLASS__, 'rest_permission_check'),
+				'callback'            => array(__CLASS__, 'rest_list_tools'),
+			)
+		);
+
+		// Tool invocation now goes through /staff-ai/chat (Orchestrator).
+		// The /staff-ai/tools/invoke endpoint was removed in PR #19.
+
+		// The REST file-download twin was removed in 5.6.3: it still carried
+		// the retired JWT auth (DEF 401s it — zero bytes ever served), had no
+		// product caller (downloads ride /staff-ai-download/ →
+		// handle_file_download), and a live-but-inert second download door
+		// invites a future maintainer to "fix" it without re-review.
+
+		// Content Agent review queue (PR-6): list pending staged drafts, apply, dismiss.
+		register_rest_route(
+			WIDROW_AI_API_NAME_SPACE,
+			'/staff-ai/content/drafts',
+			array(
+				'methods'             => 'GET',
+				'permission_callback' => array(__CLASS__, 'rest_permission_check'),
+				'callback'            => array(__CLASS__, 'rest_list_content_drafts'),
+			)
+		);
+		// Content Agent "Create New" (Engine 2): on-demand create request. The agent
+		// generates a draft asynchronously; it surfaces in the review queue above.
+		register_rest_route(
+			WIDROW_AI_API_NAME_SPACE,
+			'/staff-ai/content/create',
+			array(
+				'methods'             => 'POST',
+				'permission_callback' => array(__CLASS__, 'rest_permission_check'),
+				'callback'            => array(__CLASS__, 'rest_content_create'),
+			)
+		);
+		// Last audit-run timestamp for the Content Drafts freshness line (read-only).
+		register_rest_route(
+			WIDROW_AI_API_NAME_SPACE,
+			'/staff-ai/content/last-run',
+			array(
+				'methods'             => 'GET',
+				'permission_callback' => array(__CLASS__, 'rest_permission_check'),
+				'callback'            => array(__CLASS__, 'rest_content_last_run'),
+			)
+		);
+		// Current-state coverage breakdown (per content type) for the status strip.
+		register_rest_route(
+			WIDROW_AI_API_NAME_SPACE,
+			'/staff-ai/content/summary',
+			array(
+				'methods'             => 'GET',
+				'permission_callback' => array(__CLASS__, 'rest_permission_check'),
+				'callback'            => array(__CLASS__, 'rest_content_summary'),
+			)
+		);
+		// Items skipped for lack of a focus keyphrase (the human must set one).
+		register_rest_route(
+			WIDROW_AI_API_NAME_SPACE,
+			'/staff-ai/content/needs-keyphrase',
+			array(
+				'methods'             => 'GET',
+				'permission_callback' => array(__CLASS__, 'rest_permission_check'),
+				'callback'            => array(__CLASS__, 'rest_list_needs_keyphrase'),
+			)
+		);
+		register_rest_route(
+			WIDROW_AI_API_NAME_SPACE,
+			'/staff-ai/content/drafts/(?P<id>[a-zA-Z0-9_-]+)/apply',
+			array(
+				'methods'             => 'POST',
+				'permission_callback' => array(__CLASS__, 'rest_permission_check'),
+				'callback'            => array(__CLASS__, 'rest_apply_content_draft'),
+			)
+		);
+		register_rest_route(
+			WIDROW_AI_API_NAME_SPACE,
+			'/staff-ai/content/drafts/(?P<id>[a-zA-Z0-9_-]+)/dismiss',
+			array(
+				'methods'             => 'POST',
+				'permission_callback' => array(__CLASS__, 'rest_permission_check'),
+				'callback'            => array(__CLASS__, 'rest_dismiss_content_draft'),
+			)
+		);
+
+		// Content Agent DEF #522 — Optimize tab: item-level dismiss + dismissed list + restore.
+		// GET /list?bucket=<bucket> — item list by state bucket (e.g. dismissed).
+		register_rest_route(
+			WIDROW_AI_API_NAME_SPACE,
+			'/staff-ai/content/list',
+			array(
+				'methods'             => 'GET',
+				'permission_callback' => array( __CLASS__, 'rest_permission_check' ),
+				'callback'            => array( __CLASS__, 'rest_list_content_items' ),
+			)
+		);
+		// POST /items/{item_id}/dismiss — lightweight dismiss (item stays in knowledge).
+		register_rest_route(
+			WIDROW_AI_API_NAME_SPACE,
+			'/staff-ai/content/items/(?P<item_id>\d+)/dismiss',
+			array(
+				'methods'             => 'POST',
+				'permission_callback' => array( __CLASS__, 'rest_permission_check' ),
+				'callback'            => array( __CLASS__, 'rest_dismiss_content_item' ),
+			)
+		);
+		// POST /items/{item_id}/restore — restore a dismissed item back to its prior bucket.
+		register_rest_route(
+			WIDROW_AI_API_NAME_SPACE,
+			'/staff-ai/content/items/(?P<item_id>\d+)/restore',
+			array(
+				'methods'             => 'POST',
+				'permission_callback' => array( __CLASS__, 'rest_permission_check' ),
+				'callback'            => array( __CLASS__, 'rest_restore_content_item' ),
+			)
+		);
+
+		// Content Agent Engine 2.5 — Clusters curation (targets + keyphrase queues).
+		// Thin proxies to DEF /api/staff-ai/content/* with field-faithful bodies;
+		// gated by widrow_staff_access (rest_permission_check) like the review queue.
+		register_rest_route(
+			WIDROW_AI_API_NAME_SPACE,
+			'/staff-ai/content/targets',
+			array(
+				array(
+					'methods'             => 'GET',
+					'permission_callback' => array(__CLASS__, 'rest_permission_check'),
+					'callback'            => array(__CLASS__, 'rest_list_content_targets'),
+				),
+				array(
+					'methods'             => 'POST',
+					'permission_callback' => array(__CLASS__, 'rest_permission_check'),
+					'callback'            => array(__CLASS__, 'rest_create_content_target'),
+				),
+			)
+		);
+		register_rest_route(
+			WIDROW_AI_API_NAME_SPACE,
+			'/staff-ai/content/targets/(?P<id>[a-zA-Z0-9_-]+)',
+			array(
+				array(
+					'methods'             => 'PATCH',
+					'permission_callback' => array(__CLASS__, 'rest_permission_check'),
+					'callback'            => array(__CLASS__, 'rest_update_content_target'),
+				),
+				array(
+					'methods'             => 'DELETE',
+					'permission_callback' => array(__CLASS__, 'rest_permission_check'),
+					'callback'            => array(__CLASS__, 'rest_delete_content_target'),
+				),
+			)
+		);
+		register_rest_route(
+			WIDROW_AI_API_NAME_SPACE,
+			'/staff-ai/content/targets/(?P<id>[a-zA-Z0-9_-]+)/keyphrases',
+			array(
+				array(
+					'methods'             => 'GET',
+					'permission_callback' => array(__CLASS__, 'rest_permission_check'),
+					'callback'            => array(__CLASS__, 'rest_list_target_keyphrases'),
+				),
+				array(
+					'methods'             => 'POST',
+					'permission_callback' => array(__CLASS__, 'rest_permission_check'),
+					'callback'            => array(__CLASS__, 'rest_add_target_keyphrase'),
+				),
+			)
+		);
+		register_rest_route(
+			WIDROW_AI_API_NAME_SPACE,
+			'/staff-ai/content/targets/(?P<id>[a-zA-Z0-9_-]+)/derive',
+			array(
+				'methods'             => 'POST',
+				'permission_callback' => array(__CLASS__, 'rest_permission_check'),
+				'callback'            => array(__CLASS__, 'rest_derive_content_target'),
+			)
+		);
+		register_rest_route(
+			WIDROW_AI_API_NAME_SPACE,
+			'/staff-ai/content/keyphrases/(?P<id>[a-zA-Z0-9_-]+)',
+			array(
+				'methods'             => 'PATCH',
+				'permission_callback' => array(__CLASS__, 'rest_permission_check'),
+				'callback'            => array(__CLASS__, 'rest_update_keyphrase'),
+			)
+		);
+		register_rest_route(
+			WIDROW_AI_API_NAME_SPACE,
+			'/staff-ai/content/keyphrases/(?P<id>[a-zA-Z0-9_-]+)/approve',
+			array(
+				'methods'             => 'POST',
+				'permission_callback' => array(__CLASS__, 'rest_permission_check'),
+				'callback'            => array(__CLASS__, 'rest_approve_keyphrase'),
+			)
+		);
+		register_rest_route(
+			WIDROW_AI_API_NAME_SPACE,
+			'/staff-ai/content/keyphrases/(?P<id>[a-zA-Z0-9_-]+)/dismiss',
+			array(
+				'methods'             => 'POST',
+				'permission_callback' => array(__CLASS__, 'rest_permission_check'),
+				'callback'            => array(__CLASS__, 'rest_dismiss_keyphrase'),
+			)
+		);
+		register_rest_route(
+			WIDROW_AI_API_NAME_SPACE,
+			'/staff-ai/content/targets/(?P<id>[a-zA-Z0-9_-]+)/keyphrases/dismiss-remaining',
+			array(
+				'methods'             => 'POST',
+				'permission_callback' => array(__CLASS__, 'rest_permission_check'),
+				'callback'            => array(__CLASS__, 'rest_dismiss_remaining_keyphrases'),
+			)
+		);
+		// Local WP item search backing the Clusters target picker — no DEF call.
+		register_rest_route(
+			WIDROW_AI_API_NAME_SPACE,
+			'/staff-ai/content/target-search',
+			array(
+				'methods'             => 'GET',
+				'permission_callback' => array(__CLASS__, 'rest_permission_check'),
+				'callback'            => array(__CLASS__, 'rest_target_search'),
+			)
+		);
+
+		// Per-user "Connected accounts" (Slice 2 — DEF feat/per-user-mcp-identity).
+		// Each Staff-AI user connects their OWN aggregator account so a tool acts AS
+		// them. The per-user identity (`{tenant}:{sub}`) is derived DEF-side from the
+		// X-DEF-User header backend_request() already forwards — nothing user-scoped
+		// rides in the body. Gated by widrow_staff_access like every other staff-ai route.
+		register_rest_route(
+			WIDROW_AI_API_NAME_SPACE,
+			'/staff-ai/user/integrations',
+			array(
+				'methods'             => 'GET',
+				'permission_callback' => array(__CLASS__, 'rest_permission_check'),
+				'callback'            => array(__CLASS__, 'rest_user_integrations'),
+			)
+		);
+		register_rest_route(
+			WIDROW_AI_API_NAME_SPACE,
+			'/staff-ai/user/integrations/(?P<server_id>[a-zA-Z0-9_-]+)/authorize',
+			array(
+				'methods'             => 'POST',
+				'permission_callback' => array(__CLASS__, 'rest_permission_check'),
+				'callback'            => array(__CLASS__, 'rest_user_integration_authorize'),
+			)
+		);
+
+		// C2 — the other half of connect. Until now the panel offered Connect ->
+		// Connected -> Reconnect and no way back, so reconnecting minted another
+		// grant and a departed staff member's consent stayed live forever. Ends
+		// the CALLER's own grant only; the tenant's connection is untouched.
+		register_rest_route(
+			WIDROW_AI_API_NAME_SPACE,
+			'/staff-ai/user/integrations/(?P<server_id>[a-zA-Z0-9_-]+)/disconnect',
+			array(
+				'methods'             => 'POST',
+				'permission_callback' => array(__CLASS__, 'rest_permission_check'),
+				'callback'            => array(__CLASS__, 'rest_user_integration_disconnect'),
+			)
+		);
+
+		// Slice 4-B (v6.7.0): a SECOND account on a MAIL app. DEF refuses
+		// non-mail apps by name and mints the consent link even though an
+		// account is already connected - the provider's sign-in screen is
+		// where the user chooses WHICH account, by signing in as it.
+		register_rest_route(
+			WIDROW_AI_API_NAME_SPACE,
+			'/staff-ai/user/integrations/(?P<server_id>[a-zA-Z0-9_-]+)/connect-another',
+			array(
+				'methods'             => 'POST',
+				'permission_callback' => array(__CLASS__, 'rest_permission_check'),
+				'callback'            => array(__CLASS__, 'rest_user_connect_another'),
+			)
+		);
+
+		// Slice 4-B: per-ACCOUNT disconnect - ends exactly one of the caller's
+		// own connected accounts (DEF proves ownership fail-closed); the app's
+		// other accounts and every colleague's grants are untouched.
+		register_rest_route(
+			WIDROW_AI_API_NAME_SPACE,
+			'/staff-ai/user/integrations/(?P<server_id>[a-zA-Z0-9_-]+)/accounts/(?P<account_id>[a-zA-Z0-9_-]+)/disconnect',
+			array(
+				'methods'             => 'POST',
+				'permission_callback' => array(__CLASS__, 'rest_permission_check'),
+				'callback'            => array(__CLASS__, 'rest_user_account_disconnect'),
+			)
+		);
+
+		// "My Documents" panel (document library slice 4). The library is per-user:
+		// DEF scopes every query to the identity in the X-DEF-User header that
+		// backend_request() already forwards — nothing user-scoped rides in the URL
+		// or body, so one user can never list or delete another's documents.
+		register_rest_route(
+			WIDROW_AI_API_NAME_SPACE,
+			'/staff-ai/documents',
+			array(
+				'methods'             => 'GET',
+				'permission_callback' => array(__CLASS__, 'rest_permission_check'),
+				'callback'            => array(__CLASS__, 'rest_list_documents'),
+				'args'                => array(
+					'q' => array(
+						'type'              => 'string',
+						'required'          => false,
+						'sanitize_callback' => 'sanitize_text_field',
+					),
+					// Projects P-A (D-P10): the badge's filter. Same id shape the
+					// document routes enforce; DEF ignores a foreign/malformed id
+					// by answering an empty page, never an oracle.
+					'project_id' => array(
+						'type'              => 'string',
+						'required'          => false,
+						'sanitize_callback' => 'sanitize_text_field',
+					),
+				),
+			)
+		);
+
+		// Projects P-A (docs/projects-runsheet.md in the DEF repo): the user's own
+		// project containers. Per-user exactly like documents: DEF scopes every
+		// query to the X-DEF-User identity backend_request() forwards — nothing
+		// user-scoped rides in URL or body.
+		register_rest_route(
+			WIDROW_AI_API_NAME_SPACE,
+			'/staff-ai/projects',
+			array(
+				array(
+					'methods'             => 'GET',
+					'permission_callback' => array(__CLASS__, 'rest_permission_check'),
+					'callback'            => array(__CLASS__, 'rest_list_projects'),
+					'args'                => array(
+						'include_archived' => array(
+							'type'     => 'boolean',
+							'required' => false,
+						),
+					),
+				),
+				array(
+					'methods'             => 'POST',
+					'permission_callback' => array(__CLASS__, 'rest_permission_check'),
+					'callback'            => array(__CLASS__, 'rest_create_project'),
+				),
+			)
+		);
+		register_rest_route(
+			WIDROW_AI_API_NAME_SPACE,
+			'/staff-ai/projects/(?P<project_id>[a-zA-Z0-9-]+)',
+			array(
+				array(
+					'methods'             => 'PUT',
+					'permission_callback' => array(__CLASS__, 'rest_permission_check'),
+					'callback'            => array(__CLASS__, 'rest_update_project'),
+				),
+				array(
+					'methods'             => 'DELETE',
+					'permission_callback' => array(__CLASS__, 'rest_permission_check'),
+					'callback'            => array(__CLASS__, 'rest_delete_project'),
+				),
+			)
+		);
+		// Projects P-C (D-P9): the caller's scheduled tasks bound to a project -
+		// what the archive / delete prompt surfaces.
+		register_rest_route(
+			WIDROW_AI_API_NAME_SPACE,
+			'/staff-ai/projects/(?P<project_id>[a-zA-Z0-9-]+)/tasks',
+			array(
+				'methods'             => 'GET',
+				'permission_callback' => array(__CLASS__, 'rest_permission_check'),
+				'callback'            => array(__CLASS__, 'rest_list_project_tasks'),
+			)
+		);
+		register_rest_route(
+			WIDROW_AI_API_NAME_SPACE,
+			'/staff-ai/documents/(?P<id>[a-zA-Z0-9-]+)/project',
+			array(
+				'methods'             => 'PUT',
+				'permission_callback' => array(__CLASS__, 'rest_permission_check'),
+				'callback'            => array(__CLASS__, 'rest_assign_document_project'),
+			)
+		);
+		register_rest_route(
+			WIDROW_AI_API_NAME_SPACE,
+			'/staff-ai/documents/(?P<id>[a-zA-Z0-9-]+)',
+			array(
+				'methods'             => 'DELETE',
+				'permission_callback' => array(__CLASS__, 'rest_permission_check'),
+				'callback'            => array(__CLASS__, 'rest_delete_document'),
+			)
+		);
+		// Projects P-D3 (D-P14): read a document in place. DEF returns the text
+		// of one of the caller's own documents (owner-scoped from the forwarded
+		// identity, text formats only, bounded with offset continuation); the
+		// panel renders it AS TEXT — never HTML.
+		register_rest_route(
+			WIDROW_AI_API_NAME_SPACE,
+			'/staff-ai/documents/(?P<id>[a-zA-Z0-9-]+)/content',
+			array(
+				'methods'             => 'GET',
+				'permission_callback' => array(__CLASS__, 'rest_permission_check'),
+				'callback'            => array(__CLASS__, 'rest_document_content'),
+				'args'                => array(
+					'offset' => array(
+						'type'     => 'integer',
+						'required' => false,
+						'minimum'  => 0,
+					),
+				),
+			)
+		);
+
+		// Artifacts A-3 (D-A7): the owner's share link. Same permission callback
+		// and id pattern as the sibling document routes — DEF enforces ownership
+		// from the forwarded identity, so a foreign id is the uniform 404.
+		register_rest_route(
+			WIDROW_AI_API_NAME_SPACE,
+			'/staff-ai/documents/(?P<id>[a-zA-Z0-9-]+)/share',
+			array(
+				array(
+					'methods'             => 'POST',
+					'permission_callback' => array(__CLASS__, 'rest_permission_check'),
+					'callback'            => array(__CLASS__, 'rest_share_document'),
+				),
+				array(
+					'methods'             => 'DELETE',
+					'permission_callback' => array(__CLASS__, 'rest_permission_check'),
+					'callback'            => array(__CLASS__, 'rest_unshare_document'),
+				),
+			)
+		);
+
+		// "Memories" panel (privacy slice B). Memories are per-user: DEF scopes
+		// every query to the identity in the X-DEF-User header that
+		// backend_request() already forwards — nothing user-scoped rides in the URL
+		// or body. There is no user_id parameter on the DEF side and there must be
+		// none here either; one would turn this back into an admin browse endpoint.
+		// Entry ids are UUID4, so the documents id pattern fits unchanged.
+		register_rest_route(
+			WIDROW_AI_API_NAME_SPACE,
+			'/staff-ai/memories',
+			array(
+				'methods'             => 'GET',
+				'permission_callback' => array(__CLASS__, 'rest_permission_check'),
+				'callback'            => array(__CLASS__, 'rest_list_memories'),
+			)
+		);
+		register_rest_route(
+			WIDROW_AI_API_NAME_SPACE,
+			'/staff-ai/memories/(?P<id>[a-zA-Z0-9-]+)',
+			array(
+				'methods'             => 'DELETE',
+				'permission_callback' => array(__CLASS__, 'rest_permission_check'),
+				'callback'            => array(__CLASS__, 'rest_delete_memory'),
+			)
+		);
+
+		// "Usage" panel (Usage & Budgets D-U7). Own-identity only, on the
+		// Memories footing above: DEF resolves whose week this is from the
+		// X-DEF-User header and offers no `sub` parameter, so there is nothing
+		// here that could ask for someone else's usage.
+		register_rest_route(
+			WIDROW_AI_API_NAME_SPACE,
+			'/staff-ai/usage',
+			array(
+				'methods'             => 'GET',
+				'permission_callback' => array(__CLASS__, 'rest_permission_check'),
+				'callback'            => array(__CLASS__, 'rest_get_usage'),
+			)
+		);
+
+		// Email Triage schedule (S4b). Per-user like the Memories panel: DEF keys
+		// the schedule to the X-DEF-User identity backend_request() forwards -
+		// nothing user-scoped rides in the URL or body, and a user id smuggled in
+		// the body is ignored DEF-side (pinned there). This is the Staff-AI
+		// channel's first per-user WRITE-back settings route; the PUT is
+		// FULL-REPLACE (DEF fills omitted fields with defaults), so the card
+		// always sends the complete schedule object.
+		register_rest_route(
+			WIDROW_AI_API_NAME_SPACE,
+			'/staff-ai/triage-schedule',
+			array(
+				array(
+					'methods'             => 'GET',
+					'permission_callback' => array(__CLASS__, 'rest_permission_check'),
+					'callback'            => array(__CLASS__, 'rest_get_triage_schedule'),
+				),
+				array(
+					'methods'             => 'PUT',
+					'permission_callback' => array(__CLASS__, 'rest_permission_check'),
+					'callback'            => array(__CLASS__, 'rest_put_triage_schedule'),
+				),
+				array(
+					'methods'             => 'DELETE',
+					'permission_callback' => array(__CLASS__, 'rest_permission_check'),
+					'callback'            => array(__CLASS__, 'rest_delete_triage_schedule'),
+				),
+			)
+		);
+
+		// Phase 4a multiplicity: the PLURAL triage surface - one setup per
+		// mailbox, N cards. The singleton routes above stay for the legacy
+		// oldest-setup view; this is what v6.4.0 renders from. Ids in URLs
+		// are the caller's own rows or 404, resolved DEF-side.
+		register_rest_route(
+			WIDROW_AI_API_NAME_SPACE,
+			'/staff-ai/triage-schedules',
+			array(
+				array(
+					'methods'             => 'GET',
+					'permission_callback' => array(__CLASS__, 'rest_permission_check'),
+					'callback'            => array(__CLASS__, 'rest_list_triage_schedules'),
+				),
+				array(
+					'methods'             => 'POST',
+					'permission_callback' => array(__CLASS__, 'rest_permission_check'),
+					'callback'            => array(__CLASS__, 'rest_create_triage_schedule'),
+				),
+			)
+		);
+		register_rest_route(
+			WIDROW_AI_API_NAME_SPACE,
+			'/staff-ai/triage-schedules/(?P<schedule_id>[A-Za-z0-9-]{1,64})',
+			array(
+				array(
+					'methods'             => 'PUT',
+					'permission_callback' => array(__CLASS__, 'rest_permission_check'),
+					'callback'            => array(__CLASS__, 'rest_update_triage_schedule_by_id'),
+				),
+				array(
+					'methods'             => 'DELETE',
+					'permission_callback' => array(__CLASS__, 'rest_permission_check'),
+					'callback'            => array(__CLASS__, 'rest_delete_triage_schedule_by_id'),
+				),
+			)
+		);
+		register_rest_route(
+			WIDROW_AI_API_NAME_SPACE,
+			'/staff-ai/triage-schedules/(?P<schedule_id>[A-Za-z0-9-]{1,64})/run-now',
+			array(
+				array(
+					'methods'             => 'POST',
+					'permission_callback' => array(__CLASS__, 'rest_permission_check'),
+					'callback'            => array(__CLASS__, 'rest_run_now_triage_by_id'),
+				),
+			)
+		);
+
+		// The mailbox picker's data (Phase 4a, §5): the caller's OWN active
+		// mail connections. GET with nothing user-scoped anywhere - DEF keys
+		// the listing to the forwarded identity, same as every sibling.
+		register_rest_route(
+			WIDROW_AI_API_NAME_SPACE,
+			'/staff-ai/mail-connections',
+			array(
+				array(
+					'methods'             => 'GET',
+					'permission_callback' => array(__CLASS__, 'rest_permission_check'),
+					'callback'            => array(__CLASS__, 'rest_mail_connections'),
+				),
+			)
+		);
+
+		// The chat primary mailbox (Slice 4-A, v6.6.0): one per provider, the
+		// caller's own. The PUT body carries ONLY the picked connection id -
+		// DEF validates it against the caller's OWN connections and stores the
+		// toolkit THAT connection reports, so nothing user-scoped or claimable
+		// rides here. DELETE clears one provider's pick (back to unpinned).
+		register_rest_route(
+			WIDROW_AI_API_NAME_SPACE,
+			'/staff-ai/primary-mailbox',
+			array(
+				array(
+					'methods'             => 'PUT',
+					'permission_callback' => array(__CLASS__, 'rest_permission_check'),
+					'callback'            => array(__CLASS__, 'rest_set_primary_mailbox'),
+				),
+				array(
+					'methods'             => 'DELETE',
+					'permission_callback' => array(__CLASS__, 'rest_permission_check'),
+					'callback'            => array(__CLASS__, 'rest_clear_primary_mailbox'),
+				),
+			)
+		);
+
+		// Run Now. POST with no body at all: the run belongs to whoever is
+		// logged in, and DEF resolves that from the forwarded identity - there
+		// is no field here that could name another user's mailbox.
+		register_rest_route(
+			WIDROW_AI_API_NAME_SPACE,
+			'/staff-ai/triage-schedule/run-now',
+			array(
+				array(
+					'methods'             => 'POST',
+					'permission_callback' => array(__CLASS__, 'rest_permission_check'),
+					'callback'            => array(__CLASS__, 'rest_run_now_triage_schedule'),
+				),
+			)
+		);
+
+		// Free-text scheduled tasks (Phase 3, D-S2) - the creator's DEFAULT type.
+		// The same per-user shape as the triage-schedule routes: DEF keys every
+		// task to the forwarded X-DEF-User identity, nothing user-scoped rides
+		// in any URL or body, and a user holds MANY tasks, so the collection
+		// routes carry a task id where triage carries none.
+		register_rest_route(
+			WIDROW_AI_API_NAME_SPACE,
+			'/staff-ai/tasks',
+			array(
+				array(
+					'methods'             => 'GET',
+					'permission_callback' => array(__CLASS__, 'rest_permission_check'),
+					'callback'            => array(__CLASS__, 'rest_list_tasks'),
+				),
+				array(
+					'methods'             => 'POST',
+					'permission_callback' => array(__CLASS__, 'rest_permission_check'),
+					'callback'            => array(__CLASS__, 'rest_create_task'),
+				),
+			)
+		);
+		register_rest_route(
+			WIDROW_AI_API_NAME_SPACE,
+			'/staff-ai/tasks/(?P<task_id>[A-Za-z0-9-]{1,64})',
+			array(
+				array(
+					'methods'             => 'PUT',
+					'permission_callback' => array(__CLASS__, 'rest_permission_check'),
+					'callback'            => array(__CLASS__, 'rest_update_task'),
+				),
+				array(
+					'methods'             => 'DELETE',
+					'permission_callback' => array(__CLASS__, 'rest_permission_check'),
+					'callback'            => array(__CLASS__, 'rest_delete_task'),
+				),
+			)
+		);
+		register_rest_route(
+			WIDROW_AI_API_NAME_SPACE,
+			'/staff-ai/tasks/(?P<task_id>[A-Za-z0-9-]{1,64})/run-now',
+			array(
+				array(
+					'methods'             => 'POST',
+					'permission_callback' => array(__CLASS__, 'rest_permission_check'),
+					'callback'            => array(__CLASS__, 'rest_run_now_task'),
+				),
+			)
+		);
+	}
+
+	/**
+	 * REST API permission check for Staff AI endpoints.
+	 *
+	 * @return bool|\WP_Error True if access granted, WP_Error otherwise.
+	 * @since 1.1.0
+	 */
+	public static function rest_permission_check()
+	{
+		// Authentication gate.
+		if (! is_user_logged_in()) {
+			return new \WP_Error(
+				'rest_not_logged_in',
+				__('Authentication required.', 'widrow-ai'),
+				array('status' => 401)
+			);
+		}
+
+		// Capability gate.
+		if (! self::user_has_staff_ai_access()) {
+			return self::access_denied_error();
+		}
+
+		return true;
+	}
+
+	/**
+	 * Get the backend API base URL.
+	 *
+	 * @return string|null API base URL or null if not configured.
+	 * @since 1.1.0
+	 */
+	private static function get_api_base_url(): ?string
+	{
+		$url = \Widrow_AI::get_def_api_url_internal();
+		return ! empty($url) ? $url : null;
+	}
+
+	/**
+	 * Make a request to the backend API.
+	 *
+	 * @param string $method HTTP method (GET, POST).
+	 * @param string $endpoint API endpoint path.
+	 * @param array  $body Request body for POST requests.
+	 * @return array|\WP_Error Response data or WP_Error.
+	 * @since 1.1.0
+	 */
+	/**
+	 * Flatten a DEF error `detail` to a human-readable string.
+	 *
+	 * DEF's refusals are not always strings: validation refusals carry a
+	 * dict ({"error": "validation_failed", "message": "..."}) and FastAPI
+	 * 422s carry a list of {loc, msg, type} dicts. Passing either into
+	 * sprintf('%s') prints "Array" — the honest refusal became illegible
+	 * (found by #277's security leg against the live producer, on the exact
+	 * rider that existed to prevent it). Nothing here is a leak: the detail
+	 * is already the server's user-destined message.
+	 *
+	 * @param mixed $detail Raw `detail` from the DEF error body.
+	 * @return string Human-readable detail, or '' when there is none.
+	 */
+	private static function stringify_backend_detail($detail): string
+	{
+		if (is_string($detail)) {
+			return $detail;
+		}
+		if (is_array($detail)) {
+			// Dict shape: the server's message IS the user-facing refusal.
+			if (isset($detail['message']) && is_string($detail['message'])) {
+				return $detail['message'];
+			}
+			// Pydantic 422 list: flatten each entry's msg.
+			$msgs = array();
+			foreach ($detail as $entry) {
+				if (is_array($entry) && isset($entry['msg']) && is_string($entry['msg'])) {
+					$msgs[] = $entry['msg'];
+				}
+			}
+			if (! empty($msgs)) {
+				return implode('; ', $msgs);
+			}
+			// Unknown structure: JSON beats "Array".
+			return (string) wp_json_encode($detail);
+		}
+		return '';
+	}
+
+	private static function backend_request(string $method, string $endpoint, array $body = array())
+	{
+		$base_url = self::get_api_base_url();
+		if (! $base_url) {
+			return new \WP_Error(
+				'staff_ai_not_configured',
+				__('Staff AI backend URL is not configured. Go to Widrow AI → Settings to set the Staff AI API URL.', 'widrow-ai'),
+				array('status' => 503)
+			);
+		}
+
+		$url = $base_url . $endpoint;
+
+		// BFF proxy auth: API key + user ID + capabilities (no JWT).
+		$user = wp_get_current_user();
+		if (! $user || 0 === $user->ID) {
+			return new \WP_Error(
+				'staff_ai_not_authenticated',
+				__('User not authenticated.', 'widrow-ai'),
+				array('status' => 401)
+			);
+		}
+
+		$api_key = \Widrow_AI_Encryption::get_secret( 'widrow_ai_api_key' );
+		if ( empty( $api_key ) ) {
+			return new \WP_Error(
+				'staff_ai_not_configured',
+				__( 'API key not configured. Go to Widrow AI → Settings to set up the connection.', 'widrow-ai' ),
+				array( 'status' => 503 )
+			);
+		}
+
+		$capabilities = \Widrow_AI_Tools::get_user_def_capabilities( $user );
+
+		$headers = array(
+			'X-DEF-API-Key'            => $api_key,
+			'X-DEF-User'               => (string) $user->ID,
+			'X-DEF-User-Capabilities'  => implode( ',', $capabilities ),
+			'Content-Type'             => 'application/json',
+			'Accept'                   => 'application/json',
+		);
+
+		// Identity headers — let DEF build the "## Current authenticated user"
+		// prompt section. URL-encoded for Unicode safety; DEF decodes via
+		// urllib.parse.unquote(). See DEF auth.py verify_internal_request().
+		if ( ! empty( $user->display_name ) ) {
+			$headers['X-DEF-User-Display-Name'] = rawurlencode( $user->display_name );
+		}
+		if ( ! empty( $user->user_email ) ) {
+			$headers['X-DEF-User-Email'] = rawurlencode( $user->user_email );
+		}
+		if ( ! empty( $user->roles ) && is_array( $user->roles ) ) {
+			$roles = array_filter( $user->roles, 'is_string' );
+			if ( ! empty( $roles ) ) {
+				$headers['X-DEF-User-Roles'] = implode( ',', $roles );
+			}
+		}
+		$site_name = get_bloginfo( 'name' );
+		if ( ! empty( $site_name ) ) {
+			$headers['X-DEF-Site-Name'] = rawurlencode( $site_name );
+		}
+
+		$args = array(
+			'timeout'     => 60,
+			'httpversion' => '1.1',
+			'headers'     => $headers,
+		);
+
+		if ('GET' === $method) {
+			$response = wp_remote_get($url, $args);
+		} else {
+			// POST / PATCH / DELETE — wp_remote_post() only speaks POST, so all
+			// write verbs go through wp_remote_request() with an explicit method.
+			$args['method'] = $method;
+			$args['body']   = wp_json_encode($body);
+			$response       = wp_remote_request($url, $args);
+		}
+
+		if (is_wp_error($response)) {
+			return new \WP_Error(
+				'staff_ai_request_failed',
+				__('Failed to connect to Staff AI backend.', 'widrow-ai'),
+				array('status' => 502)
+			);
+		}
+
+		$status = wp_remote_retrieve_response_code($response);
+		$body   = wp_remote_retrieve_body($response);
+		$data   = json_decode($body, true);
+
+		// Handle unexpected status codes (0 = network error, empty = no response).
+		if (empty($status) || 0 === $status) {
+			return new \WP_Error(
+				'staff_ai_network_error',
+				sprintf(
+					/* translators: 1: URL being called */
+					__('Network error: Could not connect to backend at %1$s. Check if the URL is correct and the server is reachable.', 'widrow-ai'),
+					$url
+				),
+				array('status' => 502)
+			);
+		}
+
+		// Map backend errors to clean UI-safe errors.
+		if ($status >= 400) {
+			$backend_detail = self::stringify_backend_detail(isset($data['detail']) ? $data['detail'] : '');
+
+			// Handle different error status codes - each branch MUST set both $error_code and $error_message.
+			$backend_error = isset($data['detail']['error']) && is_string($data['detail']['error']) ? $data['detail']['error'] : '';
+			if (403 === $status && 'speech_disabled' === $backend_error) {
+				// Not an auth failure: the tenant switched this employee's voice
+				// off (Employees page). DEF's own sentence says so (7.7.0).
+				$error_code    = 'speech_disabled';
+				$error_message = $backend_detail;
+			} elseif (401 === $status || 403 === $status) {
+				$error_code    = 'staff_ai_auth_failed';
+				$error_message = sprintf(
+					/* translators: 1: HTTP status code, 2: backend error detail */
+					__('Backend auth failed (HTTP %1$d). The backend may need JWKS configuration. Detail: %2$s', 'widrow-ai'),
+					$status,
+					$backend_detail ? $backend_detail : 'none'
+				);
+			} elseif (404 === $status) {
+				$error_code    = 'staff_ai_not_found';
+				$error_message = sprintf(
+					/* translators: 1: API endpoint path, 2: full URL */
+					__('Backend endpoint not found (HTTP 404): %1$s. Full URL: %2$s - Please verify the backend API supports this endpoint.', 'widrow-ai'),
+					$endpoint,
+					$url
+				);
+			} elseif ($status >= 500) {
+				$error_code    = 'staff_ai_service_error';
+				$error_message = sprintf(
+					/* translators: 1: HTTP status code */
+					__('Backend service error (HTTP %1$d). The service may be temporarily unavailable.', 'widrow-ai'),
+					$status
+				);
+			} else {
+				// Any other 4xx error (400, 405, 422, etc.). Post ten-bounds
+				// deletion this is the ROUTINE refusal path (over-size upload,
+				// over-budget references): the server's own message IS the
+				// user-facing refusal, and the internal DEF URL must not ride
+				// along with it — the browser never sees that URL anywhere
+				// else, and every routine refusal was about to print it. The
+				// URL stays in the WP_DEBUG log line below for diagnostics.
+				$error_code    = 'staff_ai_http_' . $status;
+				$error_message = sprintf(
+					/* translators: 1: HTTP status code, 2: backend error detail */
+					__('The assistant service declined this request (HTTP %1$d): %2$s', 'widrow-ai'),
+					$status,
+					$backend_detail ? $backend_detail : __('Unknown error', 'widrow-ai')
+				);
+			}
+
+			// Log detailed error in debug mode for troubleshooting.
+			if (defined('WP_DEBUG') && WP_DEBUG) {
+				$debug_info = sprintf(
+					'Staff AI backend error: status=%d, endpoint=%s, url=%s, detail=%s',
+					$status,
+					$endpoint,
+					$url,
+					$backend_detail ? $backend_detail : 'none'
+				);
+				// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+				error_log($debug_info);
+			}
+
+			return new \WP_Error(
+				$error_code,
+				$error_message,
+				array('status' => $status)
+			);
+		}
+
+		return $data;
+	}
+
+	/**
+	 * REST handler: List conversations.
+	 *
+	 * @param \WP_REST_Request $request Request object.
+	 * @return \WP_REST_Response|\WP_Error Response.
+	 * @since 1.1.0
+	 */
+	public static function rest_list_conversations(\WP_REST_Request $request)
+	{
+		// Staff AI uses dedicated endpoints - NOT the customer chatbot
+		// Reference: STAFF_AI_CHANNEL_OVERVIEW.md
+		// "The Staff AI Channel is NOT a customer chatbot"
+		$result = self::backend_request('GET', '/api/staff-ai/threads');
+
+		if (is_wp_error($result)) {
+			return $result;
+		}
+
+		// Map backend response to frontend format.
+		$conversations = array();
+		if (isset($result['threads']) && is_array($result['threads'])) {
+			foreach ($result['threads'] as $thread) {
+				$conversations[] = array(
+					'id'         => $thread['id'] ?? '',
+					'title'      => $thread['title'] ?? __('New conversation', 'widrow-ai'),
+					'updated_at' => $thread['updatedAt'] ?? $thread['createdAt'] ?? '',
+					'is_shared'  => false, // Backend doesn't support sharing yet.
+					// Chat Options: the chat's project binding (a bind-time
+					// snapshot of the caller's own project's name).
+					'projectId'   => $thread['projectId'] ?? null,
+					'projectName' => $thread['projectName'] ?? null,
+				);
+			}
+		}
+
+		return new \WP_REST_Response(
+			array(
+				'success'       => true,
+				'conversations' => $conversations,
+			),
+			200
+		);
+	}
+
+	/**
+	 * The conversation id from the URL match ONLY. WP_REST_Request::get_param()
+	 * reads JSON body before URL params, so a body `id` would otherwise shadow
+	 * the route's [a-zA-Z0-9_-]+ capture on the value spliced into the DEF path.
+	 *
+	 * @param \WP_REST_Request $request Request object.
+	 * @return string
+	 */
+	private static function url_id( \WP_REST_Request $request ): string
+	{
+		$params = $request->get_url_params();
+		return isset( $params['id'] ) ? (string) $params['id'] : '';
+	}
+
+	/**
+	 * Chat Options refusals. DEF's routine 4xx detail IS the user-facing message
+	 * (a title over 200 characters, a project that is archived) and is URL-free
+	 * by backend_request()'s own rule, so it passes through; the 404 branch,
+	 * which names the internal URL, gets the plain copy via plain_backend_error.
+	 *
+	 * @param \WP_Error $error   Error from backend_request().
+	 * @param string    $message Plain copy for the masked codes.
+	 * @return \WP_Error
+	 */
+	private static function chat_option_error( \WP_Error $error, string $message )
+	{
+		if ( 0 === strpos( (string) $error->get_error_code(), 'staff_ai_http_4' ) ) {
+			return $error;
+		}
+		return self::plain_backend_error( $error, $message );
+	}
+
+	/**
+	 * REST handler: rename a chat (the sidebar's ⋮ menu). DEF enforces the
+	 * 200-char door refusal and sets title_user_set so the summariser stands
+	 * down; ownership is DEF's (foreign/deleted/unknown ids are one 404).
+	 *
+	 * @param \WP_REST_Request $request Request object.
+	 * @return \WP_REST_Response|\WP_Error Response ({success, title}).
+	 */
+	public static function rest_rename_conversation( \WP_REST_Request $request )
+	{
+		$title = $request->get_param( 'title' );
+		if ( ! is_string( $title ) || '' === trim( $title ) ) {
+			return new \WP_Error(
+				'invalid_title',
+				__( 'Enter a name for this chat.', 'widrow-ai' ),
+				array( 'status' => 422 )
+			);
+		}
+		$result = self::backend_request(
+			'PATCH',
+			'/api/staff-ai/threads/' . rawurlencode( self::url_id( $request ) ),
+			array( 'title' => trim( $title ) ) // DEF collapses whitespace + caps at 200; never rendered as HTML here
+		);
+		if ( is_wp_error( $result ) ) {
+			return self::chat_option_error(
+				$result,
+				__( 'Could not rename the chat. Nothing has changed - try again in a moment.', 'widrow-ai' )
+			);
+		}
+		return new \WP_REST_Response(
+			array(
+				'success' => true,
+				'title'   => isset( $result['title'] ) ? (string) $result['title'] : '',
+			),
+			200
+		);
+	}
+
+	/**
+	 * REST handler: delete a chat. DEF's delete is SOFT - the chat leaves every
+	 * listing and reader immediately and the row is purged a month later. A
+	 * foreign or already-deleted id gets the same 404 as an unknown one.
+	 *
+	 * @param \WP_REST_Request $request Request object.
+	 * @return \WP_REST_Response|\WP_Error Response ({success}).
+	 */
+	public static function rest_delete_conversation( \WP_REST_Request $request )
+	{
+		$result = self::backend_request(
+			'DELETE',
+			'/api/staff-ai/threads/' . rawurlencode( self::url_id( $request ) )
+		);
+		// DEF answers 204 with no body - backend_request hands that back as
+		// null, which is success here; only a WP_Error is a failure.
+		if ( is_wp_error( $result ) ) {
+			return self::plain_backend_error(
+				$result,
+				__( 'Could not delete the chat. Nothing has changed - try again in a moment.', 'widrow-ai' )
+			);
+		}
+		return new \WP_REST_Response( array( 'success' => true ), 200 );
+	}
+
+	/**
+	 * REST handler: move a chat into / out of one of the caller's projects.
+	 * Explicit null unbinds; DEF validates the project (the caller's own,
+	 * active) and a rebind replaces the single slot (D-P5).
+	 *
+	 * @param \WP_REST_Request $request Request object.
+	 * @return \WP_REST_Response|\WP_Error Response ({success, projectId, projectName}).
+	 */
+	public static function rest_set_conversation_project( \WP_REST_Request $request )
+	{
+		$project_id = $request->get_param( 'project_id' );
+		if ( null !== $project_id && ! is_string( $project_id ) ) {
+			return new \WP_Error(
+				'invalid_project',
+				__( 'Pick one of your projects, or remove the chat from its project.', 'widrow-ai' ),
+				array( 'status' => 422 )
+			);
+		}
+		$result = self::backend_request(
+			'PUT',
+			'/api/staff-ai/threads/' . rawurlencode( self::url_id( $request ) ) . '/project',
+			array( 'project_id' => is_string( $project_id ) ? sanitize_text_field( $project_id ) : null )
+		);
+		if ( is_wp_error( $result ) ) {
+			return self::chat_option_error(
+				$result,
+				__( 'Could not move the chat. Nothing has changed - try again in a moment.', 'widrow-ai' )
+			);
+		}
+		return new \WP_REST_Response(
+			array(
+				'success'     => true,
+				'projectId'   => isset( $result['projectId'] ) ? $result['projectId'] : null,
+				'projectName' => isset( $result['projectName'] ) ? $result['projectName'] : null,
+			),
+			200
+		);
+	}
+
+	/**
+	 * REST handler: list pending Content Agent drafts (PR-6 review queue).
+	 *
+	 * Proxies to DEF GET /api/staff-ai/content/drafts and passes the draft fields
+	 * through unchanged (proposed/source carry the diff the UI renders).
+	 *
+	 * @return \WP_REST_Response|\WP_Error Response.
+	 */
+	/**
+	 * True when $url is a syntactically valid http(s) URL. Used to validate
+	 * reference-source URLs WITHOUT reshaping them — esc_url_raw would re-encode
+	 * the string, but these are opaque payload data for DEF, so we only check the
+	 * scheme/host shape and pass the original through.
+	 *
+	 * @param string $url Candidate URL.
+	 * @return bool Whether it is an http(s) URL.
+	 */
+	private static function is_http_url( string $url ): bool
+	{
+		$scheme = strtolower( (string) wp_parse_url( $url, PHP_URL_SCHEME ) );
+		return ( 'http' === $scheme || 'https' === $scheme )
+			&& '' !== (string) wp_parse_url( $url, PHP_URL_HOST );
+	}
+
+	/**
+	 * Validate a client-supplied reference_sources object (Engine 2.5).
+	 *
+	 * Shape mirrors the DEF contract: { urls: string[≤5], text: string[≤20k],
+	 * files: [{filename, content_b64}][≤2, ≤10MB decoded total; pdf/docx/txt/csv/
+	 * xlsx] }. Everything optional. Returns the CLEANED object passed through
+	 * unchanged (no esc_url_raw / sanitize that could corrupt payload data —
+	 * length/type/scheme checks only), an empty array when no usable source is
+	 * present, or a WP_Error naming the first cap/shape violation. DEF owns the
+	 * authoritative validation; this is a BFF sanity gate with clear 400s.
+	 *
+	 * @param mixed $raw Raw reference_sources from the request body.
+	 * @return array|\WP_Error Cleaned reference_sources (possibly empty) or error.
+	 */
+	private static function validate_reference_sources( $raw )
+	{
+		if ( null === $raw || ( is_array( $raw ) && empty( $raw ) ) ) {
+			return array();
+		}
+		if ( ! is_array( $raw ) ) {
+			return new \WP_Error(
+				'invalid_reference_sources',
+				__( 'reference_sources must be an object.', 'widrow-ai' ),
+				array( 'status' => 400 )
+			);
+		}
+
+		$err   = static function ( $message ) {
+			return new \WP_Error( 'invalid_reference_sources', $message, array( 'status' => 400 ) );
+		};
+		$clean = array();
+
+		// urls: ≤5 http(s), passed through unchanged.
+		if ( isset( $raw['urls'] ) ) {
+			if ( ! is_array( $raw['urls'] ) ) {
+				return $err( __( 'reference_sources.urls must be a list of URLs.', 'widrow-ai' ) );
+			}
+			$urls = array();
+			foreach ( $raw['urls'] as $u ) {
+				$u = is_string( $u ) ? trim( $u ) : '';
+				if ( '' === $u ) {
+					continue;
+				}
+				if ( ! self::is_http_url( $u ) ) {
+					return $err( __( 'Each reference URL must be a valid http(s) URL.', 'widrow-ai' ) );
+				}
+				$urls[] = $u;
+			}
+			if ( ! empty( $urls ) ) {
+				$clean['urls'] = $urls;
+			}
+		}
+
+		// text: ≤20,000 chars, passed through verbatim (sanitizing would corrupt
+		// source material — this is payload data for DEF, not display text).
+		if ( isset( $raw['text'] ) ) {
+			if ( ! is_string( $raw['text'] ) ) {
+				return $err( __( 'reference_sources.text must be a string.', 'widrow-ai' ) );
+			}
+			if ( mb_strlen( $raw['text'] ) > self::CREATE_MAX_REFERENCE_TEXT ) {
+				return $err( __( 'Source text is limited to 20,000 characters.', 'widrow-ai' ) );
+			}
+			if ( '' !== trim( $raw['text'] ) ) {
+				$clean['text'] = $raw['text'];
+			}
+		}
+
+		// files: ≤2 items, allowed types, ≤10MB total decoded; passed through unchanged.
+		if ( isset( $raw['files'] ) ) {
+			if ( ! is_array( $raw['files'] ) ) {
+				return $err( __( 'reference_sources.files must be a list.', 'widrow-ai' ) );
+			}
+			$files = array();
+			$bytes = 0;
+			foreach ( $raw['files'] as $f ) {
+				if ( ! is_array( $f ) || ! isset( $f['filename'], $f['content_b64'] )
+					|| ! is_string( $f['filename'] ) || ! is_string( $f['content_b64'] ) ) {
+					return $err( __( 'Each reference file needs a filename and base64 content.', 'widrow-ai' ) );
+				}
+				$ext = strtolower( pathinfo( $f['filename'], PATHINFO_EXTENSION ) );
+				if ( ! in_array( $ext, self::CREATE_ALLOWED_FILE_EXT, true ) ) {
+					return $err( __( 'Reference files must be PDF, DOCX, TXT, CSV or XLSX.', 'widrow-ai' ) );
+				}
+				$decoded = base64_decode( $f['content_b64'], true );
+				if ( false === $decoded ) {
+					return $err( __( 'A reference file is not valid base64.', 'widrow-ai' ) );
+				}
+				$bytes  += strlen( $decoded );
+				$files[] = array( 'filename' => $f['filename'], 'content_b64' => $f['content_b64'] );
+			}
+			if ( $bytes > self::CREATE_MAX_REFERENCE_FILE_BYTES ) {
+				return $err( __( 'Reference files exceed the 10MB total limit.', 'widrow-ai' ) );
+			}
+			if ( ! empty( $files ) ) {
+				$clean['files'] = $files;
+			}
+		}
+
+		return $clean;
+	}
+
+	/**
+	 * REST handler: on-demand "Create New" request (Content Agent Engine 2).
+	 *
+	 * Proxies DEF POST /api/staff-ai/content/create with the user's keyphrase. DEF
+	 * generates a fully-optimized draft asynchronously; it then appears in the
+	 * Content Drafts review queue (kind = 'create') for approval. No synchronous
+	 * wait — this just acknowledges the request.
+	 *
+	 * @return \WP_REST_Response|\WP_Error Response.
+	 */
+	public static function rest_content_create( \WP_REST_Request $request )
+	{
+		$params    = $request->get_json_params();
+		$params    = is_array( $params ) ? $params : array();
+		$keyphrase = ( isset( $params['keyphrase'] ) && is_string( $params['keyphrase'] ) )
+			? trim( $params['keyphrase'] )
+			: '';
+
+		// Reference sources (Engine 2.5 "Create with sources") — optional. Validated
+		// for shape/caps here and passed through UNCHANGED (no lossy reshape); DEF
+		// owns authoritative validation. When ≥1 source is supplied the keyphrase is
+		// optional (DEF derives it, the human reviews it on the draft card).
+		$reference_sources = self::validate_reference_sources(
+			isset( $params['reference_sources'] ) ? $params['reference_sources'] : null
+		);
+		if ( is_wp_error( $reference_sources ) ) {
+			return $reference_sources;
+		}
+		$has_sources = ! empty( $reference_sources );
+
+		if ( '' === $keyphrase && ! $has_sources ) {
+			return new \WP_Error(
+				'invalid_keyphrase',
+				__( 'Provide a keyphrase or at least one reference source to generate a post.', 'widrow-ai' ),
+				array( 'status' => 400 )
+			);
+		}
+
+		// Optional writer notes (Engine 2.5) — forwarded verbatim to DEF; the
+		// writer consumes them when retrieval-grounded writing lands (PR 2.5-3).
+		$notes = ( isset( $params['notes'] ) && is_string( $params['notes'] ) )
+			? trim( sanitize_textarea_field( $params['notes'] ) )
+			: '';
+		if ( mb_strlen( $notes ) > 2000 ) {
+			return new \WP_Error(
+				'invalid_notes',
+				__( 'Notes are limited to 2000 characters.', 'widrow-ai' ),
+				array( 'status' => 400 )
+			);
+		}
+
+		$body = array();
+		if ( '' !== $keyphrase ) {
+			$body['keyphrase'] = $keyphrase;
+		}
+		if ( '' !== $notes ) {
+			$body['notes'] = $notes;
+		}
+		if ( $has_sources ) {
+			$body['reference_sources'] = $reference_sources;
+		}
+
+		$result = self::backend_request( 'POST', '/api/staff-ai/content/create', $body );
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+
+		$payload = array( 'success' => true );
+		if ( is_array( $result ) ) {
+			$payload = array_merge( $payload, $result );
+		}
+		return new \WP_REST_Response( $payload, 200 );
+	}
+
+	/**
+	 * The tenant's name for the Creator, off a content list response.
+	 *
+	 * DEF puts `creator_name` on both list payloads (the stored name, else its
+	 * own default). It is tenant DATA, not markup, and the page renders it as
+	 * text — so this only has to make it printable: control characters (a
+	 * newline that would break the title out of its line included) go, it is
+	 * capped, and anything unusable falls back to the default rather than
+	 * leaving the page nameless.
+	 *
+	 * @param mixed $payload Decoded backend response.
+	 * @return string Display name, never empty.
+	 */
+	public static function creator_name_from( $payload ): string
+	{
+		$raw = ( is_array( $payload ) && isset( $payload['creator_name'] ) && is_string( $payload['creator_name'] ) )
+			? $payload['creator_name']
+			: '';
+		// Byte class, no /u: these bytes never occur inside a UTF-8 sequence, so
+		// this cannot cut one in half and cannot fail on invalid input.
+		$name = trim( (string) preg_replace( '/[\x00-\x1F\x7F]+/', ' ', $raw ) );
+		if ( '' === $name ) {
+			return self::CREATOR_DEFAULT_NAME;
+		}
+		return function_exists( 'mb_substr' )
+			? (string) mb_substr( $name, 0, self::CREATOR_NAME_MAX )
+			: substr( $name, 0, self::CREATOR_NAME_MAX );
+	}
+
+	/**
+	 * Remember the name DEF last gave the Creator (8.2.8).
+	 *
+	 * The page draws before any list response lands, so without this it renders
+	 * the platform default and the JS swaps it a moment later — on every single
+	 * visit, for every tenant who has renamed her. Stored, the page opens
+	 * already showing her name and only a rename repaints, once.
+	 *
+	 * Written only when it has changed: a list runs on every page load and a
+	 * rename is rare. Not autoloaded — one admin page reads it.
+	 *
+	 * @param string $name A name already through creator_name_from().
+	 */
+	public static function remember_creator_name( string $name ): void
+	{
+		if ( get_option( 'widrow_ai_creator_name', '' ) !== $name ) {
+			update_option( 'widrow_ai_creator_name', $name, false );
+		}
+	}
+
+	public static function rest_list_content_drafts( \WP_REST_Request $request )
+	{
+		$result = self::backend_request( 'GET', '/api/staff-ai/content/drafts' );
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+		$drafts = ( isset( $result['drafts'] ) && is_array( $result['drafts'] ) ) ? $result['drafts'] : array();
+
+		// Enrich each draft with the local product title + links. The draft's
+		// item_id IS the WordPress product post ID, so we resolve title/links here
+		// (in WP) rather than round-tripping the backend — always accurate, no extra
+		// call. get_edit_post_link returns '' when the current user can't edit, so
+		// the title simply falls back to plain text client-side.
+		foreach ( $drafts as &$draft ) {
+			$item_id = isset( $draft['item_id'] ) ? (int) $draft['item_id'] : 0;
+			if ( $item_id > 0 && get_post_status( $item_id ) ) {
+				$title             = get_the_title( $item_id );
+				$draft['title']    = is_string( $title ) ? $title : '';
+				$edit_url          = get_edit_post_link( $item_id, 'raw' );
+				$draft['edit_url'] = $edit_url ? $edit_url : '';
+				$view_url          = get_permalink( $item_id );
+				$draft['view_url'] = $view_url ? $view_url : '';
+			}
+		}
+		unset( $draft );
+
+		// The page titles itself with her name, so it travels with the list —
+		// and is remembered, so the next visit renders it at first paint.
+		$creator_name = self::creator_name_from( $result );
+		self::remember_creator_name( $creator_name );
+
+		return new \WP_REST_Response(
+			array(
+				'success'      => true,
+				'drafts'       => $drafts,
+				'creator_name' => $creator_name,
+			),
+			200
+		);
+	}
+
+	/**
+	 * REST handler: the most recent Content Agent audit-run summary, for the
+	 * Content Drafts status strip.
+	 *
+	 * Proxies DEF GET /api/staff-ai/content/last-run and normalizes the payload
+	 * (see normalize_last_run_payload) so the client receives integer counts and
+	 * a predictable shape. Returns last_run = null when no run has happened.
+	 *
+	 * @return \WP_REST_Response|\WP_Error Response.
+	 */
+	public static function rest_content_last_run( \WP_REST_Request $request )
+	{
+		$result = self::backend_request( 'GET', '/api/staff-ai/content/last-run' );
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+
+		return new \WP_REST_Response(
+			array(
+				'success'  => true,
+				'last_run' => self::normalize_last_run_payload( $result ),
+			),
+			200
+		);
+	}
+
+	/**
+	 * Normalize the DEF /content/last-run payload into a safe, predictable shape.
+	 *
+	 * The backend returns either {"last_run": null} (never run) or
+	 * {"last_run": {status, counts{...}, started_at, finished_at}}. This coerces
+	 * every count to a non-negative integer (the strip renders them as numbers
+	 * and must never be handed a string/float), keeps status/timestamps as
+	 * strings (or null), and drops anything malformed. A missing or non-array
+	 * last_run collapses to null so the UI shows "No runs yet".
+	 *
+	 * Note: counts are surfaced as a raw activity breakdown by design — we never
+	 * derive a ratio like "N/total optimized", because most audited items
+	 * legitimately pass and need no work, so a fraction would imply false pending
+	 * work (Steve's hard requirement).
+	 *
+	 * @param mixed $payload Decoded backend response.
+	 * @return array|null Normalized last_run, or null when there is no run.
+	 */
+	public static function normalize_last_run_payload( $payload ): ?array
+	{
+		if ( ! is_array( $payload ) || ! array_key_exists( 'last_run', $payload ) ) {
+			return null;
+		}
+		$last_run = $payload['last_run'];
+		if ( ! is_array( $last_run ) ) {
+			return null; // null (never run) or malformed → "No runs yet".
+		}
+
+		$counts_in = ( isset( $last_run['counts'] ) && is_array( $last_run['counts'] ) )
+			? $last_run['counts']
+			: array();
+
+		$counts = array();
+		foreach ( array( 'audited', 'flagged', 'staged', 'needs_keyphrase', 'skipped', 'errored' ) as $key ) {
+			$counts[ $key ] = isset( $counts_in[ $key ] ) ? max( 0, (int) $counts_in[ $key ] ) : 0;
+		}
+
+		// Optional: content types whose audit hit a transport error. Strings only.
+		if ( isset( $counts_in['audit_failed_types'] ) && is_array( $counts_in['audit_failed_types'] ) ) {
+			$failed_types = array();
+			foreach ( $counts_in['audit_failed_types'] as $type ) {
+				if ( is_string( $type ) && '' !== $type ) {
+					$failed_types[] = $type;
+				}
+			}
+			if ( ! empty( $failed_types ) ) {
+				$counts['audit_failed_types'] = array_values( $failed_types );
+			}
+		}
+
+		$string_or_null = static function ( $value ) {
+			return ( is_string( $value ) && '' !== $value ) ? $value : null;
+		};
+
+		return array(
+			'status'      => is_string( $last_run['status'] ?? null ) ? $last_run['status'] : '',
+			'counts'      => $counts,
+			'started_at'  => $string_or_null( $last_run['started_at'] ?? null ),
+			'finished_at' => $string_or_null( $last_run['finished_at'] ?? null ),
+		);
+	}
+
+	/**
+	 * Bucket keys for the current-state coverage breakdown. Whitelisted so a
+	 * hostile/garbled backend payload can only ever produce these integer fields.
+	 */
+	const COVERAGE_BUCKET_KEYS = array(
+		'good',
+		'optimized',
+		'awaiting_review',
+		'needs_work',
+		'needs_keyphrase',
+		'dismissed',
+		'errored',
+		'other',
+		'total',
+	);
+
+	/**
+	 * REST handler: current-state content coverage breakdown, per content type,
+	 * for the Content Drafts status strip headline.
+	 *
+	 * Proxies DEF GET /api/staff-ai/content/summary and normalizes the payload
+	 * (see normalize_summary_payload). Returns summary = null when the backend has
+	 * no coverage data yet.
+	 *
+	 * @return \WP_REST_Response|\WP_Error Response.
+	 */
+	public static function rest_content_summary( \WP_REST_Request $request )
+	{
+		$result = self::backend_request( 'GET', '/api/staff-ai/content/summary' );
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+
+		return new \WP_REST_Response(
+			array(
+				'success' => true,
+				'summary' => self::normalize_summary_payload( $result ),
+			),
+			200
+		);
+	}
+
+	/**
+	 * Normalize the DEF /content/summary payload into a safe, predictable shape.
+	 *
+	 * Backend shape: {"summary": {"by_type": {"<type>": {<buckets>}, ...},
+	 * "totals": {<buckets>, "total_reviewed": N}}}. This whitelists the bucket
+	 * keys, coerces every bucket to a non-negative integer, keeps only string
+	 * type keys, and tolerates missing types/buckets. A missing or non-array
+	 * summary collapses to null (the strip then simply omits the coverage line).
+	 *
+	 * The buckets are surfaced as discrete counts; we never derive a ratio over
+	 * "all content" — the only legitimate denominator is items reviewed
+	 * (Steve's hard requirement), carried as totals.total_reviewed.
+	 *
+	 * @param mixed $payload Decoded backend response.
+	 * @return array|null Normalized summary, or null when there is none.
+	 */
+	public static function normalize_summary_payload( $payload ): ?array
+	{
+		if ( ! is_array( $payload ) || ! isset( $payload['summary'] ) || ! is_array( $payload['summary'] ) ) {
+			return null;
+		}
+		$summary = $payload['summary'];
+
+		$by_type_in = ( isset( $summary['by_type'] ) && is_array( $summary['by_type'] ) ) ? $summary['by_type'] : array();
+		$by_type    = array();
+		foreach ( $by_type_in as $type => $buckets ) {
+			if ( ! is_string( $type ) || '' === $type ) {
+				continue; // Drop malformed type keys.
+			}
+			$by_type[ $type ] = self::normalize_coverage_buckets( $buckets );
+		}
+
+		$totals = self::normalize_coverage_buckets( isset( $summary['totals'] ) ? $summary['totals'] : array() );
+		// total_reviewed is the only sanctioned denominator (never "all content").
+		$totals_in                = ( isset( $summary['totals'] ) && is_array( $summary['totals'] ) ) ? $summary['totals'] : array();
+		$totals['total_reviewed'] = ( isset( $totals_in['total_reviewed'] ) && is_scalar( $totals_in['total_reviewed'] ) )
+			? max( 0, (int) $totals_in['total_reviewed'] )
+			: 0;
+
+		return array(
+			'by_type' => $by_type,
+			'totals'  => $totals,
+		);
+	}
+
+	/**
+	 * Coerce one set of coverage buckets to a whitelisted map of non-negative
+	 * integers. Unknown keys are dropped; missing keys default to 0.
+	 *
+	 * @param mixed $buckets Raw per-type or totals bucket map.
+	 * @return array<string,int> Normalized buckets.
+	 */
+	private static function normalize_coverage_buckets( $buckets ): array
+	{
+		$buckets = is_array( $buckets ) ? $buckets : array();
+		$out     = array();
+		foreach ( self::COVERAGE_BUCKET_KEYS as $key ) {
+			// Guard is_scalar before the int-cast so an array value (garbled
+			// payload) can't raise an "Array to int conversion" warning or coerce
+			// to a misleading 1 — it cleanly becomes 0.
+			$out[ $key ] = ( isset( $buckets[ $key ] ) && is_scalar( $buckets[ $key ] ) )
+				? max( 0, (int) $buckets[ $key ] )
+				: 0;
+		}
+		return $out;
+	}
+
+	/**
+	 * REST handler: list items the Content Agent skipped for lack of a focus
+	 * keyphrase. Enriched with the local title + edit link so the human can jump
+	 * to the editor and set one.
+	 *
+	 * @return \WP_REST_Response|\WP_Error Response.
+	 */
+	public static function rest_list_needs_keyphrase( \WP_REST_Request $request )
+	{
+		$result = self::backend_request( 'GET', '/api/staff-ai/content/needs-keyphrase' );
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+		$items = ( isset( $result['items'] ) && is_array( $result['items'] ) ) ? $result['items'] : array();
+		foreach ( $items as &$item ) {
+			$item_id = isset( $item['item_id'] ) ? (int) $item['item_id'] : 0;
+			if ( $item_id > 0 && get_post_status( $item_id ) ) {
+				$title            = get_the_title( $item_id );
+				$item['title']    = is_string( $title ) ? $title : '';
+				$edit_url         = get_edit_post_link( $item_id, 'raw' );
+				$item['edit_url'] = $edit_url ? $edit_url : '';
+			}
+		}
+		unset( $item );
+
+		return new \WP_REST_Response( array( 'success' => true, 'items' => $items ), 200 );
+	}
+
+	/**
+	 * REST handler: apply a draft live (PR-6). The DEF write runs as THIS user, so
+	 * WordPress's own current_user_can gates the product edit.
+	 *
+	 * Optionally forwards reviewer edits {proposed:{field:value}} (PR-C). Only the
+	 * content allowlist is forwarded; DEF re-validates (edits may change the value
+	 * of an already-touched field, not introduce new ones).
+	 *
+	 * @return \WP_REST_Response|\WP_Error Response ({status: applied|stale|apply_failed}).
+	 */
+	public static function rest_apply_content_draft( \WP_REST_Request $request )
+	{
+		$id   = sanitize_text_field( $request->get_param( 'id' ) );
+		$body = array();
+		$params = $request->get_json_params();
+		if ( is_array( $params ) && isset( $params['proposed'] ) && is_array( $params['proposed'] ) ) {
+			$allowed  = array( 'description', 'short_description', 'name' );
+			$proposed = array();
+			foreach ( $params['proposed'] as $field => $value ) {
+				if ( in_array( $field, $allowed, true ) && is_string( $value ) ) {
+					$proposed[ $field ] = $value;
+				}
+			}
+			if ( ! empty( $proposed ) ) {
+				$body['proposed'] = $proposed;
+			}
+		}
+		$result = self::backend_request( 'POST', '/api/staff-ai/content/drafts/' . rawurlencode( $id ) . '/apply', $body );
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+		return new \WP_REST_Response( $result, 200 );
+	}
+
+	/**
+	 * REST handler: dismiss a draft (PR-6).
+	 *
+	 * @return \WP_REST_Response|\WP_Error Response ({status: dismissed}).
+	 */
+	public static function rest_dismiss_content_draft( \WP_REST_Request $request )
+	{
+		$id     = sanitize_text_field( $request->get_param( 'id' ) );
+		$result = self::backend_request( 'POST', '/api/staff-ai/content/drafts/' . rawurlencode( $id ) . '/dismiss' );
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+		return new \WP_REST_Response( $result, 200 );
+	}
+
+	// ── Content Agent DEF #522: item-level dismiss / dismissed list / restore ──────
+
+	/**
+	 * REST handler: list content items by bucket (e.g. bucket=dismissed).
+	 *
+	 * Proxies DEF GET /api/staff-ai/content/list?bucket=<bucket> and enriches each
+	 * item with the local WP title and edit URL (same pattern as needs-keyphrase).
+	 *
+	 * @return \WP_REST_Response|\WP_Error Response ({success, items}).
+	 */
+	public static function rest_list_content_items( \WP_REST_Request $request )
+	{
+		$bucket = sanitize_key( (string) $request->get_param( 'bucket' ) );
+		if ( '' === $bucket ) {
+			return new \WP_Error(
+				'invalid_bucket',
+				__( 'bucket parameter is required.', 'widrow-ai' ),
+				array( 'status' => 400 )
+			);
+		}
+		$result = self::backend_request( 'GET', '/api/staff-ai/content/list?bucket=' . rawurlencode( $bucket ) );
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+		$items = ( isset( $result['items'] ) && is_array( $result['items'] ) ) ? $result['items'] : array();
+		foreach ( $items as &$item ) {
+			$item_id = isset( $item['item_id'] ) ? (int) $item['item_id'] : 0;
+			if ( $item_id > 0 && get_post_status( $item_id ) ) {
+				$title             = get_the_title( $item_id );
+				$item['title']     = is_string( $title ) ? $title : '';
+				$edit_url          = get_edit_post_link( $item_id, 'raw' );
+				$item['edit_url']  = $edit_url ? $edit_url : '';
+				$view_url          = get_permalink( $item_id );
+				$item['view_url']  = $view_url ? $view_url : '';
+			}
+		}
+		unset( $item );
+
+		// Allowlist the fields the JS UI reads. Prevents future backend schema
+		// additions from silently surfacing sensitive fields to the client.
+		$allowed = array_flip( array( 'item_id', 'item_type', 'draft_id', 'restorable', 'last_audited', 'title', 'edit_url', 'view_url' ) );
+		$items   = array_map( static function ( $item ) use ( $allowed ) {
+			return is_array( $item ) ? array_intersect_key( $item, $allowed ) : array();
+		}, $items );
+
+		return new \WP_REST_Response( array( 'success' => true, 'items' => $items ), 200 );
+	}
+
+	/**
+	 * REST handler: lightweight dismiss of a content item (DEF #522).
+	 *
+	 * The item stays in knowledge / Customer Chat — only the optimization queue
+	 * entry moves to the dismissed bucket. Proxies DEF POST
+	 * /api/staff-ai/content/items/{item_id}/dismiss.
+	 *
+	 * @return \WP_REST_Response|\WP_Error Response ({status: dismissed}).
+	 */
+	public static function rest_dismiss_content_item( \WP_REST_Request $request )
+	{
+		$item_id = absint( $request->get_param( 'item_id' ) );
+		if ( $item_id <= 0 ) {
+			return new \WP_Error(
+				'invalid_item_id',
+				__( 'A valid item_id is required.', 'widrow-ai' ),
+				array( 'status' => 400 )
+			);
+		}
+		$result = self::backend_request( 'POST', '/api/staff-ai/content/items/' . $item_id . '/dismiss' );
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+		return new \WP_REST_Response( $result, 200 );
+	}
+
+	/**
+	 * REST handler: restore a dismissed content item (DEF #522).
+	 *
+	 * Returns the item to its prior optimization bucket (needs_keyphrase /
+	 * needs_work / pass). Proxies DEF POST
+	 * /api/staff-ai/content/items/{item_id}/restore.
+	 *
+	 * @return \WP_REST_Response|\WP_Error Response ({status: needs_keyphrase|needs_work|pass}).
+	 */
+	public static function rest_restore_content_item( \WP_REST_Request $request )
+	{
+		$item_id = absint( $request->get_param( 'item_id' ) );
+		if ( $item_id <= 0 ) {
+			return new \WP_Error(
+				'invalid_item_id',
+				__( 'A valid item_id is required.', 'widrow-ai' ),
+				array( 'status' => 400 )
+			);
+		}
+		$result = self::backend_request( 'POST', '/api/staff-ai/content/items/' . $item_id . '/restore' );
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+		return new \WP_REST_Response( $result, 200 );
+	}
+
+	// ── Per-user "Connected accounts" (Slice 2 — per-user aggregator identity) ────
+
+	/**
+	 * REST handler: the tenant's connected apps + whether THIS user has authorized
+	 * each (their own aggregator account).
+	 *
+	 * Proxies DEF GET /api/staff-ai/user/integrations. The per-user identity is
+	 * derived DEF-side from the X-DEF-User header; nothing user-scoped is sent in the
+	 * body. Each app is allowlisted to the four fields the panel renders so a future
+	 * backend schema addition can't leak through.
+	 *
+	 * @return \WP_REST_Response|\WP_Error Response ({success, configured, apps}).
+	 */
+	public static function rest_user_integrations( \WP_REST_Request $request )
+	{
+		$result = self::backend_request( 'GET', '/api/staff-ai/user/integrations' );
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+		$apps_in = ( isset( $result['apps'] ) && is_array( $result['apps'] ) ) ? $result['apps'] : array();
+		$apps    = array();
+		foreach ( $apps_in as $app ) {
+			if ( ! is_array( $app ) || empty( $app['server_id'] ) ) {
+				continue;
+			}
+			$apps[] = array(
+				'server_id'  => (string) $app['server_id'],
+				'category'   => ( isset( $app['category'] ) && is_string( $app['category'] ) ) ? $app['category'] : '',
+				'no_auth'    => ! empty( $app['no_auth'] ),
+				'authorized' => ! empty( $app['authorized'] ),
+				// Whether there is EVIDENCE of a grant to end - the union of two signals
+				// (per-toolkit, and 'authorized' per auth config), because each misses rows
+				// the other catches. Evidence, not a guarantee: the Disconnect control is
+				// gated on it so it cannot go missing from a row whose grant outlived the
+				// server its tools point at, and the handler reports honestly when the
+				// revoke then finds nothing.
+				'has_grant'  => ! empty( $app['has_grant'] ),
+				// S1c (v8.7.5): which Google account this is, from DEF. Display text; the
+				// panel renders it with textContent, so it is not escaped here.
+				'label'      => ( isset( $app['label'] ) && is_string( $app['label'] ) ) ? $app['label'] : '',
+			);
+		}
+
+		return new \WP_REST_Response(
+			array(
+				'success'    => true,
+				// configured=false → the tenant hasn't set an aggregator key yet.
+				'configured' => ! empty( $result['configured'] ),
+				'apps'       => $apps,
+			),
+			200
+		);
+	}
+
+	/**
+	 * REST handler: end the current user's own connection to one app.
+	 *
+	 * Proxies DEF POST /api/staff-ai/user/integrations/{server_id}/disconnect.
+	 *
+	 * Ends the CALLER's grant and nothing else. The tenant's connection to the app
+	 * stays - colleagues keep working - because the app is connected once for the
+	 * business and authorised once per person. Removing the app for everyone is a
+	 * tenant admin action in the portal, not this.
+	 *
+	 * Reports "requested", not "done": the provider revokes upstream on a background
+	 * job, so the truthful claim on return is that we asked.
+	 *
+	 * @param \WP_REST_Request $request Request object.
+	 * @return \WP_REST_Response|\WP_Error Response ({success, server_id, requested, failed}).
+	 */
+	public static function rest_user_integration_disconnect( \WP_REST_Request $request )
+	{
+		$server_id = sanitize_text_field( (string) $request->get_param( 'server_id' ) );
+		if ( '' === $server_id ) {
+			return new \WP_Error(
+				'invalid_server_id',
+				__( 'A server_id is required.', 'widrow-ai' ),
+				array( 'status' => 400 )
+			);
+		}
+		$result = self::backend_request(
+			'POST',
+			'/api/staff-ai/user/integrations/' . rawurlencode( $server_id ) . '/disconnect'
+		);
+		if ( is_wp_error( $result ) ) {
+			return self::plain_backend_error(
+				$result,
+				__( 'Could not disconnect that app. Your connection is unchanged - try again in a moment.', 'widrow-ai' )
+			);
+		}
+
+		return new \WP_REST_Response(
+			array(
+				'success'   => true,
+				'server_id' => $server_id,
+				'requested' => isset( $result['requested'] ) ? (int) $result['requested'] : 0,
+				'failed'    => isset( $result['failed'] ) ? (int) $result['failed'] : 0,
+			),
+			200
+		);
+	}
+
+	/**
+	 * REST handler: start/confirm THIS user's hosted OAuth for one connected app.
+	 *
+	 * Proxies DEF POST /api/staff-ai/user/integrations/{server_id}/authorize. DEF
+	 * host-checks the returned redirect_url against the aggregator's consent domain;
+	 * the panel opens it to complete consent. status='authorized' → already connected.
+	 *
+	 * @return \WP_REST_Response|\WP_Error Response ({success, server_id, status, redirect_url}).
+	 */
+	public static function rest_user_integration_authorize( \WP_REST_Request $request )
+	{
+		$server_id = sanitize_text_field( (string) $request->get_param( 'server_id' ) );
+		if ( '' === $server_id ) {
+			return new \WP_Error(
+				'invalid_server_id',
+				__( 'A server_id is required.', 'widrow-ai' ),
+				array( 'status' => 400 )
+			);
+		}
+		$result = self::backend_request(
+			'POST',
+			'/api/staff-ai/user/integrations/' . rawurlencode( $server_id ) . '/authorize'
+		);
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+
+		return new \WP_REST_Response(
+			array(
+				'success'      => true,
+				'server_id'    => $server_id,
+				'status'       => ( isset( $result['status'] ) && is_string( $result['status'] ) ) ? $result['status'] : '',
+				'redirect_url' => ( isset( $result['redirect_url'] ) && is_string( $result['redirect_url'] ) ) ? $result['redirect_url'] : '',
+			),
+			200
+		);
+	}
+
+	/**
+	 * REST handler: start THIS user's hosted OAuth for a SECOND mail account.
+	 *
+	 * Proxies DEF POST /api/staff-ai/user/integrations/{server_id}/connect-another.
+	 * Unlike the authorize sibling there is no 'authorized' short-circuit - the
+	 * link mints even though an account is connected; the sign-in screen is where
+	 * the user picks which account. DEF refuses non-mail apps by name and
+	 * host-checks the link; the response is allowlisted like the sibling's.
+	 *
+	 * @param \WP_REST_Request $request Request object.
+	 * @return \WP_REST_Response|\WP_Error Response ({success, server_id, status, redirect_url}).
+	 */
+	public static function rest_user_connect_another( \WP_REST_Request $request )
+	{
+		$server_id = sanitize_text_field( (string) $request->get_param( 'server_id' ) );
+		if ( '' === $server_id ) {
+			return new \WP_Error(
+				'invalid_server_id',
+				__( 'A server_id is required.', 'widrow-ai' ),
+				array( 'status' => 400 )
+			);
+		}
+		$result = self::backend_request(
+			'POST',
+			'/api/staff-ai/user/integrations/' . rawurlencode( $server_id ) . '/connect-another'
+		);
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+		return new \WP_REST_Response(
+			array(
+				'success'      => true,
+				'server_id'    => $server_id,
+				'status'       => ( isset( $result['status'] ) && is_string( $result['status'] ) ) ? $result['status'] : '',
+				'redirect_url' => ( isset( $result['redirect_url'] ) && is_string( $result['redirect_url'] ) ) ? $result['redirect_url'] : '',
+			),
+			200
+		);
+	}
+
+	/**
+	 * REST handler: end ONE of the current user's connected accounts on an app.
+	 *
+	 * Proxies DEF POST .../integrations/{server_id}/accounts/{account_id}/disconnect.
+	 * The toolkit sibling ends every account of the app; this ends exactly one -
+	 * DEF proves the account is the caller's own, fail-closed, before revoking.
+	 * Reports "requested", not "done" (the provider revokes on a background job).
+	 *
+	 * @param \WP_REST_Request $request Request object.
+	 * @return \WP_REST_Response|\WP_Error Response ({success, server_id, requested, failed}).
+	 */
+	public static function rest_user_account_disconnect( \WP_REST_Request $request )
+	{
+		$server_id  = sanitize_text_field( (string) $request->get_param( 'server_id' ) );
+		$account_id = sanitize_text_field( (string) $request->get_param( 'account_id' ) );
+		if ( '' === $server_id || '' === $account_id ) {
+			return new \WP_Error(
+				'invalid_params',
+				__( 'A server_id and account_id are required.', 'widrow-ai' ),
+				array( 'status' => 400 )
+			);
+		}
+		$result = self::backend_request(
+			'POST',
+			'/api/staff-ai/user/integrations/' . rawurlencode( $server_id )
+				. '/accounts/' . rawurlencode( $account_id ) . '/disconnect'
+		);
+		if ( is_wp_error( $result ) ) {
+			return self::plain_backend_error(
+				$result,
+				__( 'Could not disconnect that account. It is unchanged - try again in a moment.', 'widrow-ai' )
+			);
+		}
+		return new \WP_REST_Response(
+			array(
+				'success'   => true,
+				'server_id' => $server_id,
+				'requested' => isset( $result['requested'] ) ? (int) $result['requested'] : 0,
+				'failed'    => isset( $result['failed'] ) ? (int) $result['failed'] : 0,
+			),
+			200
+		);
+	}
+
+	/**
+	 * REST handler: list the current user's generated documents ("My Documents" panel).
+	 *
+	 * Proxies DEF GET /api/staff-ai/documents. Each row is allowlisted to the seven
+	 * fields the panel renders so a future backend schema addition can't silently
+	 * surface sensitive fields to the client. DEF's relative /api/files/ download
+	 * URL is rewritten to the cookie-auth'd /staff-ai-download/ proxy page — the
+	 * same rewrite the chat download button already goes through.
+	 *
+	 * @return \WP_REST_Response|\WP_Error Response ({success, documents}).
+	 */
+	public static function rest_list_documents( \WP_REST_Request $request )
+	{
+		$path = '/api/staff-ai/documents';
+		$args = array();
+		$q    = $request->get_param( 'q' );
+		if ( is_string( $q ) && '' !== trim( $q ) ) {
+			$args[] = 'q=' . rawurlencode( trim( $q ) );
+		}
+		// Projects P-A: forward the badge's filter under the same id alphabet the
+		// project routes accept; anything else is dropped here rather than sent.
+		$project_id = $request->get_param( 'project_id' );
+		if ( is_string( $project_id ) && preg_match( '/^[a-zA-Z0-9-]+$/', $project_id ) ) {
+			$args[] = 'project_id=' . rawurlencode( $project_id );
+		}
+		if ( $args ) {
+			$path .= '?' . implode( '&', $args );
+		}
+		$result = self::backend_request( 'GET', $path );
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+		$docs_in   = ( isset( $result['documents'] ) && is_array( $result['documents'] ) ) ? $result['documents'] : array();
+		$documents = array();
+		foreach ( $docs_in as $doc ) {
+			// Charset-check the id to the same alphabet the DELETE route accepts,
+			// so the two ends of the panel can never disagree on a valid id.
+			if ( ! is_array( $doc ) || empty( $doc['document_id'] )
+				|| ! preg_match( '/^[a-zA-Z0-9-]+$/', (string) $doc['document_id'] ) ) {
+				continue;
+			}
+			$download = self::document_download_href( $doc );
+			$documents[] = array(
+				'document_id'  => (string) $doc['document_id'],
+				'title'        => ( isset( $doc['title'] ) && is_string( $doc['title'] ) ) ? $doc['title'] : '',
+				'file_type'    => ( isset( $doc['file_type'] ) && is_string( $doc['file_type'] ) ) ? $doc['file_type'] : '',
+				'version'      => isset( $doc['version'] ) ? (int) $doc['version'] : 1,
+				'size_bytes'   => isset( $doc['size_bytes'] ) ? (int) $doc['size_bytes'] : 0,
+				'created_at'   => ( isset( $doc['created_at'] ) && is_string( $doc['created_at'] ) ) ? $doc['created_at'] : '',
+				'download_url' => $download,
+				// Projects P-A (D-P10): membership + the badge's human name. Id
+				// charset-checked like document_id; name is plain text the JS
+				// renders via textContent only.
+				'project_id'   => ( isset( $doc['project_id'] ) && is_string( $doc['project_id'] )
+					&& preg_match( '/^[a-zA-Z0-9-]+$/', $doc['project_id'] ) ) ? $doc['project_id'] : null,
+				'project_name' => ( isset( $doc['project_name'] ) && is_string( $doc['project_name'] ) ) ? $doc['project_name'] : null,
+				'slot'         => ( isset( $doc['slot'] ) && is_string( $doc['slot'] )
+					&& in_array( $doc['slot'], array( 'instructions', 'runsheet', 'session_notes' ), true ) ) ? $doc['slot'] : null,
+				// Artifacts A-3 (D-A4): null is the lock mark, a token is the globe.
+				'share'        => self::document_share( $doc ),
+			);
+		}
+
+		return new \WP_REST_Response(
+			array(
+				'success'   => true,
+				'documents' => $documents,
+			),
+			200
+		);
+	}
+
+	/**
+	 * Rewrite DEF's `/api/files/` path into this site's own download URL.
+	 *
+	 * Normalize-then-encode: DEF's download_url arrives raw (pre-#836) or
+	 * single-encoded (post-#836). rawurldecode() no-ops on raw input (invalid
+	 * %-sequences pass through), so the result is single-encoded for BOTH forms
+	 * — version-skew-safe in either deploy order. WP matches this pretty URL
+	 * against the RAW request URI (class-wp.php), so exactly one encode must
+	 * survive to handle_file_download's single urldecode.
+	 *
+	 * Lifted out of the list handler unchanged when C4 gave the viewer page its
+	 * own need for it: one copy of a URL transform, not two to keep in step.
+	 *
+	 * @param array $doc A document summary as DEF returned it.
+	 * @return string The site download URL, or '' when DEF sent no usable path.
+	 */
+	private static function document_download_href( array $doc ): string
+	{
+		if ( ! isset( $doc['download_url'] ) || ! is_string( $doc['download_url'] )
+			|| ! preg_match( '#^/api/files/([^/]+)/(.+)$#', $doc['download_url'], $m ) ) {
+			return '';
+		}
+		// `staff_ai_save=1` because both consumers of this field are Downloads: the
+		// card's ⋯ menu and the viewer's link. Without it the proxy serves an image
+		// inline for the chat's sake and Download opened the picture in the console
+		// instead of saving it. See download_disposition_for().
+		return home_url( '/staff-ai-download/' . rawurlencode( rawurldecode( $m[1] ) )
+			. '/' . rawurlencode( rawurldecode( $m[2] ) ) ) . '?staff_ai_save=1';
+	}
+
+	/**
+	 * The live share on a row DEF returned, or null (Artifacts A-3, D-A7).
+	 *
+	 * DEF mints the token as 22 url-safe base64 characters (128 bits). It is
+	 * charset-checked here for the same reason every id on these routes is: the
+	 * console builds a public address out of it, and anything that is not a
+	 * token is no share at all — never a link with rubbish in it.
+	 *
+	 * @param array $row A document summary, or the share route's own body.
+	 * @return array|null {token, created_at}, or null when nothing is shared.
+	 */
+	private static function document_share( array $row )
+	{
+		$share = isset( $row['share'] ) && is_array( $row['share'] ) ? $row['share'] : array();
+		if ( empty( $share['token'] ) || ! is_string( $share['token'] )
+			|| ! preg_match( '/^[A-Za-z0-9_-]{22}$/', $share['token'] ) ) {
+			return null;
+		}
+		return array(
+			'token'      => $share['token'],
+			'created_at' => ( isset( $share['created_at'] ) && is_string( $share['created_at'] ) ) ? $share['created_at'] : '',
+		);
+	}
+
+	/**
+	 * REST handler: read one of the current user's documents in place (P-D3).
+	 *
+	 * Proxies DEF GET /api/staff-ai/documents/{id}/content. Ownership is
+	 * enforced DEF-side from the forwarded identity, so a foreign id is a
+	 * plain 404; a format that cannot be read as text is DEF's 415 with its
+	 * own sentence. Only the fields the viewer renders are passed through,
+	 * each type-checked; `content` is a string the JS sets via textContent.
+	 */
+	public static function rest_document_content( \WP_REST_Request $request )
+	{
+		$id = sanitize_text_field( (string) $request->get_param( 'id' ) );
+		if ( '' === $id ) {
+			return new \WP_Error(
+				'invalid_document_id',
+				__( 'A document id is required.', 'widrow-ai' ),
+				array( 'status' => 400 )
+			);
+		}
+		$offset = (int) $request->get_param( 'offset' );
+		$path   = '/api/staff-ai/documents/' . rawurlencode( $id ) . '/content';
+		if ( $offset > 0 ) {
+			$path .= '?offset=' . $offset;
+		}
+		$result = self::backend_request( 'GET', $path );
+		if ( is_wp_error( $result ) ) {
+			if ( 'staff_ai_not_found' === $result->get_error_code() ) {
+				return new \WP_Error(
+					'staff_ai_not_found',
+					__( 'That document no longer exists.', 'widrow-ai' ),
+					array( 'status' => 404 )
+				);
+			}
+			return $result;
+		}
+		$doc = ( isset( $result['document'] ) && is_array( $result['document'] ) ) ? $result['document'] : array();
+		return new \WP_REST_Response(
+			array(
+				'success'     => true,
+				'document'    => array(
+					'document_id'  => ( isset( $doc['document_id'] ) && is_string( $doc['document_id'] )
+						&& preg_match( '/^[a-zA-Z0-9-]+$/', $doc['document_id'] ) ) ? $doc['document_id'] : $id,
+					'title'        => ( isset( $doc['title'] ) && is_string( $doc['title'] ) ) ? $doc['title'] : '',
+					'file_type'    => ( isset( $doc['file_type'] ) && is_string( $doc['file_type'] ) ) ? $doc['file_type'] : '',
+					'version'      => isset( $doc['version'] ) ? (int) $doc['version'] : 1,
+					// C4: the viewer is a PAGE now, reachable by reload and by a
+					// link, so it cannot rely on an opener to hand it the download
+					// URL. DEF already sends the path; this stops dropping it.
+					'download_url' => self::document_download_href( $doc ),
+					// Artifacts A-3 (D-A7): the page opens on the share state it is in.
+					'share'        => self::document_share( $doc ),
+				),
+				'content'     => ( isset( $result['content'] ) && is_string( $result['content'] ) ) ? $result['content'] : '',
+				'offset'      => isset( $result['offset'] ) ? (int) $result['offset'] : 0,
+				'total_chars' => isset( $result['total_chars'] ) ? (int) $result['total_chars'] : 0,
+				'truncated'   => ! empty( $result['truncated'] ),
+				'next_offset' => ( isset( $result['next_offset'] ) && is_numeric( $result['next_offset'] ) ) ? (int) $result['next_offset'] : null,
+				// A picture (8.1.0, images runsheet I-4): DEF answers it with its document
+				// and no text, and the viewer shows it from the download address instead
+				// of reading. Two values only; anything else, an older DEF included, reads.
+				'kind'        => ( isset( $result['kind'] ) && 'image' === $result['kind'] ) ? 'image' : 'text',
+			),
+			200
+		);
+	}
+
+	/**
+	 * REST handler: share one of the current user's artifacts by link (A-3, D-A7).
+	 *
+	 * Proxies DEF POST /api/staff-ai/documents/{id}/share. Idempotent while the
+	 * share is live — pressing Share again returns the token already out there.
+	 * DEF's own refusals surface as they arrive: its 409 sentence ("Only an
+	 * artifact can be shared by link…") IS the copy the console shows, so it
+	 * rides through backend_request's routine-refusal path rather than being
+	 * replaced here. Only the 404 is rewritten, because backend_request's is a
+	 * diagnostic carrying the internal DEF URL.
+	 *
+	 * @param \WP_REST_Request $request Request object.
+	 * @return \WP_REST_Response|\WP_Error Response ({success, share}).
+	 */
+	public static function rest_share_document( \WP_REST_Request $request )
+	{
+		return self::document_share_request( $request, 'POST' );
+	}
+
+	/**
+	 * REST handler: stop sharing one of the current user's artifacts (A-3, D-A7).
+	 *
+	 * Proxies DEF DELETE /api/staff-ai/documents/{id}/share. Idempotent: DEF
+	 * reports the end state, so revoking a link that was never minted is the
+	 * same success. Sharing again mints a NEW token; the old link stays dead.
+	 *
+	 * @param \WP_REST_Request $request Request object.
+	 * @return \WP_REST_Response|\WP_Error Response ({success, share}).
+	 */
+	public static function rest_unshare_document( \WP_REST_Request $request )
+	{
+		return self::document_share_request( $request, 'DELETE' );
+	}
+
+	/**
+	 * The one call both share buttons make.
+	 *
+	 * @param \WP_REST_Request $request Request object.
+	 * @param string           $method  POST to share, DELETE to revoke.
+	 * @return \WP_REST_Response|\WP_Error Response ({success, share}).
+	 */
+	private static function document_share_request( \WP_REST_Request $request, string $method )
+	{
+		// Charset-check the id HERE, not only in the route pattern: get_param()
+		// resolves JSON → POST → GET → URL, so a query string outranks the path
+		// segment the regex matched (the rest_delete_memory rule).
+		$id = sanitize_text_field( (string) $request->get_param( 'id' ) );
+		if ( ! preg_match( '/^[a-zA-Z0-9-]+$/', $id ) ) {
+			return new \WP_Error(
+				'invalid_document_id',
+				__( 'A document id is required.', 'widrow-ai' ),
+				array( 'status' => 400 )
+			);
+		}
+		$result = self::backend_request( $method, '/api/staff-ai/documents/' . rawurlencode( $id ) . '/share' );
+		if ( is_wp_error( $result ) ) {
+			if ( 'staff_ai_not_found' === $result->get_error_code() ) {
+				return new \WP_Error(
+					'staff_ai_not_found',
+					__( 'That document no longer exists.', 'widrow-ai' ),
+					array( 'status' => 404 )
+				);
+			}
+			return $result;
+		}
+
+		return new \WP_REST_Response(
+			array(
+				'success' => true,
+				'share'   => self::document_share( is_array( $result ) ? $result : array() ),
+			),
+			200
+		);
+	}
+
+	/**
+	 * REST handler: delete one of the current user's documents.
+	 *
+	 * Proxies DEF DELETE /api/staff-ai/documents/{id}. DEF soft-deletes the
+	 * library row and hard-deletes the stored bytes; ownership is enforced
+	 * DEF-side from the forwarded identity, so a foreign id is a plain 404.
+	 *
+	 * @return \WP_REST_Response|\WP_Error Response ({success}).
+	 */
+	public static function rest_delete_document( \WP_REST_Request $request )
+	{
+		$id = sanitize_text_field( (string) $request->get_param( 'id' ) );
+		if ( '' === $id ) {
+			return new \WP_Error(
+				'invalid_document_id',
+				__( 'A document id is required.', 'widrow-ai' ),
+				array( 'status' => 400 )
+			);
+		}
+		$result = self::backend_request( 'DELETE', '/api/staff-ai/documents/' . rawurlencode( $id ) );
+		if ( is_wp_error( $result ) ) {
+			// A vanished id is normal panel traffic (double-click, stale list) — return
+			// plain copy, not backend_request's diagnostic string carrying the backend URL.
+			if ( 'staff_ai_not_found' === $result->get_error_code() ) {
+				return new \WP_Error(
+					'staff_ai_not_found',
+					__( 'That document no longer exists.', 'widrow-ai' ),
+					array( 'status' => 404 )
+				);
+			}
+			return $result;
+		}
+
+		return new \WP_REST_Response( array( 'success' => true ), 200 );
+	}
+
+	/**
+	 * Project-route errors a user can FIX, named — the triage_save_error rule:
+	 * "try again in a moment" can never be true for a 409 or a 422, so each
+	 * gets its own sentence. DEF's 422 message names the actual field and is
+	 * user-destined; it is recovered from the wrapped error string.
+	 *
+	 * @param \WP_Error $result   Error from backend_request().
+	 * @param string    $fallback Copy for every other failure.
+	 * @return \WP_Error
+	 */
+	private static function project_save_error( \WP_Error $result, string $fallback ): \WP_Error
+	{
+		$code = $result->get_error_code();
+		if ( 'staff_ai_http_409' === $code ) {
+			$fallback = __( 'That name or slot is already taken - pick another.', 'widrow-ai' );
+			if ( preg_match( '/\(HTTP 409\): (.+)$/s', (string) $result->get_error_message(), $m )
+				&& '' !== trim( $m[1] ) && __( 'Unknown error', 'widrow-ai' ) !== trim( $m[1] ) ) {
+				$fallback = trim( $m[1] );
+			}
+		} elseif ( 'staff_ai_http_422' === $code ) {
+			$fallback = __( 'That could not be saved as entered.', 'widrow-ai' );
+			if ( preg_match( '/\(HTTP 422\): (.+)$/s', (string) $result->get_error_message(), $m )
+				&& '' !== trim( $m[1] ) && __( 'Unknown error', 'widrow-ai' ) !== trim( $m[1] ) ) {
+				$fallback = trim( $m[1] );
+			}
+		}
+		return self::plain_backend_error( $result, $fallback );
+	}
+
+	/**
+	 * One project row, allowlisted. Whatever DEF sends, only this shape reaches
+	 * the panel — the allowlist_task discipline.
+	 *
+	 * @param array $row Raw project row from DEF.
+	 * @return array|null Allowlisted row, or null when the id fails the charset.
+	 */
+	private static function allowlist_project( $row )
+	{
+		if ( ! is_array( $row ) || empty( $row['project_id'] )
+			|| ! preg_match( '/^[a-zA-Z0-9-]+$/', (string) $row['project_id'] ) ) {
+			return null;
+		}
+		$status = ( isset( $row['status'] ) && 'archived' === $row['status'] ) ? 'archived' : 'active';
+		return array(
+			'project_id' => (string) $row['project_id'],
+			'name'       => ( isset( $row['name'] ) && is_string( $row['name'] ) ) ? $row['name'] : '',
+			'status'     => $status,
+			'created_at' => ( isset( $row['created_at'] ) && is_string( $row['created_at'] ) ) ? $row['created_at'] : '',
+			'updated_at' => ( isset( $row['updated_at'] ) && is_string( $row['updated_at'] ) ) ? $row['updated_at'] : '',
+			// P-E2: the Project Hub card renders from these two; an older DEF sends neither.
+			'is_hub'     => ( true === ( $row['is_hub'] ?? null ) ),
+			'description' => ( isset( $row['description'] ) && is_string( $row['description'] ) ) ? $row['description'] : '',
+		);
+	}
+
+	/**
+	 * REST handler: list the current user's projects (Projects P-A).
+	 *
+	 * @param \WP_REST_Request $request Request object.
+	 * @return \WP_REST_Response|\WP_Error Response ({success, projects}).
+	 */
+	public static function rest_list_projects( \WP_REST_Request $request )
+	{
+		$path = '/api/staff-ai/projects';
+		if ( $request->get_param( 'include_archived' ) ) {
+			$path .= '?include_archived=true';
+		}
+		$result = self::backend_request( 'GET', $path );
+		if ( is_wp_error( $result ) ) {
+			return self::plain_backend_error(
+				$result,
+				__( 'Could not load your projects. Try again in a moment.', 'widrow-ai' )
+			);
+		}
+		$rows     = ( isset( $result['projects'] ) && is_array( $result['projects'] ) ) ? $result['projects'] : array();
+		$projects = array();
+		foreach ( $rows as $row ) {
+			$clean = self::allowlist_project( $row );
+			if ( null !== $clean ) {
+				$projects[] = $clean;
+			}
+		}
+		return new \WP_REST_Response(
+			array(
+				'success'  => true,
+				'projects' => $projects,
+			),
+			200
+		);
+	}
+
+	/**
+	 * REST handler: create a project. Body carries {name} only.
+	 *
+	 * @param \WP_REST_Request $request Request object.
+	 * @return \WP_REST_Response|\WP_Error Response ({success, project}).
+	 */
+	public static function rest_create_project( \WP_REST_Request $request )
+	{
+		$name = $request->get_param( 'name' );
+		$name = is_string( $name ) ? sanitize_text_field( $name ) : '';
+		if ( '' === trim( $name ) ) {
+			return new \WP_Error( 'invalid_name', __( 'A project needs a name.', 'widrow-ai' ), array( 'status' => 422 ) );
+		}
+		$result = self::backend_request( 'POST', '/api/staff-ai/projects', array( 'name' => $name ) );
+		if ( is_wp_error( $result ) ) {
+			return self::project_save_error(
+				$result,
+				__( 'Could not create the project. Nothing has changed - try again in a moment.', 'widrow-ai' )
+			);
+		}
+		$row = ( isset( $result['project'] ) && is_array( $result['project'] ) ) ? $result['project'] : array();
+		return new \WP_REST_Response(
+			array(
+				'success' => true,
+				'project' => self::allowlist_project( $row ),
+			),
+			200
+		);
+	}
+
+	/**
+	 * REST handler: rename / archive / unarchive a project. Body carries only
+	 * the fields being changed; DEF owns validation and the uniform 404.
+	 *
+	 * @param \WP_REST_Request $request Request object.
+	 * @return \WP_REST_Response|\WP_Error Response ({success, project}).
+	 */
+	public static function rest_update_project( \WP_REST_Request $request )
+	{
+		$payload = array();
+		$name    = $request->get_param( 'name' );
+		if ( is_string( $name ) ) {
+			$payload['name'] = sanitize_text_field( $name );
+		}
+		$status = $request->get_param( 'status' );
+		if ( is_string( $status ) && '' !== $status ) {
+			if ( ! in_array( $status, array( 'active', 'archived' ), true ) ) {
+				// Refuse, never silently drop beside a name — DEF would 422 this
+				// alone, and a partial apply that LOOKS complete misleads.
+				return new \WP_Error( 'invalid_status', __( 'Status must be active or archived.', 'widrow-ai' ), array( 'status' => 422 ) );
+			}
+			$payload['status'] = $status;
+		}
+		// P-C (D-P9): what happens to the tasks bound to this project when it is
+		// archived - keep | unbind | disable. DEF applies it in the same
+		// transaction as the status flip; an unknown value is refused here.
+		$bound = $request->get_param( 'bound_tasks' );
+		if ( null !== $bound && '' !== $bound ) {
+			if ( ! is_string( $bound ) || ! in_array( $bound, array( 'keep', 'unbind', 'disable' ), true ) ) {
+				return new \WP_Error( 'invalid_bound_tasks', __( 'bound_tasks must be keep, unbind or disable.', 'widrow-ai' ), array( 'status' => 422 ) );
+			}
+			$payload['bound_tasks'] = $bound;
+		}
+		if ( empty( $payload ) ) {
+			return new \WP_Error( 'nothing_to_update', __( 'Nothing to update.', 'widrow-ai' ), array( 'status' => 422 ) );
+		}
+		$result = self::backend_request(
+			'PUT',
+			'/api/staff-ai/projects/' . rawurlencode( (string) $request->get_param( 'project_id' ) ),
+			$payload
+		);
+		if ( is_wp_error( $result ) ) {
+			return self::project_save_error(
+				$result,
+				__( 'Could not save the project. Nothing has changed - try again in a moment.', 'widrow-ai' )
+			);
+		}
+		$row = ( isset( $result['project'] ) && is_array( $result['project'] ) ) ? $result['project'] : array();
+		return new \WP_REST_Response(
+			array(
+				'success'     => true,
+				'project'     => self::allowlist_project( $row ),
+				'bound_tasks' => self::allowlist_bound_tasks( $result['bound_tasks'] ?? null ),
+			),
+			200
+		);
+	}
+
+	/**
+	 * P-C: the {action, count} DEF reports for the bound-task directive.
+	 *
+	 * @param mixed $value DEF's bound_tasks field.
+	 * @return array|null
+	 */
+	private static function allowlist_bound_tasks( $value )
+	{
+		if ( ! is_array( $value ) ) {
+			return null;
+		}
+		return array(
+			'action' => ( isset( $value['action'] ) && is_string( $value['action'] ) ) ? $value['action'] : 'keep',
+			'count'  => isset( $value['count'] ) ? (int) $value['count'] : 0,
+		);
+	}
+
+	/**
+	 * REST handler: the caller's scheduled tasks bound to one of their projects
+	 * (P-C, D-P9) - the archive / delete prompt's list. DEF answers a foreign
+	 * id with the same 404 as a missing one.
+	 *
+	 * @param \WP_REST_Request $request Request object.
+	 * @return \WP_REST_Response|\WP_Error Response ({success, tasks}).
+	 */
+	public static function rest_list_project_tasks( \WP_REST_Request $request )
+	{
+		$result = self::backend_request(
+			'GET',
+			'/api/staff-ai/projects/' . rawurlencode( (string) $request->get_param( 'project_id' ) ) . '/tasks'
+		);
+		if ( is_wp_error( $result ) ) {
+			return self::plain_backend_error(
+				$result,
+				__( 'Could not check the tasks bound to this project.', 'widrow-ai' )
+			);
+		}
+		$tasks = array();
+		if ( isset( $result['tasks'] ) && is_array( $result['tasks'] ) ) {
+			foreach ( $result['tasks'] as $row ) {
+				if ( ! is_array( $row ) ) {
+					continue;
+				}
+				$tasks[] = array(
+					'id'      => ( isset( $row['id'] ) && is_string( $row['id'] ) ) ? $row['id'] : '',
+					'name'    => ( isset( $row['name'] ) && is_string( $row['name'] ) ) ? $row['name'] : '',
+					'enabled' => ! empty( $row['enabled'] ),
+				);
+			}
+		}
+		return new \WP_REST_Response( array( 'success' => true, 'tasks' => $tasks ), 200 );
+	}
+
+	/**
+	 * REST handler: delete a project. DEF releases the member documents (they
+	 * survive in the flat library — a project is a lens, not a cage) and
+	 * answers a foreign id with the same 404 as a missing one.
+	 *
+	 * @param \WP_REST_Request $request Request object.
+	 * @return \WP_REST_Response|\WP_Error Response ({success, released_documents}).
+	 */
+	public static function rest_delete_project( \WP_REST_Request $request )
+	{
+		// P-C (D-P9): unbind (DEF's default - a binding to a deleted id has no
+		// meaning) or disable the tasks bound to this project.
+		$bound = $request->get_param( 'bound_tasks' );
+		$query = '';
+		if ( null !== $bound && '' !== $bound ) {
+			if ( ! is_string( $bound ) || ! in_array( $bound, array( 'unbind', 'disable' ), true ) ) {
+				return new \WP_Error( 'invalid_bound_tasks', __( 'bound_tasks must be unbind or disable.', 'widrow-ai' ), array( 'status' => 422 ) );
+			}
+			$query = '?bound_tasks=' . rawurlencode( $bound );
+		}
+		$result = self::backend_request(
+			'DELETE',
+			'/api/staff-ai/projects/' . rawurlencode( (string) $request->get_param( 'project_id' ) ) . $query
+		);
+		if ( is_wp_error( $result ) ) {
+			return self::plain_backend_error(
+				$result,
+				__( 'Could not delete the project. Nothing has changed - try again in a moment.', 'widrow-ai' )
+			);
+		}
+		return new \WP_REST_Response(
+			array(
+				'success'            => true,
+				'released_documents' => isset( $result['released_documents'] ) ? (int) $result['released_documents'] : 0,
+				'bound_tasks'        => self::allowlist_bound_tasks( $result['bound_tasks'] ?? null ),
+			),
+			200
+		);
+	}
+
+	/**
+	 * REST handler: move a document into / out of one of the caller's projects,
+	 * optionally into a governing slot. DEF owns ownership (two 404s, one
+	 * owner) and the one-document-per-slot 409.
+	 *
+	 * @param \WP_REST_Request $request Request object.
+	 * @return \WP_REST_Response|\WP_Error Response ({success, project_id, slot}).
+	 */
+	public static function rest_assign_document_project( \WP_REST_Request $request )
+	{
+		$payload    = array( 'project_id' => null, 'slot' => null );
+		$project_id = $request->get_param( 'project_id' );
+		if ( is_string( $project_id ) && '' !== $project_id ) {
+			if ( ! preg_match( '/^[a-zA-Z0-9-]+$/', $project_id ) ) {
+				return new \WP_Error( 'invalid_project', __( 'Project not found.', 'widrow-ai' ), array( 'status' => 404 ) );
+			}
+			$payload['project_id'] = $project_id;
+		}
+		$slot = $request->get_param( 'slot' );
+		if ( is_string( $slot ) && '' !== $slot ) {
+			if ( ! in_array( $slot, array( 'instructions', 'runsheet', 'session_notes' ), true ) ) {
+				return new \WP_Error( 'invalid_slot', __( 'That slot is not recognised.', 'widrow-ai' ), array( 'status' => 422 ) );
+			}
+			$payload['slot'] = $slot;
+		}
+		$result = self::backend_request(
+			'PUT',
+			'/api/staff-ai/documents/' . rawurlencode( (string) $request->get_param( 'id' ) ) . '/project',
+			$payload
+		);
+		if ( is_wp_error( $result ) ) {
+			return self::project_save_error(
+				$result,
+				__( 'Could not move the document. Nothing has changed - try again in a moment.', 'widrow-ai' )
+			);
+		}
+		return new \WP_REST_Response(
+			array(
+				'success'    => true,
+				'project_id' => ( isset( $result['project_id'] ) && is_string( $result['project_id'] ) ) ? $result['project_id'] : null,
+				'slot'       => ( isset( $result['slot'] ) && is_string( $result['slot'] ) ) ? $result['slot'] : null,
+			),
+			200
+		);
+	}
+
+	/**
+	 * Replace a backend error whose message carries the INTERNAL DEF URL.
+	 *
+	 * The 404 and generic-4xx branches of backend_request() interpolate the URL
+	 * from get_def_api_url_internal() — a Docker/VNet host the browser must never
+	 * be shown (contrast get_def_api_url(), the browser-safe one). Those two get
+	 * $message; every other code (5xx, auth) is already URL-free and passes
+	 * through unchanged, so a misconfigured connection still names itself.
+	 *
+	 * The status is always preserved: a failure must stay a failure, never
+	 * degrade into a success with nothing in it.
+	 *
+	 * @param \WP_Error $error   Error from backend_request().
+	 * @param string    $message Plain copy to show instead.
+	 * @return \WP_Error
+	 */
+	private static function plain_backend_error( \WP_Error $error, string $message )
+	{
+		$code = $error->get_error_code();
+		if ( 'staff_ai_not_found' !== $code && 0 !== strpos( (string) $code, 'staff_ai_http_' ) ) {
+			return $error;
+		}
+		$data = $error->get_error_data();
+		return new \WP_Error(
+			$code,
+			$message,
+			array( 'status' => ( is_array( $data ) && isset( $data['status'] ) ) ? $data['status'] : 500 )
+		);
+	}
+
+	/**
+	 * REST handler: list what the assistant remembers about the current user
+	 * ("Memories" panel).
+	 *
+	 * Proxies DEF GET /api/staff-ai/memories. Each row is allowlisted to the five
+	 * fields DEF returns and the panel renders. DEF deliberately withholds
+	 * confidence, source and provenance — extractor machinery a person can only
+	 * argue with — so the allowlist is also the guard that keeps them out if a
+	 * future backend adds them back.
+	 *
+	 * A DEF 503 (database down) surfaces as an error, never as an empty list: an
+	 * empty list would read as "it has forgotten you", which is untrue.
+	 *
+	 * @return \WP_REST_Response|\WP_Error Response ({success, memories}).
+	 */
+	public static function rest_list_memories()
+	{
+		$result = self::backend_request( 'GET', '/api/staff-ai/memories' );
+		if ( is_wp_error( $result ) ) {
+			return self::plain_backend_error(
+				$result,
+				__( 'Could not load what Staff AI remembers. Nothing has been forgotten — try again in a moment.', 'widrow-ai' )
+			);
+		}
+		$rows     = ( isset( $result['memories'] ) && is_array( $result['memories'] ) ) ? $result['memories'] : array();
+		$memories = array();
+		foreach ( $rows as $row ) {
+			// Charset-check the id to the same alphabet the DELETE handler accepts,
+			// so the two ends of the panel can never disagree on a valid id.
+			if ( ! is_array( $row ) || empty( $row['entry_id'] )
+				|| ! preg_match( '/^[a-zA-Z0-9-]+$/', (string) $row['entry_id'] ) ) {
+				continue;
+			}
+			$memories[] = array(
+				'entry_id'   => (string) $row['entry_id'],
+				'category'   => ( isset( $row['category'] ) && is_string( $row['category'] ) ) ? $row['category'] : '',
+				'content'    => ( isset( $row['content'] ) && is_string( $row['content'] ) ) ? $row['content'] : '',
+				'created_at' => ( isset( $row['created_at'] ) && is_string( $row['created_at'] ) ) ? $row['created_at'] : '',
+				'updated_at' => ( isset( $row['updated_at'] ) && is_string( $row['updated_at'] ) ) ? $row['updated_at'] : '',
+			);
+		}
+
+		return new \WP_REST_Response(
+			array(
+				'success'  => true,
+				'memories' => $memories,
+			),
+			200
+		);
+	}
+
+	/**
+	 * REST handler: this user's own token usage for the current week
+	 * ("Usage" panel, Usage & Budgets D-U7).
+	 *
+	 * Proxies DEF GET /api/staff-ai/usage, allowlisted to the fields the panel
+	 * renders — the Memories guard, so a future backend field cannot silently
+	 * reach the browser.
+	 *
+	 * Two contract points DEF is strict about and this must not flatten:
+	 * `budget_tokens` null means UNLIMITED, never zero, so it stays null rather
+	 * than being cast to int; and `budget_known` false means DEF could not read
+	 * the budget at all (an outage, not an answer) — the panel shows a neutral
+	 * "checking" state for that, which is the whole reason the flag exists.
+	 *
+	 * A DEF 503 (database down) surfaces as an error, never as a zeroed week:
+	 * zeros would read as "you have used nothing", which is untrue.
+	 *
+	 * @return \WP_REST_Response|\WP_Error Response (the usage payload).
+	 */
+	public static function rest_get_usage()
+	{
+		$result = self::backend_request( 'GET', '/api/staff-ai/usage' );
+		if ( is_wp_error( $result ) ) {
+			return self::plain_backend_error(
+				$result,
+				__( 'Could not load your usage. Nothing has changed — try again in a moment.', 'widrow-ai' )
+			);
+		}
+
+		$current = ( isset( $result['current_week'] ) && is_array( $result['current_week'] ) )
+			? $result['current_week']
+			: array();
+
+		// Per-model spend keyed by model id. Non-numeric or negative values are
+		// dropped rather than coerced: a bad number would render a bar of the
+		// wrong length, which is worse than an absent row.
+		$per_model = array();
+		$raw_models = ( isset( $current['per_model'] ) && is_array( $current['per_model'] ) )
+			? $current['per_model']
+			: array();
+		foreach ( $raw_models as $model_id => $tokens ) {
+			if ( ! is_string( $model_id ) || '' === $model_id || ! is_numeric( $tokens ) || $tokens < 0 ) {
+				continue;
+			}
+			$per_model[ $model_id ] = (int) $tokens;
+		}
+
+		return new \WP_REST_Response(
+			array(
+				'success'      => true,
+				'week'         => ( isset( $result['week'] ) && is_string( $result['week'] ) ) ? $result['week'] : '',
+				'resets_at'    => ( isset( $result['resets_at'] ) && is_string( $result['resets_at'] ) ) ? $result['resets_at'] : '',
+				'budget_known' => ! empty( $result['budget_known'] ),
+				// Null is the unlimited case — preserved, never zeroed.
+				'budget_tokens' => ( isset( $result['budget_tokens'] ) && is_numeric( $result['budget_tokens'] ) )
+					? (int) $result['budget_tokens']
+					: null,
+				// The model the share bar is pinned to — DEF resolves the tenant's
+				// family ladder and names its strong model here. Null (an older
+				// DEF, or a failed resolution) means "no pin", and the panel falls
+				// back to the heaviest spender. Anything that is not a non-empty
+				// string becomes null rather than reaching the browser as a bar
+				// with no name.
+				'family_top_model' => ( isset( $result['family_top_model'] ) && is_string( $result['family_top_model'] ) && '' !== $result['family_top_model'] )
+					? $result['family_top_model']
+					: null,
+				'current_week' => array(
+					'total'     => ( isset( $current['total'] ) && is_numeric( $current['total'] ) ) ? (int) $current['total'] : 0,
+					'per_model' => $per_model,
+				),
+			),
+			200
+		);
+	}
+
+	/**
+	 * Allowlist one triage-schedule object to the fields the card renders.
+	 *
+	 * The same guard the Memories panel uses: if a future backend adds fields,
+	 * they stay out of the panel until someone decides they belong there.
+	 *
+	 * @param array $row Raw schedule from DEF.
+	 * @return array Allowlisted schedule.
+	 */
+	private static function allowlist_triage_schedule( array $row ): array
+	{
+		$destinations = array();
+		if ( isset( $row['destinations'] ) && is_array( $row['destinations'] ) ) {
+			foreach ( $row['destinations'] as $dest ) {
+				if ( in_array( $dest, array( 'email', 'slack', 'teams' ), true ) ) {
+					$destinations[] = $dest;
+				}
+			}
+		}
+		return array(
+			// STATED by DEF, never inferred here: a user who saved the defaults
+			// unchanged is byte-identical to a user with no row at all.
+			'exists'            => ! empty( $row['exists'] ),
+			'enabled'           => ! empty( $row['enabled'] ),
+			'send_hour_local'   => isset( $row['send_hour_local'] ) ? (int) $row['send_hour_local'] : 7,
+			'send_minute_local' => isset( $row['send_minute_local'] ) ? (int) $row['send_minute_local'] : 0,
+			'timezone'          => ( isset( $row['timezone'] ) && is_string( $row['timezone'] ) ) ? $row['timezone'] : 'UTC',
+			'destinations'      => ! empty( $destinations ) ? $destinations : array( 'email' ),
+			// Phase 4a: '' = unbound (DEF stores NULL; the run searches until
+			// the next save binds). The picker's select uses '' for that state.
+			'connected_account_id'      => ( isset( $row['connected_account_id'] ) && is_string( $row['connected_account_id'] ) )
+				? $row['connected_account_id'] : '',
+			// 6-A: absent means ON - see validate_triage_body() for why.
+			'search_correspondent_mail' => ! isset( $row['search_correspondent_mail'] )
+				|| ! empty( $row['search_correspondent_mail'] ),
+		);
+	}
+
+	/**
+	 * REST handler: the current user's own active mail connections (Phase 4a).
+	 *
+	 * Proxies DEF GET /api/staff-ai/mail-connections for the triage form's
+	 * mailbox picker. Allowlisted to {id, toolkit, address} - DEF already
+	 * scopes the list to the caller and never sends token material, and this
+	 * gate keeps any future extra out of the browser until someone decides it
+	 * belongs. setup_required (empty list) = the tenant has no aggregator key.
+	 *
+	 * @return \WP_REST_Response|\WP_Error Response ({success, connections, setup_required}).
+	 */
+	public static function rest_mail_connections()
+	{
+		$result = self::backend_request( 'GET', '/api/staff-ai/mail-connections' );
+		if ( is_wp_error( $result ) ) {
+			return self::plain_backend_error(
+				$result,
+				__( 'Could not read your mail connections right now - try again in a moment.', 'widrow-ai' )
+			);
+		}
+		$connections = array();
+		if ( isset( $result['connections'] ) && is_array( $result['connections'] ) ) {
+			foreach ( $result['connections'] as $row ) {
+				if ( ! is_array( $row ) || empty( $row['id'] ) || ! is_string( $row['id'] ) ) {
+					continue;
+				}
+				$connections[] = array(
+					'id'      => $row['id'],
+					'toolkit' => ( isset( $row['toolkit'] ) && is_string( $row['toolkit'] ) ) ? $row['toolkit'] : '',
+					'address' => ( isset( $row['address'] ) && is_string( $row['address'] ) ) ? $row['address'] : '',
+					// Slice 4-A (v6.6.0): whether this account is the caller's
+					// chat primary. Coerced to bool - state, never a claim.
+					'primary' => ! empty( $row['primary'] ),
+				);
+			}
+		}
+		return new \WP_REST_Response(
+			array(
+				'success'        => true,
+				'connections'    => $connections,
+				'setup_required' => ! empty( $result['setup_required'] ),
+			),
+			200
+		);
+	}
+
+	/**
+	 * REST handler: set the current user's chat primary mailbox (Slice 4-A).
+	 *
+	 * Proxies DEF PUT /api/staff-ai/primary-mailbox. The body carries only the
+	 * picked connection id - DEF refuses anything that is not among the
+	 * caller's OWN live connections and derives the toolkit from THAT
+	 * connection, never from a request claim. The response is allowlisted to
+	 * {toolkit, connected_account_id}.
+	 *
+	 * @param \WP_REST_Request $request Request with connected_account_id.
+	 * @return \WP_REST_Response|\WP_Error Response ({success, primary}).
+	 */
+	public static function rest_set_primary_mailbox( \WP_REST_Request $request )
+	{
+		$account_id = $request->get_param( 'connected_account_id' );
+		if ( ! is_string( $account_id ) || '' === $account_id ) {
+			return new \WP_Error(
+				'def_primary_mailbox_invalid',
+				__( 'Pick one of your connected mail accounts.', 'widrow-ai' ),
+				array( 'status' => 422 )
+			);
+		}
+		$result = self::backend_request(
+			'PUT',
+			'/api/staff-ai/primary-mailbox',
+			array( 'connected_account_id' => $account_id )
+		);
+		if ( is_wp_error( $result ) ) {
+			return self::plain_backend_error(
+				$result,
+				__( 'Could not save your primary mailbox - try again in a moment.', 'widrow-ai' )
+			);
+		}
+		$primary = array( 'toolkit' => '', 'connected_account_id' => '' );
+		if ( isset( $result['primary'] ) && is_array( $result['primary'] ) ) {
+			foreach ( array( 'toolkit', 'connected_account_id' ) as $key ) {
+				if ( isset( $result['primary'][ $key ] ) && is_string( $result['primary'][ $key ] ) ) {
+					$primary[ $key ] = $result['primary'][ $key ];
+				}
+			}
+		}
+		return new \WP_REST_Response( array( 'success' => true, 'primary' => $primary ), 200 );
+	}
+
+	/**
+	 * REST handler: clear the current user's chat primary for one provider.
+	 *
+	 * Proxies DEF DELETE /api/staff-ai/primary-mailbox?toolkit=... - back to
+	 * unpinned, DEF-side idempotent (a second click answers 200, never 404).
+	 *
+	 * @param \WP_REST_Request $request Request with toolkit.
+	 * @return \WP_REST_Response|\WP_Error Response ({success, cleared}).
+	 */
+	public static function rest_clear_primary_mailbox( \WP_REST_Request $request )
+	{
+		$toolkit = $request->get_param( 'toolkit' );
+		if ( ! is_string( $toolkit ) || '' === $toolkit ) {
+			return new \WP_Error(
+				'def_primary_mailbox_invalid',
+				__( 'Name the provider to clear.', 'widrow-ai' ),
+				array( 'status' => 422 )
+			);
+		}
+		$result = self::backend_request(
+			'DELETE',
+			'/api/staff-ai/primary-mailbox?toolkit=' . rawurlencode( $toolkit )
+		);
+		if ( is_wp_error( $result ) ) {
+			return self::plain_backend_error(
+				$result,
+				__( 'Could not clear your primary mailbox - try again in a moment.', 'widrow-ai' )
+			);
+		}
+		return new \WP_REST_Response( array( 'success' => true, 'cleared' => $toolkit ), 200 );
+	}
+
+	/**
+	 * REST handler: the current user's Email Triage schedule.
+	 *
+	 * Proxies DEF GET /api/staff-ai/triage-schedule. A user with no schedule gets
+	 * honest disabled defaults from DEF, never a 404 - the card always has
+	 * something true to render. A DEF 503 surfaces as an error, never as
+	 * defaults: defaults would read as "your schedule is off", which is unknown.
+	 *
+	 * @return \WP_REST_Response|\WP_Error Response ({success, schedule}).
+	 */
+	public static function rest_get_triage_schedule()
+	{
+		$result = self::backend_request( 'GET', '/api/staff-ai/triage-schedule' );
+		if ( is_wp_error( $result ) ) {
+			return self::plain_backend_error(
+				$result,
+				__( 'Could not load your triage schedule. Nothing has changed - try again in a moment.', 'widrow-ai' )
+			);
+		}
+		$row = ( isset( $result['schedule'] ) && is_array( $result['schedule'] ) ) ? $result['schedule'] : array();
+		return new \WP_REST_Response(
+			array(
+				'success'  => true,
+				'schedule' => self::allowlist_triage_schedule( $row ),
+				'last_run' => self::allowlist_last_run( $result['last_run'] ?? null ),
+			),
+			200
+		);
+	}
+
+	/**
+	 * Allowlist the last-run summary to status + timestamp.
+	 *
+	 * DEF already withholds the digest, which carries mail subjects, sender
+	 * addresses and drafted reply text. This is the second gate, and it is here
+	 * for the same reason as the schedule allowlist: if a future backend adds
+	 * fields, they stay out of the card until someone decides they belong.
+	 *
+	 * @param mixed $row Raw last_run from DEF, or null when nothing has run.
+	 * @return array|null {status, at, and delivered / delivered_at when DEF sends them}, or null.
+	 */
+	private static function allowlist_last_run( $row )
+	{
+		if ( ! is_array( $row ) ) {
+			return null;
+		}
+		$status = isset( $row['status'] ) && is_string( $row['status'] ) ? $row['status'] : '';
+		$at     = isset( $row['at'] ) && is_string( $row['at'] ) ? $row['at'] : '';
+		if ( '' === $status ) {
+			return null;
+		}
+		$out = array( 'status' => $status, 'at' => $at );
+		// The delivery facts (DEF 2026-09-24) pass through only when DEF sends them,
+		// typed; a caller whose DEF payload has none keeps exactly status + at.
+		if ( isset( $row['delivered'] ) && is_bool( $row['delivered'] ) ) {
+			$out['delivered'] = $row['delivered'];
+		}
+		if ( isset( $row['delivered_at'] ) && is_string( $row['delivered_at'] ) ) {
+			$out['delivered_at'] = $row['delivered_at'];
+		}
+		return $out;
+	}
+
+	/**
+	 * Validate one triage-schedule body the way DEF will - shared by the
+	 * legacy singleton PUT and the v6.4.0 plural create/update. FULL-REPLACE:
+	 * the complete object is validated and forwarded whole (an omitted field
+	 * would silently reset DEF-side). Refuses explicitly, never coerces.
+	 *
+	 * Phase 4a binding: absent mirrors DEF ('' = unbound) - a cached older
+	 * page posts no binding and must keep saving. Shape-only: DEF's run
+	 * verifies ownership fail-closed, and the picker only offers the
+	 * caller's own accounts.
+	 *
+	 * @param \WP_REST_Request $request Request object.
+	 * @return array|\WP_Error The clean payload, or the refusal.
+	 */
+	private static function validate_triage_body( \WP_REST_Request $request )
+	{
+		$enabled      = $request->get_param( 'enabled' );
+		$hour         = $request->get_param( 'send_hour_local' );
+		$minute       = $request->get_param( 'send_minute_local' );
+		$timezone     = $request->get_param( 'timezone' );
+		$destinations = $request->get_param( 'destinations' );
+		$account      = $request->get_param( 'connected_account_id' );
+		$search_mail  = $request->get_param( 'search_correspondent_mail' );
+
+		$problems = array();
+		if ( ! is_bool( $enabled ) ) {
+			$problems[] = __( 'enabled must be true or false.', 'widrow-ai' );
+		}
+		if ( null === $account ) {
+			$account = '';
+		}
+		if ( ! is_string( $account ) || strlen( $account ) > 64 ) {
+			$problems[] = __( 'The mailbox must be a connection id of at most 64 characters.', 'widrow-ai' );
+		}
+		// ABSENT MEANS ON, mirroring DEF's server_default and the read mirror.
+		// A cached pre-6.8.0 page posts no field on an otherwise ordinary save,
+		// and the save is FULL REPLACE - so defaulting it off here would let a
+		// timezone edit quietly strip the correspondent brief off a schedule the
+		// owner never touched. Refusing an absent field instead would just 400
+		// that same legitimate save. Present-but-not-boolean is still refused.
+		if ( null === $search_mail ) {
+			$search_mail = true;
+		}
+		if ( ! is_bool( $search_mail ) ) {
+			$problems[] = __( 'search_correspondent_mail must be true or false.', 'widrow-ai' );
+		}
+		if ( ! is_int( $hour ) || $hour < 0 || $hour > 23 ) {
+			$problems[] = __( 'The send hour must be a whole number from 0 to 23.', 'widrow-ai' );
+		}
+		if ( ! is_int( $minute ) || $minute < 0 || $minute > 59 ) {
+			$problems[] = __( 'The send minute must be a whole number from 0 to 59.', 'widrow-ai' );
+		}
+		if ( ! is_string( $timezone ) || '' === $timezone || strlen( $timezone ) > 64 ) {
+			$problems[] = __( 'The timezone must be a timezone name of at most 64 characters.', 'widrow-ai' );
+		}
+		$clean_destinations = array();
+		if ( is_array( $destinations ) && ! empty( $destinations ) ) {
+			foreach ( $destinations as $dest ) {
+				if ( ! in_array( $dest, array( 'email', 'slack', 'teams' ), true ) ) {
+					$clean_destinations = null;
+					break;
+				}
+				$clean_destinations[] = $dest;
+			}
+		} else {
+			$clean_destinations = null;
+		}
+		if ( null === $clean_destinations ) {
+			$problems[] = __( 'Destinations must be one or more of: email, slack, teams.', 'widrow-ai' );
+		}
+		if ( ! empty( $problems ) ) {
+			return new \WP_Error(
+				'def_triage_schedule_invalid',
+				implode( ' ', $problems ),
+				array( 'status' => 400 )
+			);
+		}
+		return array(
+			'enabled'              => $enabled,
+			'send_hour_local'      => $hour,
+			'send_minute_local'    => $minute,
+			'timezone'             => $timezone,
+			'destinations'         => array_values( array_unique( $clean_destinations ) ),
+			'connected_account_id'      => $account,
+			'search_correspondent_mail' => $search_mail,
+		);
+	}
+
+	/**
+	 * REST handler: save the current user's Email Triage schedule.
+	 *
+	 * Proxies DEF PUT /api/staff-ai/triage-schedule — the LEGACY singleton
+	 * surface (DEF answers for the caller's oldest setup as of Phase 4a); the
+	 * v6.4.0 UI uses the plural routes below.
+	 *
+	 * @param \WP_REST_Request $request Request object.
+	 * @return \WP_REST_Response|\WP_Error Response ({success, schedule}).
+	 */
+	public static function rest_put_triage_schedule( \WP_REST_Request $request )
+	{
+		$payload = self::validate_triage_body( $request );
+		if ( is_wp_error( $payload ) ) {
+			return $payload;
+		}
+
+		$result = self::backend_request( 'PUT', '/api/staff-ai/triage-schedule', $payload );
+		if ( is_wp_error( $result ) ) {
+			return self::plain_backend_error(
+				$result,
+				__( 'Could not save your triage schedule. Your previous settings are unchanged - try again in a moment.', 'widrow-ai' )
+			);
+		}
+		$row = ( isset( $result['schedule'] ) && is_array( $result['schedule'] ) ) ? $result['schedule'] : array();
+		return new \WP_REST_Response(
+			array(
+				'success'  => true,
+				'schedule' => self::allowlist_triage_schedule( $row ),
+			),
+			200
+		);
+	}
+
+	/**
+	 * REST handler: retire the current user's Email Triage setup.
+	 *
+	 * Proxies DEF DELETE /api/staff-ai/triage-schedule. This retires the SETUP,
+	 * not the mailbox connection - the OAuth grant is untouched and stays usable
+	 * by chat. Disconnecting that grant is a separate control on Connections.
+	 *
+	 * Idempotent DEF-side, so a second click or a second tab is a 200, not an
+	 * error. Ownership is resolved DEF-side from the forwarded identity; there is
+	 * no field on this request that could name another user's schedule.
+	 *
+	 * @return \WP_REST_Response|\WP_Error Response ({success, deleted}).
+	 */
+	public static function rest_delete_triage_schedule()
+	{
+		$result = self::backend_request( 'DELETE', '/api/staff-ai/triage-schedule' );
+		if ( is_wp_error( $result ) ) {
+			return self::plain_backend_error(
+				$result,
+				__( 'Could not remove your Email Triage setup. Nothing has changed - try again in a moment.', 'widrow-ai' )
+			);
+		}
+		return new \WP_REST_Response(
+			array(
+				'success' => true,
+				'deleted' => ! empty( $result['deleted'] ),
+			),
+			200
+		);
+	}
+
+	/**
+	 * REST handler: ask for an off-schedule run of the current user's triage.
+	 *
+	 * Proxies DEF POST /api/staff-ai/triage-schedule/run-now. Nothing runs here
+	 * and nothing runs in DEF either: the request is recorded and the platform
+	 * scheduler picks it up on its next pass, so a manual run travels exactly
+	 * the path the daily run does - which is the whole point of the button.
+	 * That is why the success message promises a run "shortly" rather than
+	 * pretending the digest is already on its way.
+	 *
+	 * A user who has never set triage up gets DEF's 404 surfaced as a plain
+	 * message rather than a silent no-op.
+	 *
+	 * @return \WP_REST_Response|\WP_Error Response ({success, message}).
+	 */
+	public static function rest_run_now_triage_schedule()
+	{
+		$result = self::backend_request( 'POST', '/api/staff-ai/triage-schedule/run-now', array() );
+		if ( is_wp_error( $result ) ) {
+			// Both refusals are things the user can fix, and the generic copy
+			// ("try again in a moment") can never be true for either - so each
+			// gets its own message instead of the fallback:
+			//   404 - no schedule saved yet. Reachable in plain use: the modal
+			//         renders honest defaults without creating a row, so Run now
+			//         before Save lands here.
+			//   409 - the schedule is switched off. Run now runs THE SCHEDULE,
+			//         so there is nothing to run until it is on.
+			$code = $result->get_error_code();
+			if ( 'staff_ai_http_409' === $code ) {
+				$fallback = __( 'Turn on your Email Triage schedule before running it.', 'widrow-ai' );
+			} elseif ( 'staff_ai_not_found' === $code ) {
+				$fallback = __( 'Save your Email Triage schedule before running it.', 'widrow-ai' );
+			} else {
+				$fallback = __( 'Could not start a triage run. Your schedule is unchanged - try again in a moment.', 'widrow-ai' );
+			}
+			return self::plain_backend_error( $result, $fallback );
+		}
+		return new \WP_REST_Response(
+			array(
+				'success' => true,
+				'message' => __( 'Triage will run shortly. Your digest arrives the same way your daily one does.', 'widrow-ai' ),
+			),
+			200
+		);
+	}
+
+	/**
+	 * Allowlist one PLURAL triage row (Phase 4a, v6.4.0) - the singleton
+	 * allowlist's fields minus `exists` (meaningless on a list) plus the row's
+	 * identity and its own last run.
+	 *
+	 * @param array $row Raw schedule from DEF's plural list.
+	 * @return array Allowlisted row.
+	 */
+	private static function allowlist_triage_row( array $row ): array
+	{
+		$out = self::allowlist_triage_schedule( $row );
+		unset( $out['exists'] );
+		// Charset-pinned to the DELETE/PUT route pattern's alphabet, so the
+		// two ends can never disagree (the memories-allowlist precedent).
+		$out['schedule_id'] = ( isset( $row['schedule_id'] ) && is_string( $row['schedule_id'] )
+			&& preg_match( '/^[A-Za-z0-9-]{1,64}$/', $row['schedule_id'] ) )
+			? $row['schedule_id'] : '';
+		$out['last_run'] = self::allowlist_last_run( $row['last_run'] ?? null );
+		return $out;
+	}
+
+	/**
+	 * The plural save refusals a user can act on (Phase 4a), mapped to plain
+	 * sentences: DEF's 422 mailbox_required (a second setup must name its
+	 * mailbox) and 409 mailbox_already_scheduled (one setup per mailbox).
+	 *
+	 * @param \WP_Error $result The proxied error.
+	 * @return \WP_Error Plain-sentence error.
+	 */
+	private static function triage_save_error( \WP_Error $result ): \WP_Error
+	{
+		$code = $result->get_error_code();
+		if ( 'staff_ai_http_409' === $code ) {
+			$fallback = __( 'Another of your schedules already reads that mailbox.', 'widrow-ai' );
+		} elseif ( 'staff_ai_http_422' === $code ) {
+			// DEF's plural 422 is EITHER mailbox_required OR validation_failed
+			// (panel C2 - the second is reachable via browser/server tzdata
+			// skew on the timezone list), and only the first is about the
+			// mailbox - a fixed mailbox caption would mislead on the rest.
+			// DEF's own message names the actual field and is already
+			// user-destined; it rides inside backend_request's wrapped error
+			// string, so it is recovered from there (the error DATA carries
+			// only the status - observed, not assumed).
+			$fallback = __( 'Could not save your triage schedule. Your previous settings are unchanged - try again in a moment.', 'widrow-ai' );
+			if ( preg_match( '/\(HTTP 422\): (.+)$/s', (string) $result->get_error_message(), $m )
+				&& '' !== trim( $m[1] ) && __( 'Unknown error', 'widrow-ai' ) !== trim( $m[1] ) ) {
+				$fallback = trim( $m[1] );
+			}
+		} else {
+			$fallback = __( 'Could not save your triage schedule. Your previous settings are unchanged - try again in a moment.', 'widrow-ai' );
+		}
+		return self::plain_backend_error( $result, $fallback );
+	}
+
+	/**
+	 * REST handler: the current user's Email Triage setups (Phase 4a).
+	 *
+	 * Proxies DEF GET /api/staff-ai/triage-schedules - one row per setup, each
+	 * with its own last run. Empty list is a real answer.
+	 *
+	 * @return \WP_REST_Response|\WP_Error Response ({success, schedules}).
+	 */
+	public static function rest_list_triage_schedules()
+	{
+		$result = self::backend_request( 'GET', '/api/staff-ai/triage-schedules' );
+		if ( is_wp_error( $result ) ) {
+			return self::plain_backend_error(
+				$result,
+				__( 'Could not load your triage schedules. Nothing has changed - try again in a moment.', 'widrow-ai' )
+			);
+		}
+		$schedules = array();
+		if ( isset( $result['schedules'] ) && is_array( $result['schedules'] ) ) {
+			foreach ( $result['schedules'] as $row ) {
+				if ( is_array( $row ) ) {
+					$schedules[] = self::allowlist_triage_row( $row );
+				}
+			}
+		}
+		return new \WP_REST_Response(
+			array( 'success' => true, 'schedules' => $schedules ),
+			200
+		);
+	}
+
+	/**
+	 * REST handler: create one Email Triage setup (Phase 4a).
+	 *
+	 * DEF enforces the multiplicity rules (a second setup must name its
+	 * mailbox; one setup per mailbox) - this proxy maps them to sentences.
+	 *
+	 * @param \WP_REST_Request $request Request object.
+	 * @return \WP_REST_Response|\WP_Error Response ({success, schedule}).
+	 */
+	public static function rest_create_triage_schedule( \WP_REST_Request $request )
+	{
+		$payload = self::validate_triage_body( $request );
+		if ( is_wp_error( $payload ) ) {
+			return $payload;
+		}
+		$result = self::backend_request( 'POST', '/api/staff-ai/triage-schedules', $payload );
+		if ( is_wp_error( $result ) ) {
+			return self::triage_save_error( $result );
+		}
+		$row = ( isset( $result['schedule'] ) && is_array( $result['schedule'] ) ) ? $result['schedule'] : array();
+		return new \WP_REST_Response(
+			array( 'success' => true, 'schedule' => self::allowlist_triage_row( $row ) ),
+			200
+		);
+	}
+
+	/**
+	 * REST handler: full-replace update of one Email Triage setup (Phase 4a).
+	 *
+	 * @param \WP_REST_Request $request Request object.
+	 * @return \WP_REST_Response|\WP_Error Response ({success, schedule}).
+	 */
+	public static function rest_update_triage_schedule_by_id( \WP_REST_Request $request )
+	{
+		$payload = self::validate_triage_body( $request );
+		if ( is_wp_error( $payload ) ) {
+			return $payload;
+		}
+		$sid    = rawurlencode( (string) $request->get_param( 'schedule_id' ) );
+		$result = self::backend_request( 'PUT', '/api/staff-ai/triage-schedules/' . $sid, $payload );
+		if ( is_wp_error( $result ) ) {
+			if ( 'staff_ai_not_found' === $result->get_error_code() ) {
+				// Deleted in another tab: retrying cannot help (panel nit).
+				return self::plain_backend_error(
+					$result,
+					__( 'This schedule no longer exists - refresh the page.', 'widrow-ai' )
+				);
+			}
+			return self::triage_save_error( $result );
+		}
+		$row = ( isset( $result['schedule'] ) && is_array( $result['schedule'] ) ) ? $result['schedule'] : array();
+		return new \WP_REST_Response(
+			array( 'success' => true, 'schedule' => self::allowlist_triage_row( $row ) ),
+			200
+		);
+	}
+
+	/**
+	 * REST handler: retire one Email Triage setup (Phase 4a). Idempotent.
+	 *
+	 * @param \WP_REST_Request $request Request object.
+	 * @return \WP_REST_Response|\WP_Error Response ({success, deleted}).
+	 */
+	public static function rest_delete_triage_schedule_by_id( \WP_REST_Request $request )
+	{
+		$sid    = rawurlencode( (string) $request->get_param( 'schedule_id' ) );
+		$result = self::backend_request( 'DELETE', '/api/staff-ai/triage-schedules/' . $sid );
+		if ( is_wp_error( $result ) ) {
+			return self::plain_backend_error(
+				$result,
+				__( 'Could not remove this Email Triage setup. Nothing has changed - try again in a moment.', 'widrow-ai' )
+			);
+		}
+		return new \WP_REST_Response(
+			array( 'success' => true, 'deleted' => ! empty( $result['deleted'] ) ),
+			200
+		);
+	}
+
+	/**
+	 * REST handler: Run Now for one Email Triage setup (Phase 4a). Same
+	 * stamp-never-run contract as the singleton route.
+	 *
+	 * @param \WP_REST_Request $request Request object.
+	 * @return \WP_REST_Response|\WP_Error Response ({success, message}).
+	 */
+	public static function rest_run_now_triage_by_id( \WP_REST_Request $request )
+	{
+		$sid    = rawurlencode( (string) $request->get_param( 'schedule_id' ) );
+		$result = self::backend_request( 'POST', '/api/staff-ai/triage-schedules/' . $sid . '/run-now', array() );
+		if ( is_wp_error( $result ) ) {
+			$code = $result->get_error_code();
+			if ( 'staff_ai_http_409' === $code ) {
+				$fallback = __( 'Turn on this schedule before running it.', 'widrow-ai' );
+			} elseif ( 'staff_ai_not_found' === $code ) {
+				$fallback = __( 'This schedule no longer exists - refresh the page.', 'widrow-ai' );
+			} else {
+				$fallback = __( 'Could not start a triage run. Your schedule is unchanged - try again in a moment.', 'widrow-ai' );
+			}
+			return self::plain_backend_error( $result, $fallback );
+		}
+		return new \WP_REST_Response(
+			array(
+				'success' => true,
+				'message' => __( 'Triage will run shortly. Your digest arrives the same way your daily one does.', 'widrow-ai' ),
+			),
+			200
+		);
+	}
+
+	/**
+	 * Allowlist one free-text task to the fields the card and form render.
+	 *
+	 * The triage-schedule allowlist's contract: anything a future backend adds
+	 * stays out of the UI until someone decides it belongs. Note owner_email is
+	 * deliberately NOT here - the page shows whose session this is already.
+	 *
+	 * @param array $row Raw task from DEF.
+	 * @return array Allowlisted task.
+	 */
+	private static function allowlist_task( array $row ): array
+	{
+		$destinations = array();
+		if ( isset( $row['destinations'] ) && is_array( $row['destinations'] ) ) {
+			foreach ( $row['destinations'] as $dest ) {
+				if ( in_array( $dest, array( 'email', 'slack', 'teams' ), true ) ) {
+					$destinations[] = $dest;
+				}
+			}
+		}
+		$cadence = ( isset( $row['cadence'] ) && is_string( $row['cadence'] )
+			&& in_array( $row['cadence'], array( 'manual', 'hourly', 'daily', 'weekdays', 'weekly', 'once' ), true ) )
+			? $row['cadence'] : 'daily';
+		$weekday = ( isset( $row['send_weekday'] ) && is_int( $row['send_weekday'] )
+			&& $row['send_weekday'] >= 0 && $row['send_weekday'] <= 6 )
+			? $row['send_weekday'] : 0;
+		// P3-C: '' = the employee default (DEF stores NULL). The form's select
+		// uses '' for its Default option, so null flattens to it here. No
+		// length bound: DEF's column and door already bound the id (the
+		// timezone field's shape - trust the backend's own response).
+		$model = ( isset( $row['model'] ) && is_string( $row['model'] ) ) ? $row['model'] : '';
+		return array(
+			'id'                => isset( $row['id'] ) && is_string( $row['id'] ) ? $row['id'] : '',
+			'name'              => isset( $row['name'] ) && is_string( $row['name'] ) ? $row['name'] : '',
+			'instruction'       => isset( $row['instruction'] ) && is_string( $row['instruction'] ) ? $row['instruction'] : '',
+			'enabled'           => ! empty( $row['enabled'] ),
+			'cadence'           => $cadence,
+			'send_weekday'      => $weekday,
+			// Row 9 (§14j): the date a `once` runs, KEPT after it has run.
+			'send_date_local'   => self::iso_date( $row['send_date_local'] ?? null ),
+			// W9: the date a paused task runs again from (DEF serves it only while
+			// it is still ahead), and whether its next scheduled run is skipped.
+			'paused_until'      => self::iso_date( $row['paused_until'] ?? null ),
+			'skip_next'         => ! empty( $row['skip_next'] ),
+			'send_hour_local'   => isset( $row['send_hour_local'] ) ? (int) $row['send_hour_local'] : 7,
+			'send_minute_local' => isset( $row['send_minute_local'] ) ? (int) $row['send_minute_local'] : 0,
+			'timezone'          => ( isset( $row['timezone'] ) && is_string( $row['timezone'] ) ) ? $row['timezone'] : 'UTC',
+			'destinations'      => ! empty( $destinations ) ? $destinations : array( 'email' ),
+			'model'             => $model,
+			// P-C: null = unbound. DEF's id, shape-trusted (its own response).
+			'project_id'        => ( isset( $row['project_id'] ) && is_string( $row['project_id'] ) ) ? $row['project_id'] : null,
+			// W21: custom, or slack_notes (Notes to Staff AI - DEF sets its name and instruction).
+			'kind'              => ( isset( $row['kind'] ) && 'slack_notes' === $row['kind'] ) ? 'slack_notes' : 'custom',
+			'last_run'          => self::allowlist_last_run( $row['last_run'] ?? null ),
+		);
+	}
+
+	/**
+	 * A real calendar date as YYYY-MM-DD, or null.
+	 *
+	 * The round-trip is what refuses 2026-13-45: createFromFormat rolls an
+	 * out-of-range part forward rather than failing, exactly what DEF's
+	 * date.fromisoformat refuses.
+	 *
+	 * @param mixed $value Candidate date.
+	 * @return string|null
+	 */
+	private static function iso_date( $value ): ?string
+	{
+		if ( ! is_string( $value ) || '' === $value ) {
+			return null;
+		}
+		$parsed = \DateTimeImmutable::createFromFormat( '!Y-m-d', $value );
+		return ( $parsed && $parsed->format( 'Y-m-d' ) === $value ) ? $value : null;
+	}
+
+	/**
+	 * Validate one task body the way DEF will - refuse visibly, coerce nothing.
+	 *
+	 * DEF is the authority behind this proxy; this exists so a user gets one
+	 * plain sentence instead of a proxied 422, the triage PUT's contract.
+	 *
+	 * @param \WP_REST_Request $request Request object.
+	 * @return array|\WP_Error The clean payload, or the refusal.
+	 */
+	private static function validate_task_body( \WP_REST_Request $request )
+	{
+		$name         = $request->get_param( 'name' );
+		$instruction  = $request->get_param( 'instruction' );
+		$enabled      = $request->get_param( 'enabled' );
+		$cadence      = $request->get_param( 'cadence' );
+		$weekday      = $request->get_param( 'send_weekday' );
+		$send_date    = $request->get_param( 'send_date_local' );
+		$hour         = $request->get_param( 'send_hour_local' );
+		$minute       = $request->get_param( 'send_minute_local' );
+		$timezone     = $request->get_param( 'timezone' );
+		$destinations = $request->get_param( 'destinations' );
+		$model        = $request->get_param( 'model' );
+		// P-C: optional project binding. Shape here; DEF refuses anything that is
+		// not the caller's own ACTIVE project (422), so a stale pick never binds.
+		$project_id = $request->get_param( 'project_id' );
+		// W21: DEF reads the kind on create and keeps the stored one on every edit.
+		$kind = $request->get_param( 'kind' );
+		if ( null === $kind ) {
+			$kind = 'custom';
+		}
+
+		$problems = array();
+		if ( ! in_array( $kind, array( 'custom', 'slack_notes' ), true ) ) {
+			$problems[] = __( 'The task type must be custom or slack_notes.', 'widrow-ai' );
+		}
+		// A Notes to Staff AI task's name and instruction are DEF's; the form sends neither.
+		if ( 'slack_notes' === $kind ) {
+			$name        = is_string( $name ) && '' !== trim( $name ) ? $name : 'Notes to Staff AI';
+			$instruction = is_string( $instruction ) && '' !== trim( $instruction ) ? $instruction : 'Notes to Staff AI';
+		}
+		if ( null === $project_id || '' === $project_id ) {
+			$project_id = null;
+		} elseif ( ! is_string( $project_id ) || ! preg_match( '/^[a-zA-Z0-9-]{1,64}$/', $project_id ) ) {
+			$problems[] = __( 'The project must be one of your projects, or none.', 'widrow-ai' );
+		}
+		// Absent defaults mirror DEF exactly (routes.py: body.get with a
+		// default) - a cached pre-6.1.0 page posts no cadence and must keep
+		// saving daily tasks. Present-but-wrong still refuses.
+		if ( null === $cadence ) {
+			$cadence = 'daily';
+		}
+		if ( null === $weekday ) {
+			$weekday = 0;
+		}
+		// P3-C: absent mirrors DEF ('' = employee default) - a cached pre-6.2.0
+		// page posts no model and must keep saving default-model tasks. DEF is
+		// the authority on which ids exist; this door only bounds the shape.
+		if ( null === $model ) {
+			$model = '';
+		}
+		if ( ! is_string( $model ) || strlen( $model ) > 64 ) {
+			$problems[] = __( 'The model must be a model id of at most 64 characters.', 'widrow-ai' );
+		}
+		if ( ! is_string( $cadence )
+			|| ! in_array( $cadence, array( 'manual', 'hourly', 'daily', 'weekdays', 'weekly', 'once' ), true ) ) {
+			$problems[] = __( 'The frequency must be one of: manual, hourly, daily, weekdays, weekly, once.', 'widrow-ai' );
+		}
+		// Row 9 (§14j), mirroring DEF's door. Whether the datetime is still in
+		// the FUTURE stays DEF's call - one clock, not two - and its refusal
+		// reaches the user through task_save_error().
+		$raw_date  = ( is_string( $send_date ) && '' !== $send_date ) ? $send_date : null;
+		$send_date = self::iso_date( $raw_date );
+		if ( null !== $raw_date && null === $send_date ) {
+			$problems[] = __( 'The date must be a real date, written as YYYY-MM-DD.', 'widrow-ai' );
+		} elseif ( 'once' === $cadence && null === $raw_date ) {
+			$problems[] = __( 'A task that runs once needs the date it runs.', 'widrow-ai' );
+		} elseif ( null !== $raw_date && ! in_array( $cadence, array( 'once', 'manual' ), true ) ) {
+			$problems[] = __( 'A date belongs to a task that runs once - a repeating task has none.', 'widrow-ai' );
+		}
+		// W9: pause and skip are NOT full-replace. Each is forwarded only when the
+		// request names it, so the Edit form (which sends neither) keeps both; '' or
+		// null ends a pause. Whether the date is after today stays DEF's call.
+		$pause_given  = $request->has_param( 'paused_until' );
+		$raw_pause    = $request->get_param( 'paused_until' );
+		$paused_until = null;
+		if ( $pause_given && null !== $raw_pause && '' !== $raw_pause ) {
+			$paused_until = self::iso_date( $raw_pause );
+			if ( null === $paused_until ) {
+				$problems[] = __( 'The pause date must be a real date, written as YYYY-MM-DD.', 'widrow-ai' );
+			}
+		}
+		$skip_given = $request->has_param( 'skip_next' );
+		$skip_next  = $request->get_param( 'skip_next' );
+		if ( $skip_given && ! is_bool( $skip_next ) ) {
+			$problems[] = __( 'skip_next must be true or false.', 'widrow-ai' );
+		}
+		if ( ! is_int( $weekday ) || $weekday < 0 || $weekday > 6 ) {
+			$problems[] = __( 'The weekday must be a whole number from 0 (Monday) to 6 (Sunday).', 'widrow-ai' );
+		}
+		// mb_strlen, NOT strlen (round-2 code leg): DEF counts CHARACTERS and the
+		// copy says characters, so bytes here would refuse a 41-char CJK name the
+		// input and DEF both accept — the display-name byte-cut class removed in
+		// 5.7.5. Refuses visibly either way; never truncates.
+		if ( ! is_string( $name ) || '' === trim( $name ) || mb_strlen( trim( $name ) ) > 120 ) {
+			$problems[] = __( 'The task needs a name of at most 120 characters.', 'widrow-ai' );
+		}
+		if ( ! is_string( $instruction ) || '' === trim( $instruction ) || mb_strlen( trim( $instruction ) ) > 10000 ) {
+			$problems[] = __( 'The task needs instructions of at most 10,000 characters.', 'widrow-ai' );
+		}
+		if ( ! is_bool( $enabled ) ) {
+			$problems[] = __( 'enabled must be true or false.', 'widrow-ai' );
+		}
+		if ( ! is_int( $hour ) || $hour < 0 || $hour > 23 ) {
+			$problems[] = __( 'The send hour must be a whole number from 0 to 23.', 'widrow-ai' );
+		}
+		if ( ! is_int( $minute ) || $minute < 0 || $minute > 59 ) {
+			$problems[] = __( 'The send minute must be a whole number from 0 to 59.', 'widrow-ai' );
+		}
+		if ( ! is_string( $timezone ) || '' === $timezone || strlen( $timezone ) > 64 ) {
+			$problems[] = __( 'The timezone must be a timezone name of at most 64 characters.', 'widrow-ai' );
+		}
+		$clean_destinations = array();
+		if ( is_array( $destinations ) && ! empty( $destinations ) ) {
+			foreach ( $destinations as $dest ) {
+				if ( ! in_array( $dest, array( 'email', 'slack', 'teams' ), true ) ) {
+					$clean_destinations = null;
+					break;
+				}
+				$clean_destinations[] = $dest;
+			}
+		} else {
+			$clean_destinations = null;
+		}
+		if ( null === $clean_destinations ) {
+			$problems[] = __( 'Destinations must be one or more of: email, slack, teams.', 'widrow-ai' );
+		}
+		if ( ! empty( $problems ) ) {
+			return new \WP_Error(
+				'def_task_invalid',
+				implode( ' ', $problems ),
+				array( 'status' => 400 )
+			);
+		}
+		$clean = array(
+			'kind'              => $kind,
+			'name'              => trim( $name ),
+			'instruction'       => trim( $instruction ),
+			'enabled'           => $enabled,
+			'cadence'           => $cadence,
+			'send_weekday'      => $weekday,
+			'send_hour_local'   => $hour,
+			'send_minute_local' => $minute,
+			'timezone'          => $timezone,
+			'destinations'      => array_values( array_unique( $clean_destinations ) ),
+			'model'             => $model,
+			'project_id'        => $project_id,
+		);
+		// ABSENT, never null: on a PUT, DEF keeps the stored date of a fired
+		// `once` when this key is missing and clears it for every other cadence,
+		// which is exactly the two behaviours the form wants. A null would wipe
+		// the "Ran once at" stamp of a task somebody merely renamed.
+		if ( null !== $send_date ) {
+			$clean['send_date_local'] = $send_date;
+		}
+		if ( $pause_given ) {
+			$clean['paused_until'] = $paused_until;
+		}
+		if ( $skip_given ) {
+			$clean['skip_next'] = $skip_next;
+		}
+		return $clean;
+	}
+
+	/**
+	 * REST handler: the current user's free-text scheduled tasks.
+	 *
+	 * Proxies DEF GET /api/staff-ai/tasks. The list is per user by construction
+	 * (DEF keys on the forwarded identity); an empty list is a real answer.
+	 *
+	 * @return \WP_REST_Response|\WP_Error Response ({success, tasks}).
+	 */
+	public static function rest_list_tasks()
+	{
+		$result = self::backend_request( 'GET', '/api/staff-ai/tasks' );
+		if ( is_wp_error( $result ) ) {
+			return self::plain_backend_error(
+				$result,
+				__( 'Could not load your scheduled tasks. Nothing has changed - try again in a moment.', 'widrow-ai' )
+			);
+		}
+		$tasks = array();
+		if ( isset( $result['tasks'] ) && is_array( $result['tasks'] ) ) {
+			foreach ( $result['tasks'] as $row ) {
+				if ( is_array( $row ) ) {
+					$tasks[] = self::allowlist_task( $row );
+				}
+			}
+		}
+		return new \WP_REST_Response(
+			array(
+				'success'    => true,
+				'tasks'      => $tasks,
+				// W21: the word a Slack note starts with ("Sue"), for the Notes form's hint.
+				'address_as' => ( isset( $result['address_as'] ) && is_string( $result['address_as'] ) ) ? $result['address_as'] : '',
+			),
+			200
+		);
+	}
+
+	/**
+	 * A task save's refusal in plain copy - DEF's own words when it has them.
+	 *
+	 * @param \WP_Error $result The proxied error.
+	 * @return \WP_Error Plain-sentence error.
+	 */
+	private static function task_save_error( \WP_Error $result ): \WP_Error
+	{
+		// DEF's 422 is the user's own mistake, named: "a once task must be
+		// scheduled in the future" is permanent and fixable, and the generic
+		// fallback below tells them to try again in a moment - a retry prompt
+		// for something no retry mends. DEF's 409 is the same kind of sentence
+		// ("You already have a Notes to Staff AI task."). The message rides
+		// inside backend_request's wrapped error string (the triage_save_error
+		// precedent); every other code keeps the fallback.
+		$fallback = __( 'Could not save your task. Nothing has changed - try again in a moment.', 'widrow-ai' );
+		if ( in_array( $result->get_error_code(), array( 'staff_ai_http_422', 'staff_ai_http_409' ), true )
+			&& preg_match( '/\(HTTP 4(?:09|22)\): (.+)$/s', (string) $result->get_error_message(), $m )
+			&& '' !== trim( $m[1] ) && __( 'Unknown error', 'widrow-ai' ) !== trim( $m[1] ) ) {
+			$fallback = trim( $m[1] );
+		}
+		return self::plain_backend_error( $result, $fallback );
+	}
+
+	/**
+	 * REST handler: create one free-text task for the current user.
+	 *
+	 * Proxies DEF POST /api/staff-ai/tasks. Ownership - and the delivery
+	 * address - come from the forwarded identity, never the body: a user id or
+	 * email smuggled in the body is ignored DEF-side (pinned there).
+	 *
+	 * @param \WP_REST_Request $request Request object.
+	 * @return \WP_REST_Response|\WP_Error Response ({success, task}).
+	 */
+	public static function rest_create_task( \WP_REST_Request $request )
+	{
+		$payload = self::validate_task_body( $request );
+		if ( is_wp_error( $payload ) ) {
+			return $payload;
+		}
+		$result = self::backend_request( 'POST', '/api/staff-ai/tasks', $payload );
+		if ( is_wp_error( $result ) ) {
+			return self::task_save_error( $result );
+		}
+		$row = ( isset( $result['task'] ) && is_array( $result['task'] ) ) ? $result['task'] : array();
+		return new \WP_REST_Response(
+			array(
+				'success' => true,
+				'task'    => self::allowlist_task( $row ),
+			),
+			200
+		);
+	}
+
+	/**
+	 * REST handler: full-replace update of one of the current user's tasks.
+	 *
+	 * Proxies DEF PUT /api/staff-ai/tasks/{id}. A task belonging to a colleague
+	 * answers 404 from DEF exactly like a missing one - never confirmed.
+	 *
+	 * @param \WP_REST_Request $request Request object.
+	 * @return \WP_REST_Response|\WP_Error Response ({success, task}).
+	 */
+	public static function rest_update_task( \WP_REST_Request $request )
+	{
+		$payload = self::validate_task_body( $request );
+		if ( is_wp_error( $payload ) ) {
+			return $payload;
+		}
+		$result = self::backend_request(
+			'PUT',
+			'/api/staff-ai/tasks/' . rawurlencode( (string) $request->get_param( 'task_id' ) ),
+			$payload
+		);
+		if ( is_wp_error( $result ) ) {
+			return self::task_save_error( $result );
+		}
+		$row = ( isset( $result['task'] ) && is_array( $result['task'] ) ) ? $result['task'] : array();
+		return new \WP_REST_Response(
+			array(
+				'success' => true,
+				'task'    => self::allowlist_task( $row ),
+			),
+			200
+		);
+	}
+
+	/**
+	 * REST handler: retire one of the current user's tasks.
+	 *
+	 * Proxies DEF DELETE /api/staff-ai/tasks/{id}. Idempotent DEF-side; run
+	 * history survives the setup (DEF's delete-vs-cancel contract).
+	 *
+	 * @param \WP_REST_Request $request Request object.
+	 * @return \WP_REST_Response|\WP_Error Response ({success, deleted}).
+	 */
+	public static function rest_delete_task( \WP_REST_Request $request )
+	{
+		$result = self::backend_request(
+			'DELETE',
+			'/api/staff-ai/tasks/' . rawurlencode( (string) $request->get_param( 'task_id' ) )
+		);
+		if ( is_wp_error( $result ) ) {
+			return self::plain_backend_error(
+				$result,
+				__( 'Could not remove your task. Nothing has changed - try again in a moment.', 'widrow-ai' )
+			);
+		}
+		return new \WP_REST_Response(
+			array(
+				'success' => true,
+				'deleted' => ! empty( $result['deleted'] ),
+			),
+			200
+		);
+	}
+
+	/**
+	 * REST handler: ask for an off-schedule run of one of the current user's tasks.
+	 *
+	 * Proxies DEF POST /api/staff-ai/tasks/{id}/run-now - the triage Run Now
+	 * contract exactly: DEF stamps the request, the platform scheduler picks it
+	 * up on its next pass, and the run travels the same path a scheduled one
+	 * does. The two refusals a user can fix get their own copy.
+	 *
+	 * @param \WP_REST_Request $request Request object.
+	 * @return \WP_REST_Response|\WP_Error Response ({success, message}).
+	 */
+	public static function rest_run_now_task( \WP_REST_Request $request )
+	{
+		$result = self::backend_request(
+			'POST',
+			'/api/staff-ai/tasks/' . rawurlencode( (string) $request->get_param( 'task_id' ) ) . '/run-now',
+			array()
+		);
+		if ( is_wp_error( $result ) ) {
+			$code = $result->get_error_code();
+			if ( 'staff_ai_http_409' === $code ) {
+				$fallback = __( 'Turn this task on before running it.', 'widrow-ai' );
+			} elseif ( 'staff_ai_not_found' === $code ) {
+				$fallback = __( 'This task no longer exists - it may have been removed in another tab.', 'widrow-ai' );
+			} else {
+				$fallback = __( 'Could not start the task. Its schedule is unchanged - try again in a moment.', 'widrow-ai' );
+			}
+			return self::plain_backend_error( $result, $fallback );
+		}
+		return new \WP_REST_Response(
+			array(
+				'success' => true,
+				'message' => __( 'The task will run shortly. Its output arrives at the destinations you chose.', 'widrow-ai' ),
+			),
+			200
+		);
+	}
+
+	/**
+	 * REST handler: forget one thing the assistant remembers about the current user.
+	 *
+	 * Proxies DEF DELETE /api/staff-ai/memories/{id}. Ownership is enforced
+	 * DEF-side from the forwarded identity, so a foreign id is a plain 404.
+	 *
+	 * @param \WP_REST_Request $request Request object.
+	 * @return \WP_REST_Response|\WP_Error Response ({success}).
+	 */
+	public static function rest_delete_memory( \WP_REST_Request $request )
+	{
+		// Charset-check the id HERE, not only in the route pattern: get_param()
+		// resolves JSON → POST → GET → URL (WP_REST_Request::get_parameter_order),
+		// so a query string outranks the path segment the regex matched — the id
+		// forwarded to DEF is not necessarily the one the route validated.
+		$id = sanitize_text_field( (string) $request->get_param( 'id' ) );
+		if ( ! preg_match( '/^[a-zA-Z0-9-]+$/', $id ) ) {
+			return new \WP_Error(
+				'invalid_memory_id',
+				__( 'A memory id is required.', 'widrow-ai' ),
+				array( 'status' => 400 )
+			);
+		}
+		$result = self::backend_request( 'DELETE', '/api/staff-ai/memories/' . rawurlencode( $id ) );
+		if ( is_wp_error( $result ) ) {
+			// Both of these are normal panel traffic — a vanished id (double-click,
+			// stale list) and DEF's 409 when the store changed under the delete. Plain
+			// copy, not backend_request's diagnostic string carrying the backend URL.
+			if ( 'staff_ai_not_found' === $result->get_error_code() ) {
+				return new \WP_Error(
+					'staff_ai_not_found',
+					__( 'That memory is already gone.', 'widrow-ai' ),
+					array( 'status' => 404 )
+				);
+			}
+			if ( 'staff_ai_http_409' === $result->get_error_code() ) {
+				return new \WP_Error(
+					'staff_ai_conflict',
+					__( 'Your memories changed while that was deleting. Refresh and try again.', 'widrow-ai' ),
+					array( 'status' => 409 )
+				);
+			}
+			return self::plain_backend_error(
+				$result,
+				__( 'Could not delete that memory.', 'widrow-ai' )
+			);
+		}
+
+		return new \WP_REST_Response( array( 'success' => true ), 200 );
+	}
+
+	// ── Content Agent Engine 2.5: Clusters curation (targets + keyphrase queues) ──
+
+	/**
+	 * Validate a client-supplied reference_urls list: an array of http(s)
+	 * URLs. Returns the cleaned list, or a WP_Error naming the problem —
+	 * an invalid entry is rejected explicitly, never silently dropped. No
+	 * count cap (5.7.11): DEF owns any per-target bound, and its refusal
+	 * comes back through this same error path.
+	 *
+	 * @param mixed $raw Raw reference_urls from the request body.
+	 * @return array|\WP_Error Cleaned URL list or error.
+	 */
+	private static function validate_reference_urls( $raw )
+	{
+		if ( ! is_array( $raw ) ) {
+			return new \WP_Error(
+				'invalid_reference_urls',
+				__( 'reference_urls must be a list of URLs.', 'widrow-ai' ),
+				array( 'status' => 400 )
+			);
+		}
+		$urls = array();
+		foreach ( $raw as $u ) {
+			$clean = is_string( $u ) ? esc_url_raw( trim( $u ), array( 'http', 'https' ) ) : '';
+			if ( '' === $clean ) {
+				return new \WP_Error(
+					'invalid_reference_urls',
+					__( 'Each reference URL must be a valid http(s) URL.', 'widrow-ai' ),
+					array( 'status' => 400 )
+				);
+			}
+			$urls[] = $clean;
+		}
+		return $urls;
+	}
+
+	/**
+	 * REST handler: list cluster targets. Proxies DEF GET /content/targets and
+	 * passes the target objects through unchanged (id, item_type, item_id,
+	 * source_route, title, url, reference_urls, focus_keyphrase, status,
+	 * keyphrase_counts, created_at), plus the Creator's name for the page.
+	 *
+	 * @return \WP_REST_Response|\WP_Error Response.
+	 */
+	public static function rest_list_content_targets( \WP_REST_Request $request )
+	{
+		$result = self::backend_request( 'GET', '/api/staff-ai/content/targets' );
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+		$targets = ( isset( $result['targets'] ) && is_array( $result['targets'] ) ) ? $result['targets'] : array();
+
+		// Whichever list lands first names her on the page, and remembers her.
+		$creator_name = self::creator_name_from( $result );
+		self::remember_creator_name( $creator_name );
+
+		return new \WP_REST_Response(
+			array(
+				'success'      => true,
+				'targets'      => $targets,
+				'creator_name' => $creator_name,
+			),
+			200
+		);
+	}
+
+	/**
+	 * REST handler: nominate a cluster target. Forwards item_type, item_id,
+	 * source_route (CPTs), title, url and reference_urls to DEF — every accepted
+	 * field is forwarded; DEF re-validates authoritatively (422/409).
+	 *
+	 * @return \WP_REST_Response|\WP_Error Response.
+	 */
+	public static function rest_create_content_target( \WP_REST_Request $request )
+	{
+		$params = $request->get_json_params();
+		$params = is_array( $params ) ? $params : array();
+
+		$item_type = ( isset( $params['item_type'] ) && is_string( $params['item_type'] ) ) ? sanitize_key( $params['item_type'] ) : '';
+		$item_id   = isset( $params['item_id'] ) ? (string) $params['item_id'] : '';
+		$title     = ( isset( $params['title'] ) && is_string( $params['title'] ) ) ? sanitize_text_field( $params['title'] ) : '';
+		$url       = ( isset( $params['url'] ) && is_string( $params['url'] ) ) ? esc_url_raw( trim( $params['url'] ), array( 'http', 'https' ) ) : '';
+
+		if ( '' === $item_type || ! preg_match( '/^\d+$/', $item_id ) || '' === $title || '' === $url ) {
+			return new \WP_Error(
+				'invalid_target',
+				__( 'item_type, a numeric item_id, title and a valid http(s) url are required.', 'widrow-ai' ),
+				array( 'status' => 400 )
+			);
+		}
+
+		$body = array(
+			'item_type' => $item_type,
+			'item_id'   => $item_id,
+			'title'     => $title,
+			'url'       => $url,
+		);
+		if ( isset( $params['source_route'] ) && is_string( $params['source_route'] ) && '' !== $params['source_route'] ) {
+			$body['source_route'] = sanitize_key( $params['source_route'] );
+		}
+		if ( isset( $params['reference_urls'] ) ) {
+			$urls = self::validate_reference_urls( $params['reference_urls'] );
+			if ( is_wp_error( $urls ) ) {
+				return $urls;
+			}
+			$body['reference_urls'] = $urls;
+		}
+
+		$result = self::backend_request( 'POST', '/api/staff-ai/content/targets', $body );
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+		$payload = array( 'success' => true );
+		if ( is_array( $result ) ) {
+			$payload = array_merge( $payload, $result );
+		}
+		return new \WP_REST_Response( $payload, 200 );
+	}
+
+	/**
+	 * REST handler: update a target. PATCH semantics — only the keys present in
+	 * the request are forwarded (title, url, reference_urls, status).
+	 *
+	 * @return \WP_REST_Response|\WP_Error Response.
+	 */
+	public static function rest_update_content_target( \WP_REST_Request $request )
+	{
+		$id     = sanitize_text_field( $request->get_param( 'id' ) );
+		$params = $request->get_json_params();
+		$params = is_array( $params ) ? $params : array();
+		$body   = array();
+
+		if ( array_key_exists( 'title', $params ) ) {
+			$title = is_string( $params['title'] ) ? sanitize_text_field( $params['title'] ) : '';
+			if ( '' === $title ) {
+				return new \WP_Error( 'invalid_target', __( 'title cannot be empty.', 'widrow-ai' ), array( 'status' => 400 ) );
+			}
+			$body['title'] = $title;
+		}
+		if ( array_key_exists( 'url', $params ) ) {
+			$url = is_string( $params['url'] ) ? esc_url_raw( trim( $params['url'] ), array( 'http', 'https' ) ) : '';
+			if ( '' === $url ) {
+				return new \WP_Error( 'invalid_target', __( 'url must be a valid http(s) URL.', 'widrow-ai' ), array( 'status' => 400 ) );
+			}
+			$body['url'] = $url;
+		}
+		if ( array_key_exists( 'reference_urls', $params ) ) {
+			$urls = self::validate_reference_urls( $params['reference_urls'] );
+			if ( is_wp_error( $urls ) ) {
+				return $urls;
+			}
+			$body['reference_urls'] = $urls;
+		}
+		if ( array_key_exists( 'status', $params ) ) {
+			if ( ! in_array( $params['status'], array( 'active', 'paused' ), true ) ) {
+				return new \WP_Error( 'invalid_target', __( 'status must be active or paused.', 'widrow-ai' ), array( 'status' => 400 ) );
+			}
+			$body['status'] = $params['status'];
+		}
+		if ( empty( $body ) ) {
+			return new \WP_Error( 'invalid_target', __( 'Nothing to update.', 'widrow-ai' ), array( 'status' => 400 ) );
+		}
+
+		$result = self::backend_request( 'PATCH', '/api/staff-ai/content/targets/' . rawurlencode( $id ), $body );
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+		return new \WP_REST_Response( $result, 200 );
+	}
+
+	/**
+	 * REST handler: remove a target (and its queue rows, on the DEF side).
+	 * Written posts and staged drafts are untouched.
+	 *
+	 * @return \WP_REST_Response|\WP_Error Response ({status: deleted}).
+	 */
+	public static function rest_delete_content_target( \WP_REST_Request $request )
+	{
+		$id     = sanitize_text_field( $request->get_param( 'id' ) );
+		$result = self::backend_request( 'DELETE', '/api/staff-ai/content/targets/' . rawurlencode( $id ) );
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+		return new \WP_REST_Response( $result, 200 );
+	}
+
+	/**
+	 * REST handler: list a target's keyphrase queue. Rows pass through unchanged
+	 * (phrase, intent_type, status, rationale, staged_change_id, post_id, …);
+	 * written rows whose post_id resolves locally are enriched with edit_url /
+	 * view_url so the UI can link the cluster post.
+	 *
+	 * @return \WP_REST_Response|\WP_Error Response.
+	 */
+	public static function rest_list_target_keyphrases( \WP_REST_Request $request )
+	{
+		$id     = sanitize_text_field( $request->get_param( 'id' ) );
+		$result = self::backend_request( 'GET', '/api/staff-ai/content/targets/' . rawurlencode( $id ) . '/keyphrases' );
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+		$rows = ( isset( $result['keyphrases'] ) && is_array( $result['keyphrases'] ) ) ? $result['keyphrases'] : array();
+
+		foreach ( $rows as &$row ) {
+			$post_id = ( is_array( $row ) && isset( $row['post_id'] ) ) ? (int) $row['post_id'] : 0;
+			if ( $post_id > 0 && get_post_status( $post_id ) ) {
+				$edit_url        = get_edit_post_link( $post_id, 'raw' );
+				$row['edit_url'] = $edit_url ? $edit_url : '';
+				$view_url        = get_permalink( $post_id );
+				$row['view_url'] = $view_url ? $view_url : '';
+			}
+		}
+		unset( $row );
+
+		return new \WP_REST_Response( array( 'success' => true, 'keyphrases' => $rows ), 200 );
+	}
+
+	/**
+	 * REST handler: manually add a keyphrase to a target's queue (born approved
+	 * on the DEF side — human-added IS curation).
+	 *
+	 * @return \WP_REST_Response|\WP_Error Response.
+	 */
+	public static function rest_add_target_keyphrase( \WP_REST_Request $request )
+	{
+		$id     = sanitize_text_field( $request->get_param( 'id' ) );
+		$params = $request->get_json_params();
+		$phrase = ( is_array( $params ) && isset( $params['phrase'] ) && is_string( $params['phrase'] ) )
+			? sanitize_text_field( $params['phrase'] )
+			: '';
+		$intent = ( is_array( $params ) && isset( $params['intent_type'] ) && is_string( $params['intent_type'] ) )
+			? sanitize_key( $params['intent_type'] )
+			: '';
+		if ( '' === $phrase || '' === $intent ) {
+			return new \WP_Error(
+				'invalid_keyphrase',
+				__( 'A phrase and an intent type are required.', 'widrow-ai' ),
+				array( 'status' => 400 )
+			);
+		}
+		$result = self::backend_request(
+			'POST',
+			'/api/staff-ai/content/targets/' . rawurlencode( $id ) . '/keyphrases',
+			array( 'phrase' => $phrase, 'intent_type' => $intent )
+		);
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+		return new \WP_REST_Response( $result, 200 );
+	}
+
+	/**
+	 * REST handler: edit a queued keyphrase (phrase and/or intent_type, only
+	 * while proposed/approved — DEF enforces the state machine with 409).
+	 *
+	 * @return \WP_REST_Response|\WP_Error Response.
+	 */
+	public static function rest_update_keyphrase( \WP_REST_Request $request )
+	{
+		$id     = sanitize_text_field( $request->get_param( 'id' ) );
+		$params = $request->get_json_params();
+		$params = is_array( $params ) ? $params : array();
+		$body   = array();
+
+		if ( array_key_exists( 'phrase', $params ) ) {
+			$phrase = is_string( $params['phrase'] ) ? sanitize_text_field( $params['phrase'] ) : '';
+			if ( '' === $phrase ) {
+				return new \WP_Error( 'invalid_keyphrase', __( 'phrase cannot be empty.', 'widrow-ai' ), array( 'status' => 400 ) );
+			}
+			$body['phrase'] = $phrase;
+		}
+		if ( array_key_exists( 'intent_type', $params ) ) {
+			$intent = is_string( $params['intent_type'] ) ? sanitize_key( $params['intent_type'] ) : '';
+			if ( '' === $intent ) {
+				return new \WP_Error( 'invalid_keyphrase', __( 'intent_type cannot be empty.', 'widrow-ai' ), array( 'status' => 400 ) );
+			}
+			$body['intent_type'] = $intent;
+		}
+		if ( empty( $body ) ) {
+			return new \WP_Error( 'invalid_keyphrase', __( 'Nothing to update.', 'widrow-ai' ), array( 'status' => 400 ) );
+		}
+
+		$result = self::backend_request( 'PATCH', '/api/staff-ai/content/keyphrases/' . rawurlencode( $id ), $body );
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+		return new \WP_REST_Response( $result, 200 );
+	}
+
+	/**
+	 * REST handler: approve a proposed keyphrase.
+	 *
+	 * @return \WP_REST_Response|\WP_Error Response.
+	 */
+	public static function rest_approve_keyphrase( \WP_REST_Request $request )
+	{
+		$id     = sanitize_text_field( $request->get_param( 'id' ) );
+		$result = self::backend_request( 'POST', '/api/staff-ai/content/keyphrases/' . rawurlencode( $id ) . '/approve' );
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+		return new \WP_REST_Response( $result, 200 );
+	}
+
+	/**
+	 * REST handler: dismiss a keyphrase (keeps its slot claimed — re-derive
+	 * won't re-propose it).
+	 *
+	 * @return \WP_REST_Response|\WP_Error Response.
+	 */
+	public static function rest_dismiss_keyphrase( \WP_REST_Request $request )
+	{
+		$id     = sanitize_text_field( $request->get_param( 'id' ) );
+		$result = self::backend_request( 'POST', '/api/staff-ai/content/keyphrases/' . rawurlencode( $id ) . '/dismiss' );
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+		return new \WP_REST_Response( $result, 200 );
+	}
+
+	/**
+	 * REST handler: bulk-dismiss every still-proposed keyphrase on a target
+	 * (the post-curation "Dismiss remaining" click). Proxies DEF's same-named
+	 * route; dismissed phrases keep their slot, so re-derive won't re-propose
+	 * them. Pure passthrough — keyphrase_counts is sparse (zero-count keys
+	 * omitted) and the JS coerces missing keys to 0.
+	 *
+	 * @return \WP_REST_Response|\WP_Error Response ({dismissed, keyphrase_counts}).
+	 */
+	public static function rest_dismiss_remaining_keyphrases( \WP_REST_Request $request )
+	{
+		$id     = sanitize_text_field( $request->get_param( 'id' ) );
+		$result = self::backend_request(
+			'POST',
+			'/api/staff-ai/content/targets/' . rawurlencode( $id ) . '/keyphrases/dismiss-remaining'
+		);
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+		return new \WP_REST_Response( $result, 200 );
+	}
+
+	/**
+	 * REST handler: run derive for a target. Enqueue-and-ack on the DEF side
+	 * ({status: accepted}, ~15-60s) — the UI polls the keyphrase list for new
+	 * proposed rows.
+	 *
+	 * @return \WP_REST_Response|\WP_Error Response.
+	 */
+	public static function rest_derive_content_target( \WP_REST_Request $request )
+	{
+		$id     = sanitize_text_field( $request->get_param( 'id' ) );
+		$result = self::backend_request( 'POST', '/api/staff-ai/content/targets/' . rawurlencode( $id ) . '/derive' );
+		if ( is_wp_error( $result ) ) {
+			return $result;
+		}
+		return new \WP_REST_Response( $result, 200 );
+	}
+
+	/**
+	 * REST handler: local WP item search backing the Clusters target picker.
+	 * Searches published items across all public, REST-exposed post types
+	 * (posts and pages first-class alongside products and CPTs) and returns the
+	 * fields a nomination needs — source_route is the type's rest_base, which
+	 * DEF requires for non-built-in types.
+	 *
+	 * @return \WP_REST_Response Response ({items: [...]}).
+	 */
+	public static function rest_target_search( \WP_REST_Request $request )
+	{
+		$q = sanitize_text_field( (string) $request->get_param( 'q' ) );
+		if ( strlen( $q ) < 2 ) {
+			return new \WP_REST_Response( array( 'success' => true, 'items' => array() ), 200 );
+		}
+
+		$types = get_post_types( array( 'public' => true, 'show_in_rest' => true ), 'names' );
+		unset( $types['attachment'] );
+
+		$posts = get_posts(
+			array(
+				's'              => $q,
+				'post_type'      => array_values( $types ),
+				'post_status'    => 'publish',
+				'posts_per_page' => 20,
+			)
+		);
+
+		$items = array();
+		foreach ( $posts as $p ) {
+			$pto     = get_post_type_object( $p->post_type );
+			$items[] = array(
+				'item_type'    => $p->post_type,
+				'item_id'      => (string) $p->ID,
+				'title'        => get_the_title( $p ),
+				'url'          => get_permalink( $p ),
+				'source_route' => ( $pto && ! empty( $pto->rest_base ) ) ? $pto->rest_base : $p->post_type,
+			);
+		}
+
+		return new \WP_REST_Response( array( 'success' => true, 'items' => $items ), 200 );
+	}
+
+	/**
+	 * REST handler: Load single conversation.
+	 *
+	 * @param \WP_REST_Request $request Request object.
+	 * @return \WP_REST_Response|\WP_Error Response.
+	 * @since 1.1.0
+	 */
+	public static function rest_load_conversation(\WP_REST_Request $request)
+	{
+		$thread_id = sanitize_text_field($request->get_param('id'));
+		// Staff AI uses dedicated endpoints - NOT the customer chatbot
+		$result    = self::backend_request('GET', '/api/staff-ai/threads/' . rawurlencode($thread_id) . '/messages');
+
+		if (is_wp_error($result)) {
+			return $result;
+		}
+
+		// Map backend response to frontend format.
+		$messages = array();
+		if (isset($result['messages']) && is_array($result['messages'])) {
+			foreach ($result['messages'] as $msg) {
+				$row = array(
+					'role'         => $msg['role'] ?? 'user',
+					'content'      => $msg['content'] ?? '',
+					'timestamp'    => $msg['timestamp'] ?? '',
+					// A spoken turn (7.7.0) keeps its mic glyph on reload.
+					'via_voice'    => ! empty($msg['via_voice']),
+					// A reply the person stopped keeps its "Stopped" note on reload and on a
+					// re-attach that renders the thread (W82).
+					'stopped'      => ! empty($msg['stopped']),
+					// Pass through replay-safe tool_outputs from the backend (web citation
+					// sources, result cards) so the widget rebuilds inline pills / cards
+					// on history reload.
+					'tool_outputs' => ( isset($msg['tool_outputs']) && is_array($msg['tool_outputs']) ) ? $msg['tool_outputs'] : array(),
+					// A stored turn's pictures and files come back with it (8.0.0).
+					'attachments'  => self::console_attachments($msg['attachments'] ?? null),
+				);
+				// A reply still being written says so (8.7.14): a console that could not
+				// re-attach polls the thread until it is done.
+				if (isset($msg['is_complete'])) {
+					$row['is_complete'] = (bool) $msg['is_complete'];
+				}
+				$messages[] = $row;
+			}
+		}
+
+		// Merge persisted thread events (share confirmations, errors) into the message list.
+		$option_key = 'widrow_ai_share_events_' . $thread_id;
+		$thread_events = get_option($option_key, array());
+		if (!empty($thread_events) && is_array($thread_events)) {
+			foreach ($thread_events as $event) {
+				$type = $event['type'] ?? 'share';
+				if ('error' === $type) {
+					$messages[] = array(
+						'role'      => 'error_event',
+						'content'   => $event['message'] ?? 'Unknown error',
+						'timestamp' => $event['timestamp'] ?? '',
+					);
+				} else {
+					$messages[] = array(
+						'role'      => 'share_event',
+						'content'   => implode(', ', $event['recipients'] ?? array()),
+						'timestamp' => $event['timestamp'] ?? '',
+					);
+				}
+			}
+
+			// Re-sort by timestamp so events appear in correct position.
+			usort($messages, function ($a, $b) {
+				return strcmp($a['timestamp'] ?? '', $b['timestamp'] ?? '');
+			});
+		}
+
+		return new \WP_REST_Response(
+			array(
+				'success'  => true,
+				'id'       => $thread_id,
+				'messages' => $messages,
+			),
+			200
+		);
+	}
+
+	/**
+	 * A stored turn's attachments for the console (8.0.0, images runsheet D-I7).
+	 *
+	 * Identity only - {file_id, kind, mime_type, filename, has_thumbnail} - each
+	 * field checked and anything else dropped; the console builds the proxy URL
+	 * from file_id. filename is the user's own text and the console renders it
+	 * as text.
+	 *
+	 * @param mixed $attachments DEF's list, or nothing.
+	 * @return array
+	 */
+	private static function console_attachments($attachments): array
+	{
+		$out = array();
+		if (! is_array($attachments)) {
+			return $out;
+		}
+		foreach ($attachments as $att) {
+			if (! is_array($att) || ! isset($att['file_id']) || ! is_string($att['file_id'])
+				|| ! preg_match('/^[A-Za-z0-9_-]{1,80}$/', $att['file_id'])) {
+				continue;
+			}
+			$out[] = array(
+				'file_id'       => $att['file_id'],
+				'kind'          => isset($att['kind']) && is_string($att['kind']) ? sanitize_text_field($att['kind']) : '',
+				'mime_type'     => isset($att['mime_type']) && is_string($att['mime_type']) ? sanitize_text_field($att['mime_type']) : '',
+				'filename'      => isset($att['filename']) && is_string($att['filename']) ? sanitize_text_field($att['filename']) : '',
+				'has_thumbnail' => ! empty($att['has_thumbnail']),
+			);
+		}
+		return $out;
+	}
+
+	/**
+	 * REST handler: Send message.
+	 *
+	 * @param \WP_REST_Request $request Request object.
+	 * @return \WP_REST_Response|\WP_Error Response.
+	 * @since 1.1.0
+	 */
+	/**
+	 * REST handler: Upload init — proxy to DEF backend presigned URL generation.
+	 *
+	 * PHP validation is UX-layer filtering only (extension-based, not content inspection).
+	 * The DEF backend performs authoritative content-type validation.
+	 *
+	 * @since 1.2.0
+	 * @param \WP_REST_Request $request The REST request.
+	 * @return \WP_REST_Response|\WP_Error
+	 */
+	public static function rest_upload_init(\WP_REST_Request $request)
+	{
+		$body = $request->get_json_params();
+
+		$filename  = isset($body['filename']) ? sanitize_file_name($body['filename']) : '';
+		$mime_type = isset($body['mime_type']) ? sanitize_text_field($body['mime_type']) : '';
+		$size      = isset($body['size_bytes']) ? absint($body['size_bytes']) : 0;
+		$conv_id   = isset($body['conversation_id']) ? sanitize_text_field($body['conversation_id']) : '';
+
+		// Validate filename.
+		if (empty($filename)) {
+			error_log('[DEF Upload] Rejected: empty filename from user ' . get_current_user_id());
+			return new \WP_Error('invalid_filename', __('Filename is required.', 'widrow-ai'), array('status' => 400));
+		}
+
+		// Validate MIME type against allowlist (UX filtering — backend validates authoritatively).
+		if (! in_array($mime_type, self::UPLOAD_ALLOWED_MIME_TYPES, true)) {
+			error_log('[DEF Upload] Rejected MIME type: ' . $mime_type . ' for file: ' . $filename . ' from user ' . get_current_user_id());
+			return new \WP_Error(
+				'unsupported_media_type',
+				__('File type not supported.', 'widrow-ai'),
+				array('status' => 415)
+			);
+		}
+
+		// Malformed size is refused here; the SIZE CEILING is the server's
+		// (UPLOAD_MAX_FILE_MB, env-tunable) — its 413 surfaces through the
+		// BFF seam with the server's own message (5.7.11). A hardcoded copy
+		// here was the binding doll the day the env ceiling rose.
+		if ($size <= 0) {
+			error_log('[DEF Upload] Rejected malformed file size: ' . $size . ' bytes for file: ' . $filename . ' from user ' . get_current_user_id());
+			return new \WP_Error(
+				'invalid_size',
+				__('File size is invalid.', 'widrow-ai'),
+				array('status' => 400)
+			);
+		}
+
+		$init = array(
+			'filename'        => $filename,
+			'mime_type'       => $mime_type,
+			'size_bytes'      => $size,
+			'conversation_id' => $conv_id,
+		);
+
+		// The console's companion thumbnail (8.0.0, images runsheet D-I2), passed
+		// through as declared: the bound on it is the server's (D-I6), like the
+		// size ceiling above, and a refusal there is the console's to retry without.
+		$thumb = isset($body['thumbnail']) && is_array($body['thumbnail']) ? $body['thumbnail'] : array();
+		$thumb_size = isset($thumb['size_bytes']) ? absint($thumb['size_bytes']) : 0;
+		if ($thumb_size > 0) {
+			$init['thumbnail'] = array(
+				'mime_type'  => isset($thumb['mime_type']) && is_string($thumb['mime_type']) ? sanitize_text_field($thumb['mime_type']) : '',
+				'size_bytes' => $thumb_size,
+			);
+		}
+
+		// Proxy to backend.
+		return self::backend_request('POST', '/api/staff_ai/uploads/init', $init);
+	}
+
+	/**
+	 * REST handler: Upload commit — proxy to DEF backend upload finalization.
+	 *
+	 * @since 1.2.0
+	 * @param \WP_REST_Request $request The REST request.
+	 * @return \WP_REST_Response|\WP_Error
+	 */
+	public static function rest_upload_commit(\WP_REST_Request $request)
+	{
+		$body    = $request->get_json_params();
+		$file_id = isset($body['file_id']) ? sanitize_text_field($body['file_id']) : '';
+
+		if (empty($file_id) || ! preg_match('/^upload_[a-f0-9]+$/', $file_id)) {
+			error_log('[DEF Upload] Rejected invalid file_id: ' . $file_id . ' from user ' . get_current_user_id());
+			return new \WP_Error('invalid_file_id', __('Invalid file ID.', 'widrow-ai'), array('status' => 400));
+		}
+
+		return self::backend_request('POST', '/api/staff_ai/uploads/commit', array(
+			'file_id' => $file_id,
+		));
+	}
+
+	public static function rest_send_message(\WP_REST_Request $request)
+	{
+		$body = $request->get_json_params();
+
+		$message   = isset($body['message']) ? sanitize_textarea_field($body['message']) : '';
+		$thread_id = isset($body['thread_id']) ? sanitize_text_field($body['thread_id']) : null;
+		$file_ids  = isset($body['file_ids']) && is_array($body['file_ids']) ? $body['file_ids'] : array();
+
+		// Validate file_ids format.
+		$validated_file_ids = array();
+		foreach ($file_ids as $fid) {
+			$fid = sanitize_text_field($fid);
+			if (preg_match('/^upload_[a-f0-9]+$/', $fid)) {
+				$validated_file_ids[] = $fid;
+			}
+		}
+
+		// Message or files required.
+		if (empty($message) && empty($validated_file_ids)) {
+			return new \WP_Error(
+				'invalid_message',
+				__('Message cannot be empty.', 'widrow-ai'),
+				array('status' => 400)
+			);
+		}
+
+		// Build message object.
+		$message_obj = array(
+			'role'    => 'user',
+			'content' => ! empty($message) ? $message : 'Please analyze the attached file(s).',
+		);
+
+		// Attach file references if present.
+		if (! empty($validated_file_ids)) {
+			$message_obj['attachments'] = array_map(
+				function ($fid) {
+					return array('file_id' => $fid);
+				},
+				$validated_file_ids
+			);
+		}
+
+		// Build chat request for backend.
+		$chat_body = array(
+			'messages' => array($message_obj),
+		);
+
+		// If continuing existing thread.
+		if ($thread_id && 'temp-' !== substr($thread_id, 0, 5)) {
+			$chat_body['thread_id']        = $thread_id;
+			$chat_body['continue_thread']  = true;
+		}
+
+		// Projects P-B: "New chat in this project" seeds the thread's binding.
+		// Shape-validated here (UUID), OWNER-validated by DEF (the caller's own
+		// active project, never overwriting an existing binding). The streaming
+		// route is a raw passthrough, so DEF's validation is the real gate — this
+		// mirror keeps the fallback path's field-by-field discipline.
+		$project_id = isset($body['project_id']) ? sanitize_text_field($body['project_id']) : '';
+		if ($project_id && preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $project_id)) {
+			$chat_body['project_id'] = $project_id;
+		}
+
+		// The browser's IANA zone (7.6.7): DEF renders today's date in it. Shape-checked
+		// here (the streaming route passes it raw), validated by DEF — an unknown zone
+		// is dropped there, never refused.
+		$timezone = isset($body['timezone']) ? sanitize_text_field($body['timezone']) : '';
+		if ($timezone && preg_match('/^[A-Za-z0-9_+\-]+(\/[A-Za-z0-9_+\-]+)*$/', $timezone)) {
+			$chat_body['timezone'] = $timezone;
+		}
+
+		// A spoken turn (7.7.0): DEF marks the model-facing message so the reply
+		// opens by saying back what it will do. Boolean only — never the transcript.
+		if (! empty($body['via_voice'])) {
+			$chat_body['via_voice'] = true;
+		}
+
+		// Staff AI uses dedicated endpoint - NOT the customer chatbot
+		// Reference: STAFF_AI_CHANNEL_OVERVIEW.md
+		// "Staff AI is NOT a customer chatbot and is NOT used for platform configuration"
+		$result = self::backend_request('POST', '/api/staff-ai/chat', $chat_body);
+
+		if (is_wp_error($result)) {
+			return $result;
+		}
+
+		// Extract response.
+		$assistant_content = '';
+		$tool_outputs      = array();
+
+		if (isset($result['choices'][0]['message']['content'])) {
+			$assistant_content = $result['choices'][0]['message']['content'];
+		}
+
+		// Extract tool_outputs from Python response (for chat-invoked tools)
+		if (isset($result['choices'][0]['message']['tool_outputs']) && is_array($result['choices'][0]['message']['tool_outputs'])) {
+			foreach ($result['choices'][0]['message']['tool_outputs'] as $tool_output) {
+				$output_type = $tool_output['type'] ?? 'file';
+
+				if ($output_type === 'escalation_offer') {
+					// Escalation offer — pass through type, reason, reason_code
+					$tool_outputs[] = array(
+						'type'        => 'escalation_offer',
+						'reason'      => $tool_output['reason'] ?? '',
+						'reason_code' => $tool_output['reason_code'] ?? 'general',
+					);
+				} else {
+					// File output — rewrite download URL to use WordPress proxy endpoint
+					$download_url = $tool_output['download_url'] ?? '';
+					if (!empty($download_url) && strpos($download_url, '/api/files/') === 0) {
+						// Extract tenant and filename from /api/files/{tenant}/{filename}
+						$path_part = str_replace('/api/files/', '', $download_url);
+						$path_parts = explode('/', $path_part, 2);
+						if (count($path_parts) === 2) {
+							$tenant = $path_parts[0];
+							$filename = $path_parts[1];
+							// Properly URL-encode the filename for the URL
+							$download_url = home_url('/staff-ai-download/' . rawurlencode($tenant) . '/' . rawurlencode($filename));
+						}
+					}
+
+					// Artifacts (8.2.2): the chat card's Open needs the library id to
+					// reach the content route. Charset-checked to the same alphabet the
+					// documents routes accept, so the two ends cannot disagree on a
+					// valid id; absent when DEF sends none, and the card stays as it was.
+					$document_id = $tool_output['document_id'] ?? null;
+					if (!is_string($document_id) || !preg_match('/^[a-zA-Z0-9-]+$/', $document_id)) {
+						$document_id = null;
+					}
+
+					$tool_outputs[] = array(
+						'file_name'    => $tool_output['file_name'] ?? '',
+						'file_type'    => $tool_output['file_type'] ?? '',
+						'download_url' => $download_url,
+						'document_id'  => $document_id,
+						'expires_at'   => $tool_output['expires_at'] ?? null,
+					);
+				}
+			}
+		}
+
+		$channel = isset($result['channel']) ? $result['channel'] : 'staff_ai';
+
+		return new \WP_REST_Response(
+			array(
+				'success'      => true,
+				'thread_id'    => $result['thread_id'] ?? $thread_id,
+				'channel'      => $channel,
+				'tool_invoked' => $result['tool_invoked'] ?? null,
+				'message'      => array(
+					'role'         => 'assistant',
+					'content'      => $assistant_content,
+					'tool_outputs' => $tool_outputs,
+				),
+			),
+			200
+		);
+	}
+
+	/**
+	 * REST handler: Summarize conversation for Share form.
+	 *
+	 * Proxies to Python backend /api/staff-ai/threads/{id}/summarize
+	 * to get an AI-generated subject + summary.
+	 *
+	 * @param \WP_REST_Request $request Request object.
+	 * @return \WP_REST_Response|\WP_Error Response.
+	 * @since 1.2.0
+	 */
+	public static function rest_summarize_conversation(\WP_REST_Request $request)
+	{
+		$id = $request->get_param('id');
+		$response = self::backend_request(
+			'POST',
+			'/api/staff-ai/threads/' . rawurlencode($id) . '/summarize',
+			array()
+		);
+
+		if (is_wp_error($response)) {
+			return new \WP_REST_Response(
+				array(
+					'success'          => true,
+					'suggested_subject' => __('Staff AI Conversation', 'widrow-ai'),
+					'summary'          => '',
+					'summary_fallback' => true,
+				),
+				200
+			);
+		}
+
+		return new \WP_REST_Response($response, 200);
+	}
+
+	/**
+	 * REST handler: Share settings (proxy to escalation settings).
+	 *
+	 * Returns escalation settings for the staff_ai channel, using the
+	 * Staff AI permission check (cookie/nonce auth) instead of the
+	 * escalation endpoint's JWT Bearer auth.
+	 *
+	 * @param \WP_REST_Request $request Request object.
+	 * @return \WP_REST_Response Response.
+	 * @since 1.2.0
+	 */
+	public static function rest_share_settings(\WP_REST_Request $request)
+	{
+		// Delegate to the escalation settings handler with channel=staff_ai
+		$inner_request = new \WP_REST_Request('GET', '/' . WIDROW_AI_API_NAME_SPACE . '/settings/escalation');
+		$inner_request->set_param('channel', 'staff_ai');
+		$response = \Widrow_AI_Escalation::get_escalation_settings($inner_request);
+
+		if ($response instanceof \WP_Error) {
+			return new \WP_REST_Response(
+				array(
+					'allowed_recipients' => array(),
+					'recipient_options'  => array(),
+				),
+				200
+			);
+		}
+
+		// Add recipient_options (with display names) for the token picker UI.
+		// allowed_recipients stays as string[] for policy/validation.
+		$data = $response->get_data();
+		$current_user_id = get_current_user_id();
+
+		$option_key = 'widrow_ai_escalation_staff_ai';
+		$stored     = get_option( $option_key, array() );
+
+		if ( empty( $stored['allowed_recipients'] ) ) {
+			// Auto-discovery path: query staff/management users, exclude self.
+			// Suppress admin fallback — empty list is preferable to reintroducing
+			// the excluded user when they're the only staff/management user.
+			$result = \Widrow_AI_Escalation::get_staff_management_recipients_public(
+				$current_user_id,
+				false
+			);
+			$data['recipient_options'] = $result['recipients'];
+		} else {
+			// Stored override path: build recipient_options from the email list.
+			$current_email = strtolower( wp_get_current_user()->user_email ?? '' );
+			$data['recipient_options'] = array();
+			foreach ( (array) $stored['allowed_recipients'] as $email ) {
+				$lower = strtolower( sanitize_email( $email ) );
+				if ( ! is_email( $lower ) || $lower === $current_email ) {
+					continue;
+				}
+				$user = get_user_by( 'email', $email );
+				$data['recipient_options'][] = array(
+					'email' => $lower,
+					'name'  => $user ? ( $user->display_name ?: $user->user_login ) : $lower,
+				);
+			}
+		}
+
+		return new \WP_REST_Response( $data, 200 );
+	}
+
+	/**
+	 * REST handler: Share send (proxy to escalation send-email).
+	 *
+	 * Forwards the share email request to the escalation email bridge,
+	 * using the Staff AI permission check (cookie/nonce auth).
+	 *
+	 * @param \WP_REST_Request $request Request object.
+	 * @return \WP_REST_Response Response.
+	 * @since 1.2.0
+	 */
+	public static function rest_share_send(\WP_REST_Request $request)
+	{
+		$body = $request->get_json_params();
+
+		// Whitelist allowed client fields — prevent staff users from injecting
+		// bcc, sender_email, user_copy_email, or other escalation fields.
+		// NOTE: 'channel' is NOT in the whitelist — forced server-side below.
+		// NOTE: 'document_ids' is deliberately NOT forwarded either — it is
+		// resolved to server-side file paths HERE and handed to the mailer as
+		// a PHP argument, so the escalation route never grows a client-
+		// suppliable attachment field.
+		$allowed_keys = array('to', 'subject', 'body');
+		$safe_body = array();
+		foreach ($allowed_keys as $key) {
+			if (isset($body[$key])) {
+				$safe_body[$key] = $body[$key];
+			}
+		}
+
+		// Optional document attachments. The permission model enforces
+		// itself: documents are resolved through the caller's OWN authenticated
+		// list + download path, so a user can only ever attach what they can
+		// already download.
+		$attachments = array();
+		$attach_dir  = '';
+		if ( ! empty( $body['document_ids'] ) ) {
+			$fetched = self::share_fetch_attachments( $body['document_ids'] );
+			if ( $fetched instanceof \WP_REST_Response ) {
+				return $fetched; // Polite refusal — nothing was sent.
+			}
+			$attachments = $fetched['paths'];
+			$attach_dir  = $fetched['dir'];
+		}
+
+		// Force channel=staff_ai server-side. This endpoint is exclusively
+		// for Staff AI sharing — never allow the client to drive a different
+		// escalation channel through this route (confused-deputy prevention).
+		$safe_body['channel'] = 'staff_ai';
+
+		// Inject current user's email as Reply-To so recipients can reply
+		// to the person who shared. Server-side injection (not from client
+		// input) — safe because auth is already verified via cookie/nonce.
+		$current_user = wp_get_current_user();
+		if ( $current_user && ! empty( $current_user->user_email ) ) {
+			$reply_to = sanitize_email( $current_user->user_email );
+			if ( is_email( $reply_to ) ) {
+				$safe_body['reply_to'] = $reply_to;
+			}
+		}
+
+		// Delegate to the escalation send-email handler
+		$inner_request = new \WP_REST_Request('POST', '/' . WIDROW_AI_API_NAME_SPACE . '/escalation/send-email');
+		$inner_request->set_header('Content-Type', 'application/json');
+		$inner_request->set_body(wp_json_encode($safe_body));
+		foreach ($safe_body as $key => $value) {
+			$inner_request->set_param($key, $value);
+		}
+
+		try {
+			return \Widrow_AI_Escalation::send_escalation_email($inner_request, $attachments);
+		} finally {
+			self::share_cleanup_attachments( $attach_dir, $attachments );
+		}
+	}
+
+	/**
+	 * Resolve document ids to fetched temp files for share attachments.
+	 *
+	 * All-or-nothing: any invalid id, missing document, size overrun, or
+	 * fetch failure refuses the WHOLE share politely — never a silently
+	 * partial mail. Documents are resolved via the caller's own
+	 * authenticated document list and fetched through the same BFF-auth'd
+	 * download path the panel uses, so ownership is enforced by the
+	 * per-user blob key with no new ACL.
+	 *
+	 * @param mixed $document_ids Raw client value (expected: array of id strings).
+	 * @return array|\WP_REST_Response array('dir' => tmpdir, 'paths' => files) or a refusal response.
+	 */
+	private static function share_fetch_attachments( $document_ids )
+	{
+		if ( ! is_array( $document_ids ) || count( $document_ids ) > self::SHARE_MAX_ATTACHMENT_COUNT ) {
+			return new \WP_REST_Response(
+				array(
+					'error'   => 'VALIDATION_ERROR',
+					'message' => sprintf(
+						/* translators: %d: maximum number of documents per share. */
+						__( 'You can attach up to %d documents per share.', 'widrow-ai' ),
+						self::SHARE_MAX_ATTACHMENT_COUNT
+					),
+				),
+				400
+			);
+		}
+		foreach ( $document_ids as $id ) {
+			// Same alphabet the panel routes accept — the ends can never disagree.
+			if ( ! is_string( $id ) || ! preg_match( '/^[a-zA-Z0-9-]+$/', $id ) ) {
+				return new \WP_REST_Response(
+					array(
+						'error'   => 'VALIDATION_ERROR',
+						'message' => __( 'Invalid document id.', 'widrow-ai' ),
+					),
+					400
+				);
+			}
+		}
+
+		// The caller's OWN document list — ownership check comes free.
+		$result = self::backend_request( 'GET', '/api/staff-ai/documents' );
+		if ( is_wp_error( $result ) ) {
+			return new \WP_REST_Response(
+				array(
+					'error'   => 'BACKEND_ERROR',
+					'message' => __( 'Could not load your documents. Nothing was sent.', 'widrow-ai' ),
+				),
+				502
+			);
+		}
+		$by_id = array();
+		foreach ( ( isset( $result['documents'] ) && is_array( $result['documents'] ) ) ? $result['documents'] : array() as $doc ) {
+			if ( is_array( $doc ) && ! empty( $doc['document_id'] ) ) {
+				$by_id[ (string) $doc['document_id'] ] = $doc;
+			}
+		}
+
+		$selected    = array();
+		$total_bytes = 0;
+		foreach ( $document_ids as $id ) {
+			if ( ! isset( $by_id[ $id ] ) ) {
+				// One plain copy for every miss — unknown and foreign ids are
+				// indistinguishable (no oracle).
+				return new \WP_REST_Response(
+					array(
+						'error'   => 'NOT_FOUND',
+						'message' => __( 'Document not found.', 'widrow-ai' ),
+					),
+					404
+				);
+			}
+			$selected[ $id ] = $by_id[ $id ];
+		}
+		// Sum AFTER keying by id so a duplicated id counts (and attaches) once.
+		foreach ( $selected as $doc ) {
+			$total_bytes += isset( $doc['size_bytes'] ) ? (int) $doc['size_bytes'] : 0;
+		}
+		if ( $total_bytes > self::SHARE_MAX_ATTACHMENT_BYTES ) {
+			return new \WP_REST_Response(
+				array(
+					'error'   => 'VALIDATION_ERROR',
+					'message' => sprintf(
+						/* translators: %d: maximum total attachment size in MB. */
+						__( 'Attachments exceed the %dMB limit for shared emails. Nothing was sent — try fewer or smaller documents.', 'widrow-ai' ),
+						(int) ( self::SHARE_MAX_ATTACHMENT_BYTES / MB_IN_BYTES )
+					),
+				),
+				400
+			);
+		}
+
+		$base_url = self::get_api_base_url();
+		$api_key  = \Widrow_AI_Encryption::get_secret( 'widrow_ai_api_key' );
+		if ( ! $base_url || empty( $api_key ) ) {
+			return new \WP_REST_Response(
+				array(
+					'error'   => 'BACKEND_ERROR',
+					'message' => __( 'Staff AI backend not configured.', 'widrow-ai' ),
+				),
+				503
+			);
+		}
+		$user         = wp_get_current_user();
+		$capabilities = \Widrow_AI_Tools::get_user_def_capabilities( $user );
+
+		$dir = trailingslashit( get_temp_dir() ) . uniqid( 'def-share-', true );
+		// mkdir, NOT wp_mkdir_p: must FAIL if the dir already exists (a
+		// pre-created dir/symlink in shared /tmp could capture the writes),
+		// and 0700 keeps the files private to the web user while they exist.
+		if ( ! @mkdir( $dir, 0700 ) ) {
+			return new \WP_REST_Response(
+				array(
+					'error'   => 'SERVER_ERROR',
+					'message' => __( 'Could not prepare attachments. Nothing was sent.', 'widrow-ai' ),
+				),
+				500
+			);
+		}
+
+		$paths         = array();
+		$fetched_bytes = 0;
+		foreach ( $selected as $doc ) {
+			$m = array();
+			if ( ! isset( $doc['download_url'] ) || ! is_string( $doc['download_url'] )
+				|| ! preg_match( '#^/api/files/([^/]+)/(.+)$#', $doc['download_url'], $m ) ) {
+				self::share_cleanup_attachments( $dir, $paths );
+				return new \WP_REST_Response(
+					array(
+						'error'   => 'BACKEND_ERROR',
+						'message' => __( 'Could not fetch a document. Nothing was sent.', 'widrow-ai' ),
+					),
+					502
+				);
+			}
+			// Normalize-then-encode: skew-safe whether DEF emits the filename
+			// raw or percent-encoded (same normalization as the panel rewrite).
+			$file_url = $base_url . '/api/files/' . rawurlencode( rawurldecode( $m[1] ) )
+				. '/' . rawurlencode( rawurldecode( $m[2] ) );
+			$response = wp_remote_get(
+				$file_url,
+				array(
+					'timeout' => 30,
+					// Belt-and-braces: the cap is checked against DEF-reported
+					// size_bytes BEFORE fetching; this bounds the actual bytes too.
+					'limit_response_size' => self::SHARE_MAX_ATTACHMENT_BYTES,
+					'headers' => array(
+						'X-DEF-API-Key'           => $api_key,
+						'X-DEF-User'              => (string) $user->ID,
+						'X-DEF-User-Capabilities' => implode( ',', $capabilities ),
+					),
+				)
+			);
+			$bytes = is_wp_error( $response ) ? '' : wp_remote_retrieve_body( $response );
+			if ( is_wp_error( $response ) || 200 !== wp_remote_retrieve_response_code( $response ) || '' === $bytes ) {
+				self::share_cleanup_attachments( $dir, $paths );
+				return new \WP_REST_Response(
+					array(
+						'error'   => 'BACKEND_ERROR',
+						'message' => __( 'Could not fetch a document. Nothing was sent.', 'widrow-ai' ),
+					),
+					502
+				);
+			}
+			// The cap was pre-checked on DEF-reported sizes; enforce it on the
+			// ACTUAL bytes too, so a stale/absent size_bytes can't slip past.
+			$fetched_bytes += strlen( $bytes );
+			if ( $fetched_bytes > self::SHARE_MAX_ATTACHMENT_BYTES ) {
+				self::share_cleanup_attachments( $dir, $paths );
+				return new \WP_REST_Response(
+					array(
+						'error'   => 'VALIDATION_ERROR',
+						'message' => sprintf(
+							/* translators: %d: maximum total attachment size in MB. */
+							__( 'Attachments exceed the %dMB limit for shared emails. Nothing was sent — try fewer or smaller documents.', 'widrow-ai' ),
+							(int) ( self::SHARE_MAX_ATTACHMENT_BYTES / MB_IN_BYTES )
+						),
+					),
+					400
+				);
+			}
+
+			// Recipient-friendly attachment name: the document title with the
+			// stored file's extension; fall back to the stored filename.
+			$stored_name = rawurldecode( $m[2] );
+			$ext         = pathinfo( $stored_name, PATHINFO_EXTENSION );
+			$title       = ( isset( $doc['title'] ) && is_string( $doc['title'] ) ) ? $doc['title'] : '';
+			$name        = sanitize_file_name( '' !== $title ? $title : $stored_name );
+			if ( '' === $name ) {
+				$name = 'document';
+			}
+			if ( '' !== $ext && strtolower( pathinfo( $name, PATHINFO_EXTENSION ) ) !== strtolower( $ext ) ) {
+				$name .= '.' . $ext;
+			}
+			$path = $dir . '/' . $name;
+			$n    = 2;
+			while ( in_array( $path, $paths, true ) || file_exists( $path ) ) {
+				$path = $dir . '/' . pathinfo( $name, PATHINFO_FILENAME ) . '-' . $n
+					. ( '' !== $ext ? '.' . $ext : '' );
+				$n++;
+			}
+			if ( false === file_put_contents( $path, $bytes ) ) {
+				self::share_cleanup_attachments( $dir, $paths );
+				return new \WP_REST_Response(
+					array(
+						'error'   => 'SERVER_ERROR',
+						'message' => __( 'Could not prepare attachments. Nothing was sent.', 'widrow-ai' ),
+					),
+					500
+				);
+			}
+			$paths[] = $path;
+		}
+
+		return array(
+			'dir'   => $dir,
+			'paths' => $paths,
+		);
+	}
+
+	/**
+	 * Remove share attachment temp files and their directory. Best-effort.
+	 *
+	 * @param string $dir   Temp directory ('' = nothing to clean).
+	 * @param array  $paths Files inside it.
+	 */
+	private static function share_cleanup_attachments( $dir, array $paths )
+	{
+		foreach ( $paths as $path ) {
+			if ( is_string( $path ) && file_exists( $path ) ) {
+				@unlink( $path );
+			}
+		}
+		if ( '' !== $dir && is_dir( $dir ) ) {
+			@rmdir( $dir );
+		}
+	}
+
+	/**
+	 * REST handler: Store a thread event (share confirmation or error).
+	 *
+	 * Persists events as banners in the conversation thread across page loads.
+	 * Supported types: "share" (green) and "error" (red).
+	 *
+	 * @param \WP_REST_Request $request Request object.
+	 * @return \WP_REST_Response Response.
+	 * @since 1.2.0
+	 */
+	public static function rest_store_share_event(\WP_REST_Request $request)
+	{
+		$thread_id = sanitize_text_field($request->get_param('id'));
+		$body = $request->get_json_params();
+
+		$type = sanitize_text_field($body['type'] ?? 'share');
+		$timestamp = isset($body['timestamp']) ? sanitize_text_field($body['timestamp']) : gmdate('c');
+
+		if ('error' === $type) {
+			$message = sanitize_text_field($body['message'] ?? 'Unknown error');
+			$event = array(
+				'type'      => 'error',
+				'message'   => $message,
+				'timestamp' => $timestamp,
+				'user_id'   => get_current_user_id(),
+			);
+		} else {
+			$recipients = isset($body['recipients']) ? array_map('sanitize_email', (array) $body['recipients']) : array();
+			if (empty($recipients)) {
+				return new \WP_REST_Response(
+					array('success' => false, 'message' => 'No recipients provided.'),
+					400
+				);
+			}
+			$event = array(
+				'type'       => 'share',
+				'recipients' => $recipients,
+				'timestamp'  => $timestamp,
+				'user_id'    => get_current_user_id(),
+			);
+		}
+
+		$option_key = 'widrow_ai_share_events_' . $thread_id;
+		$events = get_option($option_key, array());
+
+		// Cap at 100 events per thread to prevent unbounded storage growth.
+		if (count($events) >= 100) {
+			$events = array_slice($events, -99);
+		}
+
+		$events[] = $event;
+		update_option($option_key, $events, false); // no autoload
+
+		return new \WP_REST_Response(array('success' => true), 200);
+	}
+
+	/**
+	 * REST handler: Status check for debugging.
+	 *
+	 * @param \WP_REST_Request $request Request object.
+	 * @return \WP_REST_Response Response with status info.
+	 * @since 1.1.0
+	 */
+	public static function rest_status(\WP_REST_Request $request)
+	{
+		$user     = wp_get_current_user();
+		$base_url = self::get_api_base_url();
+
+		$status = array(
+			'success'      => true,
+			'user'         => array(
+				'id'    => $user->ID,
+				'email' => $user->user_email,
+			),
+			'capabilities' => array(
+				'widrow_staff_access'      => $user->has_cap('widrow_staff_access'),
+				'widrow_management_access' => $user->has_cap('widrow_management_access'),
+			),
+			'config'       => array(
+				'api_url_configured' => ! empty($base_url),
+				'api_url'            => $base_url,
+				'jwks_url'           => rest_url(WIDROW_AI_API_NAME_SPACE . '/jwks'),
+				'issuer'             => get_site_url(),
+			),
+		);
+
+		// Test token generation.
+		$capabilities = array();
+		if ($user->has_cap('widrow_staff_access')) {
+			$capabilities[] = 'widrow_staff_access';
+		}
+		if ($user->has_cap('widrow_management_access')) {
+			$capabilities[] = 'widrow_management_access';
+		}
+
+		$claims = array(
+			'sub'          => (string) $user->ID,
+			'email'        => $user->user_email,
+			'capabilities' => $capabilities,
+			'channel'      => 'staff_ai',
+			'iss'          => get_site_url(),
+			'aud'          => 'digital-employee-framework',
+		);
+
+		$token = Widrow_AI_JWT::issue_token($claims, 300);
+		$status['token_generation'] = ! empty($token) ? 'ok' : 'failed';
+
+		// Test backend connectivity if configured.
+		if (! empty($base_url) && ! empty($token)) {
+			// Test 1: Health endpoint
+			$health_url  = $base_url . '/api/health';
+			$test_args   = array(
+				'timeout'     => 10,
+				'httpversion' => '1.1',
+				'headers'     => array(
+					'Authorization' => 'Bearer ' . $token,
+					'Accept'        => 'application/json',
+				),
+			);
+
+			$health_response = wp_remote_get($health_url, $test_args);
+
+			if (is_wp_error($health_response)) {
+				$status['health_check'] = 'error: ' . $health_response->get_error_message();
+			} else {
+				$health_status = wp_remote_retrieve_response_code($health_response);
+				$status['health_check'] = 'status_' . $health_status;
+			}
+
+			// Test 2: Staff AI Status endpoint (validates Staff AI routing)
+			$threads_url      = $base_url . '/api/staff-ai/status';
+			$threads_response = wp_remote_get($threads_url, $test_args);
+
+			if (is_wp_error($threads_response)) {
+				$status['threads_check'] = 'error: ' . $threads_response->get_error_message();
+			} else {
+				$threads_status = wp_remote_retrieve_response_code($threads_response);
+				$threads_body   = wp_remote_retrieve_body($threads_response);
+				$threads_data   = json_decode($threads_body, true);
+
+				$status['threads_check'] = array(
+					'status' => $threads_status,
+					'detail' => isset($threads_data['detail']) ? $threads_data['detail'] : null,
+				);
+			}
+		} else {
+			$status['health_check']  = 'not_tested';
+			$status['threads_check'] = 'not_tested';
+		}
+
+		return new \WP_REST_Response($status, 200);
+	}
+
+	/**
+	 * REST handler: List available tools.
+	 *
+	 * Proxies to Python backend /api/staff-ai/tools
+	 *
+	 * @param \WP_REST_Request $request Request object.
+	 * @return \WP_REST_Response|\WP_Error Response with tools list.
+	 * @since 1.2.0
+	 */
+	public static function rest_list_tools(\WP_REST_Request $request)
+	{
+		$result = self::backend_request('GET', '/api/staff-ai/tools');
+
+		if (is_wp_error($result)) {
+			$code    = $result->get_error_code();
+			$message = $result->get_error_message();
+			$data    = $result->get_error_data();
+			$status  = isset($data['status']) ? (int) $data['status'] : 500;
+
+			return new \WP_REST_Response(
+				array(
+					'code'    => $code,
+					'message' => $message,
+					'data'    => array('status' => $status),
+				),
+				$status
+			);
+		}
+
+		return new \WP_REST_Response($result, 200);
+	}
+
+	/**
+	 * Add rewrite rules for /staff-ai endpoint.
+	 */
+	public static function add_rewrite_rules(): void
+	{
+		add_rewrite_rule(
+			'^' . self::ENDPOINT_SLUG . '/?$',
+			'index.php?' . self::ENDPOINT_SLUG . '=1',
+			'top'
+		);
+
+		// PWA manifest and service worker.
+		add_rewrite_rule(
+			'^' . self::ENDPOINT_SLUG . '/manifest\.json$',
+			'index.php?staff_ai_pwa=manifest',
+			'top'
+		);
+		add_rewrite_rule(
+			'^' . self::ENDPOINT_SLUG . '/sw\.js$',
+			'index.php?staff_ai_pwa=sw',
+			'top'
+		);
+
+		// File download endpoint (uses cookie auth, not REST nonce).
+		add_rewrite_rule(
+			'^staff-ai-download/([^/]+)/(.+)$',
+			'index.php?staff_ai_download=1&staff_ai_tenant=$matches[1]&staff_ai_filename=$matches[2]',
+			'top'
+		);
+
+		// A chat attachment, or its thumbnail, back to the console (8.0.0):
+		// /staff-ai-attachment/{thread}/{file_id}[/thumbnail]. Cookie auth, like a download.
+		add_rewrite_rule(
+			'^staff-ai-attachment/([^/]+)/([^/]+)(?:/(thumbnail))?/?$',
+			'index.php?staff_ai_attachment=$matches[2]&staff_ai_thread=$matches[1]&staff_ai_variant=$matches[3]',
+			'top'
+		);
+	}
+
+	/**
+	 * Flush the rewrite rules once per plugin version (8.0.0).
+	 *
+	 * The activation hook flushes, but an update never activates: the GitHub
+	 * updater's activate_plugin() finds the plugin already active, and WordPress
+	 * fires no activation hook for a plugin that already is - so a rule a release
+	 * adds (the attachment proxy) would 404 on every install until someone
+	 * deactivated and reactivated by hand. On wp_loaded, after every plugin's
+	 * init has added its own rules.
+	 */
+	public static function maybe_flush_rewrite_rules(): void
+	{
+		if (get_option('widrow_ai_rewrite_version') === WIDROW_AI_VERSION) {
+			return;
+		}
+		flush_rewrite_rules();
+		update_option('widrow_ai_rewrite_version', WIDROW_AI_VERSION);
+	}
+
+	/**
+	 * Add query vars.
+	 *
+	 * @param array $vars Existing query vars.
+	 * @return array Modified query vars.
+	 */
+	public static function add_query_vars(array $vars): array
+	{
+		$vars[] = self::ENDPOINT_SLUG;
+		$vars[] = 'staff_ai_download';
+		$vars[] = 'staff_ai_tenant';
+		$vars[] = 'staff_ai_filename';
+		$vars[] = 'staff_ai_save';
+		$vars[] = 'staff_ai_pwa';
+		$vars[] = 'staff_ai_attachment';
+		$vars[] = 'staff_ai_thread';
+		$vars[] = 'staff_ai_variant';
+		return $vars;
+	}
+
+	/**
+	 * Handle the /staff-ai endpoint request.
+	 */
+	public static function handle_endpoint(): void
+	{
+		// Handle PWA assets (manifest, service worker) — no auth required.
+		$pwa_asset = get_query_var('staff_ai_pwa');
+		if ($pwa_asset) {
+			self::handle_pwa_asset($pwa_asset);
+			return;
+		}
+
+		// Handle file download endpoint.
+		if (get_query_var('staff_ai_download')) {
+			self::handle_file_download();
+			return;
+		}
+
+		if (get_query_var('staff_ai_attachment')) {
+			self::handle_attachment();
+			return;
+		}
+
+		if (! get_query_var(self::ENDPOINT_SLUG)) {
+			return;
+		}
+
+		// Authentication gate: redirect to login if not authenticated.
+		if (! is_user_logged_in()) {
+			$redirect_url = home_url('/' . self::ENDPOINT_SLUG);
+			wp_safe_redirect(wp_login_url($redirect_url));
+			exit;
+		}
+
+		// Capability gate: check for widrow_staff_access OR widrow_management_access.
+		if (! self::user_has_staff_ai_access()) {
+			self::render_access_denied();
+			exit;
+		}
+
+		// Render the Staff AI shell.
+		self::render_shell();
+		exit;
+	}
+
+	/**
+	 * Handle file download from Python backend.
+	 *
+	 * Uses WordPress cookie authentication (not REST nonce) so direct links work.
+	 *
+	 * @since 1.2.0
+	 */
+	private static function handle_file_download(): void
+	{
+		$tenant   = get_query_var('staff_ai_tenant');
+		$filename = get_query_var('staff_ai_filename');
+
+		// Strip trailing slash that WordPress might add
+		$filename = rtrim($filename, '/');
+
+		// URL decode in case it's still encoded
+		$filename = urldecode($filename);
+		$tenant   = urldecode($tenant);
+
+		if (empty($tenant) || empty($filename)) {
+			wp_die(__('Invalid file path.', 'widrow-ai'), __('Error', 'widrow-ai'), array('response' => 400));
+		}
+
+		// Authentication gate.
+		if (! is_user_logged_in()) {
+			wp_die(__('Authentication required.', 'widrow-ai'), __('Unauthorized', 'widrow-ai'), array('response' => 401));
+		}
+
+		// Capability gate.
+		if (! self::user_has_staff_ai_access()) {
+			wp_die(esc_html(self::access_denied_message()), __('Forbidden', 'widrow-ai'), array('response' => 403));
+		}
+
+		// Get backend URL.
+		$base_url = self::get_api_base_url();
+		if (! $base_url) {
+			wp_die(__('Staff AI backend not configured.', 'widrow-ai'), __('Error', 'widrow-ai'), array('response' => 503));
+		}
+
+		// Build the file URL - rawurlencode to handle spaces and special chars
+		$file_url = $base_url . '/api/files/' . rawurlencode($tenant) . '/' . rawurlencode($filename);
+
+		// Debug log for troubleshooting
+		if (defined('WP_DEBUG') && WP_DEBUG) {
+			error_log('[DEF Staff AI Download] Tenant: ' . $tenant);
+			error_log('[DEF Staff AI Download] Filename: ' . $filename);
+			error_log('[DEF Staff AI Download] Backend URL: ' . $file_url);
+		}
+
+		// BFF proxy auth — the same header set as backend_request(). This
+		// download handler predated the BFF migration (API key only, no JWT)
+		// and kept sending a JWT that DEF's staff routes reject with 401.
+		$user    = wp_get_current_user();
+		$api_key = \Widrow_AI_Encryption::get_secret( 'widrow_ai_api_key' );
+		if ( empty( $api_key ) ) {
+			wp_die(__('API key not configured. Go to Widrow AI → Settings to set up the connection.', 'widrow-ai'), __('Error', 'widrow-ai'), array('response' => 503));
+		}
+		$capabilities = \Widrow_AI_Tools::get_user_def_capabilities( $user );
+
+		// Fetch file from backend.
+		$response = wp_remote_get(
+			$file_url,
+			array(
+				'timeout' => 30,
+				'headers' => array(
+					'X-DEF-API-Key'           => $api_key,
+					'X-DEF-User'              => (string) $user->ID,
+					'X-DEF-User-Capabilities' => implode( ',', $capabilities ),
+				),
+			)
+		);
+
+		if (is_wp_error($response)) {
+			wp_die(__('Failed to download file.', 'widrow-ai'), __('Error', 'widrow-ai'), array('response' => 500));
+		}
+
+		$status_code = wp_remote_retrieve_response_code($response);
+		if ($status_code !== 200) {
+			$error_body = wp_remote_retrieve_body($response);
+			$error_msg  = __('File not found or access denied.', 'widrow-ai');
+			// Add debug info in development
+			if (defined('WP_DEBUG') && WP_DEBUG) {
+				$error_msg .= ' (HTTP ' . intval( $status_code ) . ': ' . esc_html( substr( $error_body, 0, 200 ) ) . ')';
+			}
+			wp_die($error_msg, __('Error', 'widrow-ai'), array('response' => $status_code));
+		}
+
+		$body         = wp_remote_retrieve_body($response);
+		$content_type = wp_remote_retrieve_header($response, 'content-type');
+
+		// The name the reader saves it under. DEF knows the document's TITLE from its
+		// library row and puts it in the Content-Disposition; the URL carries only the
+		// blob key, and for a project's governing slot that key is just `runsheet.md`
+		// — so every project's runsheet saved over the last one (Steve's 7.9.1 canary).
+		$clean_filename = self::download_filename_from(
+			wp_remote_retrieve_header( $response, 'content-disposition' ),
+			$filename
+		);
+
+		// SECURITY: Sanitize Content-Type — only allow safe MIME types, block text/html.
+		$safe_content_type = self::sanitize_proxy_content_type( $content_type );
+
+		// SECURITY: Sanitize filename — strip anything that could inject headers.
+		$safe_filename = self::sanitize_proxy_filename( $clean_filename );
+
+		// Send file response with security headers.
+		nocache_headers();
+		header( 'Content-Type: ' . $safe_content_type );
+		$disposition = self::download_disposition_for(
+			$safe_content_type,
+			'1' === (string) get_query_var( 'staff_ai_save' )
+		);
+		header( 'Content-Disposition: ' . $disposition . '; filename="' . $safe_filename . '"' );
+		header( 'Content-Length: ' . strlen( $body ) );
+		header( 'X-Content-Type-Options: nosniff' );
+		echo $body;
+		exit;
+	}
+
+	/**
+	 * Serve a chat attachment back to the console (8.0.0, images runsheet I-2).
+	 *
+	 * The picture a user attached to a turn, or its companion thumbnail, from
+	 * DEF's read-back route through the same cookie-auth'd door as a download:
+	 * the same gates, in the same order, the same BFF headers, and DEF's own
+	 * answer (404 for a file that is not this reader's in this thread) passed
+	 * through. The ONE deliberate difference from handle_file_download(): the
+	 * response is CACHEABLE, by this reader's browser only - `private, immutable`
+	 * for a year, because an upload's bytes never change under their id (D-I4),
+	 * so a thread's pictures cost one fetch per browser. WordPress sends every
+	 * logged-in response with no-cache/no-store headers (WP::send_headers);
+	 * they are replaced here, and `private` keeps a page cache or a CDN out.
+	 */
+	private static function handle_attachment(): void
+	{
+		$file_id = (string) get_query_var('staff_ai_attachment');
+		$thread  = (string) get_query_var('staff_ai_thread');
+		$variant = 'thumbnail' === get_query_var('staff_ai_variant') ? 'thumbnail' : 'original';
+
+		if (! preg_match('/^[A-Za-z0-9_-]{1,80}$/', $file_id) || ! preg_match('/^[A-Za-z0-9_-]{1,128}$/', $thread)) {
+			wp_die(__('Invalid file path.', 'widrow-ai'), __('Error', 'widrow-ai'), array('response' => 400));
+		}
+
+		if (! is_user_logged_in()) {
+			wp_die(__('Authentication required.', 'widrow-ai'), __('Unauthorized', 'widrow-ai'), array('response' => 401));
+		}
+
+		if (! self::user_has_staff_ai_access()) {
+			wp_die(esc_html(self::access_denied_message()), __('Forbidden', 'widrow-ai'), array('response' => 403));
+		}
+
+		$base_url = self::get_api_base_url();
+		if (! $base_url) {
+			wp_die(__('Staff AI backend not configured.', 'widrow-ai'), __('Error', 'widrow-ai'), array('response' => 503));
+		}
+
+		$user    = wp_get_current_user();
+		$api_key = \Widrow_AI_Encryption::get_secret( 'widrow_ai_api_key' );
+		if ( empty( $api_key ) ) {
+			wp_die(__('API key not configured. Go to Widrow AI → Settings to set up the connection.', 'widrow-ai'), __('Error', 'widrow-ai'), array('response' => 503));
+		}
+		$capabilities = \Widrow_AI_Tools::get_user_def_capabilities( $user );
+
+		$response = wp_remote_get(
+			$base_url . '/api/staff_ai/uploads/' . rawurlencode($file_id) . '/content?thread_id=' . rawurlencode($thread) . '&variant=' . $variant,
+			array(
+				'timeout' => 30,
+				'headers' => array(
+					'X-DEF-API-Key'           => $api_key,
+					'X-DEF-User'              => (string) $user->ID,
+					'X-DEF-User-Capabilities' => implode( ',', $capabilities ),
+				),
+			)
+		);
+
+		if (is_wp_error($response)) {
+			wp_die(__('Failed to download file.', 'widrow-ai'), __('Error', 'widrow-ai'), array('response' => 500));
+		}
+
+		$status_code = wp_remote_retrieve_response_code($response);
+		if ($status_code !== 200) {
+			// DEF's answer stands (404 not this reader's, 409 not yet committed); its body does not travel.
+			wp_die(__('File not found or access denied.', 'widrow-ai'), __('Error', 'widrow-ai'), array('response' => intval( $status_code ) ?: 502));
+		}
+
+		$body    = wp_remote_retrieve_body($response);
+		$headers = self::attachment_response_headers(
+			wp_remote_retrieve_header( $response, 'content-type' ),
+			self::download_filename_from( wp_remote_retrieve_header( $response, 'content-disposition' ), $file_id ),
+			strlen( $body )
+		);
+		foreach ( $headers as $line ) {
+			header( $line );
+		}
+		header_remove( 'Expires' );
+		echo $body;
+		exit;
+	}
+
+	/**
+	 * The header lines an attachment is served with - pure, so a test can pin
+	 * the one that matters (the cache) without the exit that follows it.
+	 *
+	 * @param string $content_type DEF's Content-Type, sanitized here.
+	 * @param string $filename     The name DEF gave it, sanitized here.
+	 * @param int    $length       The body length.
+	 * @return string[]
+	 */
+	private static function attachment_response_headers( string $content_type, string $filename, int $length ): array
+	{
+		$safe_type = self::sanitize_proxy_content_type( $content_type );
+		return array(
+			'Content-Type: ' . $safe_type,
+			'Content-Disposition: ' . self::download_disposition_for( $safe_type, false ) . '; filename="' . self::sanitize_proxy_filename( $filename ) . '"',
+			'Content-Length: ' . $length,
+			'Cache-Control: private, max-age=31536000, immutable',
+			'X-Content-Type-Options: nosniff',
+		);
+	}
+
+	/**
+	 * Inline or attachment for a proxied file.
+	 *
+	 * Images are served INLINE (7.6.8) so the chat can show the picture and a direct
+	 * open renders it — an attachment inside the installed (standalone) app is a blank
+	 * screen with no way back. Safe because sanitize_proxy_content_type has already
+	 * downgraded SVG/HTML/XML/script types to octet-stream, which stays an attachment,
+	 * and the caller pins the type with nosniff.
+	 *
+	 * A Download link needs the opposite for an image and one URL cannot be both, so the
+	 * CALLER says which with `?staff_ai_save=1` — and asking to save wins over the image
+	 * rule. Steve's canary, 2026-09-12: "When you click on Download - it does not
+	 * download - it opens the image in the screen ... (PWA app on laptop)." The flag can
+	 * only ever make a response MORE of an attachment, never less.
+	 *
+	 * @param string $content_type The SANITIZED content type about to be sent.
+	 * @param bool   $save         Whether the caller asked to save rather than show.
+	 * @return string 'inline' or 'attachment'.
+	 * @since 7.9.6
+	 */
+	private static function download_disposition_for( string $content_type, bool $save ): string
+	{
+		if ( $save ) {
+			return 'attachment';
+		}
+		return 0 === strpos( $content_type, 'image/' ) ? 'inline' : 'attachment';
+	}
+
+	/**
+	 * Sanitize Content-Type for proxied file downloads.
+	 *
+	 * Prevents Content-Type reflection XSS by rejecting types that could
+	 * execute scripts in the browser (text/html, application/xhtml+xml, etc.).
+	 * Forces application/octet-stream for any unrecognized or dangerous type.
+	 *
+	 * @param string $content_type The Content-Type from the backend response.
+	 * @return string A safe Content-Type string.
+	 * @since 1.2.0
+	 */
+	private static function sanitize_proxy_content_type( string $content_type ): string {
+		if ( empty( $content_type ) ) {
+			return 'application/octet-stream';
+		}
+
+		// Extract the base MIME type (strip charset, boundary, etc.).
+		$base = strtolower( trim( explode( ';', $content_type )[0] ) );
+
+		// Blocklist: types that can execute scripts in the browser.
+		$dangerous_types = array(
+			'text/html',
+			'application/xhtml+xml',
+			'application/xml',
+			'text/xml',
+			'image/svg+xml',
+			'application/javascript',
+			'text/javascript',
+			'application/x-javascript',
+		);
+
+		if ( in_array( $base, $dangerous_types, true ) ) {
+			return 'application/octet-stream';
+		}
+
+		// Reject anything that does not look like a valid MIME type.
+		if ( ! preg_match( '~^[a-z0-9][a-z0-9!#$&\-^_.+]*/[a-z0-9][a-z0-9!#$&\-^_.+]*$~', $base ) ) {
+			return 'application/octet-stream';
+		}
+
+		return $base;
+	}
+
+	/**
+	 * Decide the name a downloaded document is saved under.
+	 *
+	 * DEF sends the document's TITLE in its own Content-Disposition (it has the
+	 * library row); the URL carries the blob key, which for a project's governing
+	 * slot is only ever `runsheet.md` / `instructions.md` / `session_notes.md`.
+	 * Prefer what DEF says, fall back to the URL when it says nothing usable.
+	 *
+	 * The RFC 5987 `filename*` copy is read FIRST because it is the one that
+	 * survives a non-ASCII title — the plain `filename` beside it is an ASCII
+	 * approximation with `?` where the characters were.
+	 *
+	 * The storage prefix is stripped from EITHER source, so a DEF that has not
+	 * yet deployed its half cannot serve a blob key as a filename.
+	 *
+	 * @param mixed  $disposition  The upstream Content-Disposition header, if any.
+	 * @param string $url_filename The filename segment from the request URL.
+	 * @return string The name to offer, before header sanitisation.
+	 */
+	private static function download_filename_from( $disposition, string $url_filename ): string {
+		$name = '';
+		if ( is_string( $disposition ) && '' !== $disposition ) {
+			// A QUOTED parameter value can itself contain `filename*=`. A title is user
+			// text, and RFC 6266 escaping keeps such a sequence inside the quotes rather
+			// than removing it — so a scan of the raw header matches the copy INSIDE the
+			// quoted filename and stops at the `;` in it. Blank quoted values first: the
+			// genuine parameter sits outside them and survives untouched.
+			$scan = preg_replace( '/"(?:[^"\\\\]|\\\\.)*"/', '""', $disposition );
+			if ( preg_match( "/filename\*\s*=\s*UTF-8''([^;]+)/i", $scan, $m ) ) {
+				$name = rawurldecode( trim( $m[1] ) );
+			} elseif ( preg_match( '/filename\s*=\s*"((?:[^"\\\\]|\\\\.)*)"/i', $disposition, $m ) ) {
+				$name = stripslashes( $m[1] );
+			} elseif ( preg_match( '/filename\s*=\s*([^;]+)/i', $disposition, $m ) ) {
+				$name = trim( $m[1] );
+			}
+		}
+		if ( '' === trim( $name ) ) {
+			$name = $url_filename;
+		}
+		if ( preg_match( '/^\d{8}_\d{6}_[a-f0-9]+_(.+)$/', $name, $m ) ) {
+			$name = $m[1];
+		}
+		return $name;
+	}
+
+	/**
+	 * Sanitize filename for Content-Disposition header.
+	 *
+	 * Prevents HTTP header injection by stripping control characters,
+	 * newlines, quotes, and any non-printable characters from the filename.
+	 * Falls back to 'download' if nothing remains.
+	 *
+	 * @param string $filename The raw filename.
+	 * @return string A safe filename for use in Content-Disposition.
+	 * @since 1.2.0
+	 */
+	private static function sanitize_proxy_filename( string $filename ): string {
+		// Strip any characters that could inject headers or break the Content-Disposition value.
+		// Remove: control chars (0x00-0x1F, 0x7F), double quotes, backslashes, newlines.
+		$safe = preg_replace( '/[\x00-\x1F\x7F"\\\\]/', '', $filename );
+
+		// Also strip path separators to prevent path traversal in save dialogs.
+		$safe = str_replace( array( '/', '\\' ), '', $safe );
+
+		// Trim whitespace and dots (Windows disallows trailing dots).
+		$safe = trim( $safe, " \t\n\r\0\x0B." );
+
+		// Fallback if nothing remains.
+		if ( empty( $safe ) ) {
+			$safe = 'download';
+		}
+
+		return $safe;
+	}
+
+	/**
+	 * Check if current user has Staff AI access.
+	 *
+	 * @return bool True if user has widrow_staff_access OR widrow_management_access.
+	 */
+	public static function user_has_staff_ai_access(): bool
+	{
+		$user = wp_get_current_user();
+		if (! $user || ! $user->exists()) {
+			return false;
+		}
+
+		return $user->has_cap('widrow_staff_access') || $user->has_cap('widrow_management_access');
+	}
+
+	/**
+	 * The canonical access-denied copy.
+	 *
+	 * One message, one source. Before 5.7.7 the same refusal existed in three
+	 * variants across four surfaces (this page, rest_permission_check, the BFF
+	 * passthrough callbacks, the download wp_die), none of which said how
+	 * access is granted.
+	 *
+	 * The only population that can actually be refused is a signed-in user
+	 * holding no DEF capability: administrators and management users have
+	 * Staff AI access built in (map_def_capabilities grants widrow_staff_access
+	 * via map_meta_cap), so the copy speaks to the one audience that can
+	 * really see it — someone who needs their administrator.
+	 *
+	 * @return string The refusal copy.
+	 */
+	public static function access_denied_message(): string
+	{
+		return __("Your account doesn't have Staff AI access. Ask your site administrator to grant it in Widrow AI → Settings → User Roles.", 'widrow-ai');
+	}
+
+	/**
+	 * The canonical access-denied WP_Error for REST refusals.
+	 *
+	 * Deliberately a DISTINCT, stable code — not rest_forbidden — so a caller
+	 * (or a test) can tell "the gate refused you" from every other 403/401 in
+	 * the stack by code rather than by status arithmetic.
+	 *
+	 * @return \WP_Error 403 with code def_staff_access_required.
+	 */
+	public static function access_denied_error(): \WP_Error
+	{
+		return new \WP_Error(
+			'def_staff_access_required',
+			self::access_denied_message(),
+			array('status' => 403)
+		);
+	}
+
+	/**
+	 * Render the access denied page.
+	 */
+	private static function render_access_denied(): void
+	{
+		http_response_code(403);
+		// The other branch of the same URL. Without this, a cross-origin frame
+		// of /staff-ai LOADS for a signed-in user who lacks console access and
+		// is BLOCKED for one who has it — a capability oracle readable from an
+		// attacker's page (security leg F4).
+		self::send_console_frame_headers();
+?>
+		<!DOCTYPE html>
+		<html <?php language_attributes(); ?>>
+
+		<head>
+			<meta charset="<?php bloginfo('charset'); ?>">
+			<meta name="viewport" content="width=device-width, initial-scale=1">
+			<title><?php echo esc_html__('Access Denied', 'widrow-ai'); ?> - <?php bloginfo('name'); ?></title>
+			<style>
+				* {
+					margin: 0;
+					padding: 0;
+					box-sizing: border-box;
+				}
+
+				body {
+					font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+					background: #f0f0f1;
+					color: #3c434a;
+					display: flex;
+					align-items: center;
+					justify-content: center;
+					min-height: 100vh;
+					padding: 20px;
+				}
+
+				.access-denied {
+					background: #fff;
+					border: 1px solid #c3c4c7;
+					border-radius: 4px;
+					padding: 40px;
+					max-width: 400px;
+					text-align: center;
+					box-shadow: 0 1px 3px rgba(0, 0, 0, .04);
+				}
+
+				.access-denied h1 {
+					font-size: 1.5em;
+					margin-bottom: 16px;
+					color: #1d2327;
+				}
+
+				.access-denied p {
+					color: #50575e;
+					line-height: 1.6;
+				}
+			</style>
+		</head>
+
+		<body>
+			<div class="access-denied">
+				<h1><?php echo esc_html__('Access Denied', 'widrow-ai'); ?></h1>
+				<p><?php echo esc_html(self::access_denied_message()); ?></p>
+			</div>
+		</body>
+
+		</html>
+	<?php
+	}
+
+
+	// ─── PWA Support ────────────────────────────────────────────────
+
+	/**
+	 * Handle PWA asset requests (manifest.json, sw.js).
+	 *
+	 * @param string $asset The asset type to serve.
+	 */
+	private static function handle_pwa_asset(string $asset): void
+	{
+		switch ($asset) {
+			case 'manifest':
+				self::serve_pwa_manifest();
+				break;
+			case 'sw':
+				self::serve_pwa_service_worker();
+				break;
+			default:
+				status_header(404);
+				exit;
+		}
+	}
+
+	/**
+	 * The best app icon this site has at a requested size (8.2.7).
+	 *
+	 * Chain: Branding → Web App Icon, Branding → logo, the WordPress site
+	 * icon, then the icon bundled with the plugin. One resolver, because the
+	 * manifest and the shell's apple-touch-icon must agree about which icon
+	 * this site's app wears.
+	 *
+	 * @param int $size Pixels wanted, square.
+	 * @return array{src:string,sizes:string,type:string} URL, the size the
+	 *                                                    file REALLY is, and its type.
+	 */
+	private static function app_icon(int $size): array
+	{
+		$ids = array(
+			(int) get_option('widrow_ai_app_icon_id', 0),
+			(int) get_option('widrow_ai_logo_id', 0),
+			(int) get_option('site_icon', 0),
+		);
+		foreach ($ids as $id) {
+			$icon = $id ? self::attachment_icon($id, $size) : null;
+			if ($icon) {
+				return $icon;
+			}
+		}
+		return self::bundled_icon($size);
+	}
+
+	/**
+	 * One attachment as an app icon, at its TRUE pixel size.
+	 *
+	 * wp_get_attachment_image_url($id, array(192, 192)) returns the NEAREST
+	 * registered size, not a 192 crop — on a site whose thumbnail is 250 it
+	 * hands back a 250 file, which the manifest then declared as 192x192.
+	 * So: pick the smallest cut WordPress actually made that is genuinely big
+	 * enough, and declare what the metadata says it measures.
+	 *
+	 * An attachment that cannot serve the size asked for moves the chain along
+	 * rather than becoming the icon anyway. widrow_ai_logo_id is a WORDMARK
+	 * option: a 300x120 logo — or a 150x150 site icon — offered as both the 192
+	 * and the 512 entry is two identical icons and none at 192 square, which is
+	 * how a site loses the Install button in Chrome and Edge. The same goes for
+	 * anything that is not a raster every browser reads: the media picker admits
+	 * SVGs, wp_attachment_is_image() passes them, and an SVG can carry
+	 * width/height metadata — but iOS ignores one as an apple-touch-icon.
+	 *
+	 * @param int $id   Attachment ID.
+	 * @param int $size Pixels wanted, square.
+	 * @return array{src:string,sizes:string,type:string}|null
+	 */
+	private static function attachment_icon(int $id, int $size): ?array
+	{
+		$mime = get_post_mime_type($id);
+		if (!in_array($mime, array('image/png', 'image/jpeg', 'image/webp'), true)) {
+			return null;
+		}
+
+		$meta = wp_get_attachment_metadata($id);
+		if (empty($meta['width']) || empty($meta['height'])) {
+			return null;
+		}
+
+		$cuts = array(array('full', (int) $meta['width'], (int) $meta['height']));
+		foreach ((array) ($meta['sizes'] ?? array()) as $name => $cut) {
+			if (!empty($cut['width']) && !empty($cut['height'])) {
+				$cuts[] = array($name, (int) $cut['width'], (int) $cut['height']);
+			}
+		}
+
+		// The smallest cut that is genuinely big enough on BOTH axes, or nothing.
+		$best = null;
+		foreach ($cuts as $cut) {
+			if (min($cut[1], $cut[2]) < $size) {
+				continue;
+			}
+			if (null === $best || $cut[1] * $cut[2] < $best[1] * $best[2]) {
+				$best = $cut;
+			}
+		}
+		if (null === $best) {
+			return null;
+		}
+
+		$url = wp_get_attachment_image_url($id, $best[0]);
+		if (!$url) {
+			return null;
+		}
+		return array(
+			'src'   => $url,
+			'sizes' => $best[1] . 'x' . $best[2],
+			'type'  => $mime,
+		);
+	}
+
+	/**
+	 * The icon that ships with the plugin — square, opaque, full-bleed.
+	 *
+	 * @param int $size Pixels wanted, square.
+	 * @return array{src:string,sizes:string,type:string}
+	 */
+	private static function bundled_icon(int $size): array
+	{
+		$px = 512;
+		foreach (array(180, 192, 512) as $bundled) {
+			if ($bundled >= $size) {
+				$px = $bundled;
+				break;
+			}
+		}
+		return array(
+			'src'   => WIDROW_AI_PLUGIN_URL . 'assets/images/staff-ai-icon-' . $px . '.png',
+			'sizes' => $px . 'x' . $px,
+			'type'  => 'image/png',
+		);
+	}
+
+	/**
+	 * Serve the PWA web app manifest.
+	 */
+	private static function serve_pwa_manifest(): void
+	{
+		nocache_headers();
+		header('Content-Type: application/manifest+json');
+		echo wp_json_encode(self::pwa_manifest(), JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);
+		exit;
+	}
+
+	/**
+	 * The manifest itself — built without the response, so it can be read.
+	 *
+	 * @return array The web app manifest.
+	 */
+	private static function pwa_manifest(): array
+	{
+		$display_name = get_option('widrow_ai_display_name', '');
+		if (empty($display_name)) {
+			$display_name = get_bloginfo('name');
+		}
+		$app_name = __('Staff AI', 'widrow-ai');
+
+		// app_icon() holds the chain. `any maskable` is what gets Android to crop the
+		// icon to its own shape instead of dropping it in a white plate first.
+		$icons = array();
+		foreach (array(192, 512) as $size) {
+			$icon            = self::app_icon($size);
+			$icon['purpose'] = 'any maskable';
+			$icons[]         = $icon;
+		}
+
+		$manifest = array(
+			'name'             => $app_name,
+			'short_name'       => __('Staff AI', 'widrow-ai'),
+			'description'      => sprintf(
+				/* translators: %s: site display name */
+				__('%s Staff AI Assistant', 'widrow-ai'),
+				$display_name
+			),
+			'start_url'        => home_url('/staff-ai/'),
+			'scope'            => home_url('/staff-ai/'),
+			'display'          => 'standalone',
+			'background_color' => '#ffffff',
+			'theme_color'      => '#6366f1',
+			'icons'            => $icons,
+			// C3b: the installed app reads this to notice a release it is not running.
+			// A non-standard member, which browsers ignore — and the response sends
+			// nocache_headers(), so the check always sees the live version.
+			'version'          => WIDROW_AI_VERSION,
+		);
+
+		return $manifest;
+	}
+
+	/**
+	 * Serve the PWA service worker.
+	 * Minimal worker — just enough for PWA installability.
+	 */
+	private static function serve_pwa_service_worker(): void
+	{
+		header('Content-Type: application/javascript');
+		header('Service-Worker-Allowed: /staff-ai/');
+		header('Cache-Control: no-cache');
+		echo <<<'JS'
+// Staff AI Service Worker — enables PWA install.
+const CACHE_NAME = 'staff-ai-v1';
+
+self.addEventListener('install', function(event) {
+	self.skipWaiting();
+});
+
+self.addEventListener('activate', function(event) {
+	event.waitUntil(self.clients.claim());
+});
+
+self.addEventListener('fetch', function(event) {
+	// GETs only. The chat stream is a POST and must reach the network untouched: wrapping
+	// it in respondWith() turned a locked phone's dropped stream into "FetchEvent.respondWith
+	// received an error: Load failed" with nothing to fall back to (7.6.9, Steve's canary
+	// 2026-09-06). The page's own fetch now sees the drop and reloads the finished reply.
+	if (event.request.method !== 'GET') return;
+	// Network-first for everything else — Staff AI is a live app, not offline-capable.
+	event.respondWith(
+		fetch(event.request).catch(function() {
+			return caches.match(event.request);
+		})
+	);
+});
+JS;
+		exit;
+	}
+
+	/**
+	 * Deny framing of the Staff-AI console.
+	 *
+	 * WordPress denies framing on wp-admin pages for free. The console is a
+	 * FRONT-END endpoint (template_redirect, its own standalone document), so
+	 * it gets none of that hardening and has to ask. It matters here because
+	 * the console carries one-click Ask buttons that auto-send a fixed prompt
+	 * to the assistant (v7.6.2) — that is what a clickjack would aim at.
+	 *
+	 * Customer Chat is deliberately NOT covered: embedded-widget deployments
+	 * frame it on purpose (assets/js/widrow-ai-cart-sync.js and the parent-side
+	 * JWT bridge in assets/js/widrow-ai.js are that contract's two halves).
+	 *
+	 * Both headers are sent HERE rather than by core's
+	 * send_frame_options_header(), for two measured reasons (panel, 2026-09-03):
+	 * core sends its CSP with PHP's default $replace = true, so on WP 6.9+ it
+	 * would REPLACE a security plugin's whole Content-Security-Policy with just
+	 * frame-ancestors — on the one page that renders the console and its REST
+	 * nonce; and it sends only X-Frame-Options before 6.9, which this plugin
+	 * still supports (Requires at least: 6.2), so it cannot be relied on for
+	 * the CSP either. Sending directly is identical on every version.
+	 *
+	 * @since 7.6.4
+	 *
+	 * @param callable|null $emit Header emitter, for the suite's spy. Defaults
+	 *                            to header(). See the guard below for why a
+	 *                            test cannot let the real one run.
+	 * @return void
+	 */
+	private static function send_console_frame_headers( ?callable $emit = null ): void
+	{
+		// PHPUnit has written its own banner long before a test body runs, so
+		// headers_sent() is TRUE for every test in the suite — a real header()
+		// call there raises E_WARNING, which phpunit.xml.dist's
+		// convertWarningsToExceptions turns into a failure. The same guard is
+		// what production needs: with WP_DEBUG_DISPLAY on, or a stray BOM in
+		// another plugin, template_redirect can run with output already begun,
+		// and this must stay silent rather than print a PHP warning into the
+		// console's HTML (the headers_sent() guard idiom).
+		if ( null === $emit && headers_sent() ) {
+			return;
+		}
+		$emit = $emit ?? 'header';
+		$emit( 'X-Frame-Options: SAMEORIGIN', true );
+		// APPENDED, never replacing. Multiple CSP headers are each enforced —
+		// the effective policy is their intersection — so a policy carrying
+		// nothing but frame-ancestors can only ever tighten, and can never
+		// clobber a policy the site set for itself.
+		// frame-src 'self' (artifacts A-2, D-A3): the console renders an artifact in a
+		// sandboxed srcdoc frame — allowed by 'self' — and a page inside that frame can
+		// still navigate ITSELF, which no sandbox flag prevents. This directive refuses
+		// that navigation at the request, before it leaves the browser (measured
+		// 2026-09-15). Still nothing but frame directives: it cannot loosen a policy
+		// the site set for itself.
+		$emit( "Content-Security-Policy: frame-ancestors 'self'; frame-src 'self';", false );
+	}
+
+	/**
+	 * Render the Staff AI application shell.
+	 *
+	 * This outputs a standalone HTML document (not embedded in wp-admin).
+	 * It does NOT call wp_head() / wp_footer() by design — assets are
+	 * loaded via direct <link> and <script> tags in the template.
+	 * Do not attempt to use wp_enqueue_style/script for this page.
+	 */
+	private static function render_shell(): void
+	{
+		// Prevent caching — page contains user-specific nonce and identifiers.
+		nocache_headers();
+		self::send_console_frame_headers();
+
+		$user    = wp_get_current_user();
+		$channel = 'staff_ai';
+
+		// REST API data for JS.
+		$api_base = rest_url( WIDROW_AI_API_NAME_SPACE . '/staff-ai' );
+		$nonce    = wp_create_nonce( 'wp_rest' );
+
+		// Header logo — D-II fallback chain: widrow_ai_logo_id → custom_logo → site name.
+		$show_logo = '0' !== get_option( 'widrow_ai_logo_show_staff_ai', '1' );
+		if ( $show_logo ) {
+			$logo_html = Widrow_AI_Admin::get_logo_html( 32 );
+		} else {
+			$display_name = get_option( 'widrow_ai_display_name', get_bloginfo( 'name' ) );
+			$logo_html    = '<span class="header-logo-text">' . esc_html( $display_name ) . '</span>';
+		}
+		// Welcome hero (v7.5.1): the same chain at 40px — get_logo_html() emits an
+		// INLINE max-height, so the size must be built here, not styled later.
+		$welcome_logo_html = $show_logo ? Widrow_AI_Admin::get_logo_html( 40 ) : $logo_html;
+
+		// The home-screen icon (8.2.7). iOS reads ONLY the apple-touch-icon tag —
+		// with none it fell back to a manifest icon and masked the uploaded
+		// artwork's transparent corners onto white.
+		$apple_touch_icon = self::app_icon( 180 );
+
+		// Template expects: $channel, $user, $api_base, $nonce, $logo_html,
+		// $welcome_logo_html, $apple_touch_icon.
+		$template = WIDROW_AI_PLUGIN_DIR . 'templates/staff-ai-shell.php';
+		if ( ! file_exists( $template ) ) {
+			wp_die(
+				esc_html__( 'Staff AI template not found. Please reinstall the Widrow AI plugin.', 'widrow-ai' ),
+				esc_html__( 'Template Error', 'widrow-ai' ),
+				array( 'response' => 500 )
+			);
+		}
+		require $template;
+	}
+
+	/**
+	 * Flush rewrite rules on activation.
+	 */
+	public static function on_activate(): void
+	{
+		self::add_rewrite_rules();
+		flush_rewrite_rules();
+	}
+}

@@ -6,7 +6,7 @@
  * key generation, token roundtrip, JWKS endpoint structure,
  * and context token issuance for authenticated users.
  *
- * @package def-core
+ * @package widrow-ai
  * @group jwt
  */
 
@@ -18,7 +18,7 @@ class Test_JWT_Integration extends WP_UnitTestCase {
 		parent::set_up();
 
 		// Clear any existing keys so each test starts fresh.
-		delete_option( DEF_CORE_OPTION_KEYS );
+		delete_option( WIDROW_AI_OPTION_KEYS );
 	}
 
 	public function tear_down(): void {
@@ -30,9 +30,9 @@ class Test_JWT_Integration extends WP_UnitTestCase {
 	 * Test: Key generation produces valid RSA keypair in real WP environment.
 	 */
 	public function test_key_generation_produces_valid_keypair(): void {
-		DEF_Core_JWT::ensure_keys_exist();
+		Widrow_AI_JWT::ensure_keys_exist();
 
-		$keys = get_option( DEF_CORE_OPTION_KEYS );
+		$keys = get_option( WIDROW_AI_OPTION_KEYS );
 		$this->assertIsArray( $keys, 'Keys option should be an array' );
 		$this->assertArrayHasKey( 'private', $keys, 'Keys should have private key' );
 		$this->assertArrayHasKey( 'public', $keys, 'Keys should have public key' );
@@ -59,17 +59,17 @@ class Test_JWT_Integration extends WP_UnitTestCase {
 	 * Test: issue_token / verify_token roundtrip succeeds.
 	 */
 	public function test_issue_verify_roundtrip(): void {
-		DEF_Core_JWT::ensure_keys_exist();
+		Widrow_AI_JWT::ensure_keys_exist();
 
 		$claims = array(
 			'sub'   => '42',
 			'email' => 'test@example.com',
 			'roles' => array( 'subscriber' ),
 			'iss'   => get_site_url(),
-			'aud'   => DEF_CORE_AUDIENCE,
+			'aud'   => WIDROW_AI_AUDIENCE,
 		);
 
-		$token = DEF_Core_JWT::issue_token( $claims, 300 );
+		$token = Widrow_AI_JWT::issue_token( $claims, 300 );
 		$this->assertNotEmpty( $token, 'Token should not be empty' );
 
 		// Token should have 3 parts (header.payload.signature).
@@ -77,11 +77,11 @@ class Test_JWT_Integration extends WP_UnitTestCase {
 		$this->assertCount( 3, $parts, 'JWT should have 3 parts' );
 
 		// Verify the token.
-		$payload = DEF_Core_JWT::verify_token( $token );
+		$payload = Widrow_AI_JWT::verify_token( $token );
 		$this->assertIsArray( $payload, 'Verified payload should be an array' );
 		$this->assertEquals( '42', $payload['sub'], 'Subject claim should match' );
 		$this->assertEquals( 'test@example.com', $payload['email'], 'Email claim should match' );
-		$this->assertEquals( DEF_CORE_AUDIENCE, $payload['aud'], 'Audience claim should match' );
+		$this->assertEquals( WIDROW_AI_AUDIENCE, $payload['aud'], 'Audience claim should match' );
 
 		// Standard claims should be present.
 		$this->assertArrayHasKey( 'iat', $payload, 'iat claim should exist' );
@@ -94,7 +94,7 @@ class Test_JWT_Integration extends WP_UnitTestCase {
 	 * Test: JWKS endpoint returns structurally valid response.
 	 */
 	public function test_jwks_endpoint_structurally_valid(): void {
-		DEF_Core_JWT::ensure_keys_exist();
+		Widrow_AI_JWT::ensure_keys_exist();
 
 		$server   = rest_get_server();
 		$request  = new WP_REST_Request( 'GET', '/a3-ai/v1/jwks' );
@@ -109,7 +109,7 @@ class Test_JWT_Integration extends WP_UnitTestCase {
 		$key = $data['keys'][0];
 
 		// Match the kid from stored keys.
-		$stored_keys = get_option( DEF_CORE_OPTION_KEYS );
+		$stored_keys = get_option( WIDROW_AI_OPTION_KEYS );
 		$this->assertEquals( $stored_keys['kid'], $key['kid'], 'JWKS kid should match stored kid' );
 
 		// Verify modulus and exponent are base64url-encoded (no padding, no +/).
@@ -121,7 +121,7 @@ class Test_JWT_Integration extends WP_UnitTestCase {
 	 * Test: Context token issuance for authenticated user returns valid JWT.
 	 */
 	public function test_context_token_for_authenticated_user(): void {
-		DEF_Core_JWT::ensure_keys_exist();
+		Widrow_AI_JWT::ensure_keys_exist();
 
 		$user_id = self::factory()->user->create(
 			array(
@@ -143,10 +143,10 @@ class Test_JWT_Integration extends WP_UnitTestCase {
 		$this->assertArrayHasKey( 'exp', $data, 'Response should contain exp' );
 
 		// Verify the issued token is actually valid.
-		$payload = DEF_Core_JWT::verify_token( $data['token'] );
+		$payload = Widrow_AI_JWT::verify_token( $data['token'] );
 		$this->assertIsArray( $payload, 'Context token should verify successfully' );
 		$this->assertEquals( (string) $user_id, $payload['sub'], 'Token sub should match user ID' );
 		$this->assertEquals( 'testuser@example.com', $payload['email'], 'Token email should match' );
-		$this->assertEquals( DEF_CORE_AUDIENCE, $payload['aud'], 'Token aud should match plugin audience' );
+		$this->assertEquals( WIDROW_AI_AUDIENCE, $payload['aud'], 'Token aud should match plugin audience' );
 	}
 }

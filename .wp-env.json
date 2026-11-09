@@ -1,7 +1,7 @@
 {
   "core": "WordPress/WordPress#6.9.1",
   "phpVersion": "8.2",
-  "mappings": { "wp-content/plugins/def-core": "." },
+  "mappings": { "wp-content/plugins/widrow-ai": "." },
   "config": {
     "WP_DEBUG": true,
     "WP_DEBUG_LOG": true,
@@ -11,7 +11,7 @@
     "tests": {
       "core": "WordPress/WordPress#6.9.1",
       "phpVersion": "8.2",
-      "mappings": { "wp-content/plugins/def-core": "." },
+      "mappings": { "wp-content/plugins/widrow-ai": "." },
       "config": {
         "WP_DEBUG": true,
         "WP_DEBUG_LOG": true,

@@ -4,7 +4,7 @@
  * account's address isn't proven either, so nothing that could carry a message reaches
  * it: a first name is one short word of letters, and the chat is never included.
  *
- * @package def-core
+ * @package widrow-ai
  */
 
 declare(strict_types=1);
@@ -27,9 +27,9 @@ class Test_Escalation_Ack_Tags extends WP_UnitTestCase {
 			10,
 			2
 		);
-		update_option( 'def_core_chat_escalation_ack_enabled', '1' );
-		update_option( 'def_core_chat_escalation_ack_subject', 'Thanks {first-name}' );
-		update_option( 'def_core_chat_escalation_ack_body', "Hello {first-name},\n\nThe team" );
+		update_option( 'widrow_ai_chat_escalation_ack_enabled', '1' );
+		update_option( 'widrow_ai_chat_escalation_ack_subject', 'Thanks {first-name}' );
+		update_option( 'widrow_ai_chat_escalation_ack_body', "Hello {first-name},\n\nThe team" );
 	}
 
 	private function send( array $fields ): array {
@@ -108,7 +108,7 @@ class Test_Escalation_Ack_Tags extends WP_UnitTestCase {
 	}
 
 	public function test_no_acknowledgement_claims_no_confirmation(): void {
-		update_option( 'def_core_chat_escalation_ack_enabled', '0' );
+		update_option( 'widrow_ai_chat_escalation_ack_enabled', '0' );
 		$this->assertArrayNotHasKey( 'ack_sent', $this->send( array( 'reply_to' => 'sam@example.com' ) ) );
 	}
 }

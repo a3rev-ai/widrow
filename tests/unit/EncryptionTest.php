@@ -1,10 +1,10 @@
 <?php
 /**
- * PHPUnit tests for DEF_Core_Encryption.
+ * PHPUnit tests for Widrow_AI_Encryption.
  *
  * Converted from tests/test-encryption.php — all original test cases preserved.
  *
- * @package def-core/tests/unit
+ * @package widrow-ai/tests/unit
  */
 
 declare(strict_types=1);
@@ -12,7 +12,7 @@ declare(strict_types=1);
 use Yoast\PHPUnitPolyfills\TestCases\TestCase;
 
 /**
- * @covers DEF_Core_Encryption
+ * @covers Widrow_AI_Encryption
  */
 final class EncryptionTest extends TestCase {
 
@@ -37,7 +37,7 @@ final class EncryptionTest extends TestCase {
 		if ( ! function_exists( 'sodium_crypto_secretbox' ) ) {
 			$this->markTestSkipped( 'sodium not available' );
 		}
-		$encrypted = DEF_Core_Encryption::encrypt( 'my-super-secret-api-key-12345' );
+		$encrypted = Widrow_AI_Encryption::encrypt( 'my-super-secret-api-key-12345' );
 		$this->assertNotNull( $encrypted );
 	}
 
@@ -46,7 +46,7 @@ final class EncryptionTest extends TestCase {
 			$this->markTestSkipped( 'sodium not available' );
 		}
 		$plaintext = 'my-super-secret-api-key-12345';
-		$encrypted = DEF_Core_Encryption::encrypt( $plaintext );
+		$encrypted = Widrow_AI_Encryption::encrypt( $plaintext );
 		$this->assertNotSame( $plaintext, $encrypted );
 	}
 
@@ -54,7 +54,7 @@ final class EncryptionTest extends TestCase {
 		if ( ! function_exists( 'sodium_crypto_secretbox' ) ) {
 			$this->markTestSkipped( 'sodium not available' );
 		}
-		$encrypted = DEF_Core_Encryption::encrypt( 'my-super-secret-api-key-12345' );
+		$encrypted = Widrow_AI_Encryption::encrypt( 'my-super-secret-api-key-12345' );
 		$data = json_decode( $encrypted, true );
 		$this->assertSame( 1, $data['version'] );
 		$this->assertArrayHasKey( 'nonce', $data );
@@ -66,8 +66,8 @@ final class EncryptionTest extends TestCase {
 			$this->markTestSkipped( 'sodium not available' );
 		}
 		$plaintext = 'my-super-secret-api-key-12345';
-		$encrypted = DEF_Core_Encryption::encrypt( $plaintext );
-		$this->assertSame( $plaintext, DEF_Core_Encryption::decrypt( $encrypted ) );
+		$encrypted = Widrow_AI_Encryption::encrypt( $plaintext );
+		$this->assertSame( $plaintext, Widrow_AI_Encryption::decrypt( $encrypted ) );
 	}
 
 	public function test_sodium_different_nonces_produce_different_blobs(): void {
@@ -75,8 +75,8 @@ final class EncryptionTest extends TestCase {
 			$this->markTestSkipped( 'sodium not available' );
 		}
 		$plaintext  = 'my-super-secret-api-key-12345';
-		$encrypted1 = DEF_Core_Encryption::encrypt( $plaintext );
-		$encrypted2 = DEF_Core_Encryption::encrypt( $plaintext );
+		$encrypted1 = Widrow_AI_Encryption::encrypt( $plaintext );
+		$encrypted2 = Widrow_AI_Encryption::encrypt( $plaintext );
 		$this->assertNotSame( $encrypted1, $encrypted2 );
 	}
 
@@ -85,10 +85,10 @@ final class EncryptionTest extends TestCase {
 			$this->markTestSkipped( 'sodium not available' );
 		}
 		$plaintext  = 'my-super-secret-api-key-12345';
-		$encrypted1 = DEF_Core_Encryption::encrypt( $plaintext );
-		$encrypted2 = DEF_Core_Encryption::encrypt( $plaintext );
-		$this->assertSame( $plaintext, DEF_Core_Encryption::decrypt( $encrypted1 ) );
-		$this->assertSame( $plaintext, DEF_Core_Encryption::decrypt( $encrypted2 ) );
+		$encrypted1 = Widrow_AI_Encryption::encrypt( $plaintext );
+		$encrypted2 = Widrow_AI_Encryption::encrypt( $plaintext );
+		$this->assertSame( $plaintext, Widrow_AI_Encryption::decrypt( $encrypted1 ) );
+		$this->assertSame( $plaintext, Widrow_AI_Encryption::decrypt( $encrypted2 ) );
 	}
 
 	/**
@@ -114,9 +114,9 @@ final class EncryptionTest extends TestCase {
 			throw new RuntimeException( 'This is not implemented in sodium_compat' );
 		}
 
-		$this->assertTrue( DEF_Core_Encryption::set_secret( 'def_core_api_key', 'connect-key' ) );
-		$this->assertSame( 1, json_decode( get_option( 'def_core_api_key' ), true )['version'] );
-		$this->assertSame( 'connect-key', DEF_Core_Encryption::get_secret( 'def_core_api_key' ) );
+		$this->assertTrue( Widrow_AI_Encryption::set_secret( 'widrow_ai_api_key', 'connect-key' ) );
+		$this->assertSame( 1, json_decode( get_option( 'widrow_ai_api_key' ), true )['version'] );
+		$this->assertSame( 'connect-key', Widrow_AI_Encryption::get_secret( 'widrow_ai_api_key' ) );
 	}
 
 	// ── 2. GCM encrypt/decrypt round-trip ───────────────────────────────
@@ -136,7 +136,7 @@ final class EncryptionTest extends TestCase {
 			'tag'        => base64_encode( $tag ),
 		) );
 
-		$this->assertSame( $plaintext, DEF_Core_Encryption::decrypt( $blob ) );
+		$this->assertSame( $plaintext, Widrow_AI_Encryption::decrypt( $blob ) );
 	}
 
 	public function test_gcm_blob_has_version_2(): void {
@@ -159,59 +159,59 @@ final class EncryptionTest extends TestCase {
 	// ── 3. Legacy plaintext auto-migration ──────────────────────────────
 
 	public function test_legacy_plaintext_returned_and_encrypted(): void {
-		update_option( 'def_core_api_key', 'legacy-plaintext-key-abc123' );
+		update_option( 'widrow_ai_api_key', 'legacy-plaintext-key-abc123' );
 
-		$result = DEF_Core_Encryption::get_secret( 'def_core_api_key' );
+		$result = Widrow_AI_Encryption::get_secret( 'widrow_ai_api_key' );
 		$this->assertSame( 'legacy-plaintext-key-abc123', $result );
 
 		// After auto-migration, stored value should be encrypted JSON.
-		$stored = get_option( 'def_core_api_key' );
+		$stored = get_option( 'widrow_ai_api_key' );
 		$parsed = json_decode( $stored, true );
 		$this->assertIsArray( $parsed );
 		$this->assertArrayHasKey( 'version', $parsed );
 
 		// Second read still correct.
-		$this->assertSame( 'legacy-plaintext-key-abc123', DEF_Core_Encryption::get_secret( 'def_core_api_key' ) );
+		$this->assertSame( 'legacy-plaintext-key-abc123', Widrow_AI_Encryption::get_secret( 'widrow_ai_api_key' ) );
 	}
 
 	// ── 4. Salt rotation detection ──────────────────────────────────────
 
 	public function test_salt_rotation_returns_null_and_sets_transient(): void {
-		DEF_Core_Encryption::set_secret( 'def_core_api_key', 'secret-before-rotation' );
-		$this->assertSame( 'secret-before-rotation', DEF_Core_Encryption::get_secret( 'def_core_api_key' ) );
+		Widrow_AI_Encryption::set_secret( 'widrow_ai_api_key', 'secret-before-rotation' );
+		$this->assertSame( 'secret-before-rotation', Widrow_AI_Encryption::get_secret( 'widrow_ai_api_key' ) );
 
 		// Rotate salts.
 		global $_wp_test_salts;
 		$_wp_test_salts['auth']        = 'completely-new-auth-salt-after-rotation';
 		$_wp_test_salts['secure_auth'] = 'completely-new-secure-auth-salt-after-rotation';
 
-		$this->assertNull( DEF_Core_Encryption::get_secret( 'def_core_api_key' ) );
-		$this->assertTrue( get_transient( DEF_Core_Encryption::TRANSIENT_ENCRYPTION_ERROR ) );
+		$this->assertNull( Widrow_AI_Encryption::get_secret( 'widrow_ai_api_key' ) );
+		$this->assertTrue( get_transient( Widrow_AI_Encryption::TRANSIENT_ENCRYPTION_ERROR ) );
 	}
 
 	// ── 5. Empty value → null ───────────────────────────────────────────
 
 	public function test_no_option_stored_returns_null(): void {
-		$this->assertNull( DEF_Core_Encryption::get_secret( 'def_core_api_key' ) );
+		$this->assertNull( Widrow_AI_Encryption::get_secret( 'widrow_ai_api_key' ) );
 	}
 
 	public function test_empty_string_stored_returns_null(): void {
-		update_option( 'def_core_api_key', '' );
-		$this->assertNull( DEF_Core_Encryption::get_secret( 'def_core_api_key' ) );
+		update_option( 'widrow_ai_api_key', '' );
+		$this->assertNull( Widrow_AI_Encryption::get_secret( 'widrow_ai_api_key' ) );
 	}
 
 	public function test_decrypt_empty_string_returns_null(): void {
-		$this->assertNull( DEF_Core_Encryption::decrypt( '' ) );
+		$this->assertNull( Widrow_AI_Encryption::decrypt( '' ) );
 	}
 
 	// ── 6. set_secret + get_secret round-trip ───────────────────────────
 
 	public function test_set_get_secret_roundtrip(): void {
-		$ok = DEF_Core_Encryption::set_secret( 'def_core_api_key', 'round-trip-test-key' );
+		$ok = Widrow_AI_Encryption::set_secret( 'widrow_ai_api_key', 'round-trip-test-key' );
 		$this->assertTrue( $ok );
-		$this->assertSame( 'round-trip-test-key', DEF_Core_Encryption::get_secret( 'def_core_api_key' ) );
+		$this->assertSame( 'round-trip-test-key', Widrow_AI_Encryption::get_secret( 'widrow_ai_api_key' ) );
 
-		$stored = get_option( 'def_core_api_key' );
+		$stored = get_option( 'widrow_ai_api_key' );
 		$this->assertNotSame( 'round-trip-test-key', $stored );
 		$parsed = json_decode( $stored, true );
 		$this->assertArrayHasKey( 'version', $parsed );
@@ -221,12 +221,12 @@ final class EncryptionTest extends TestCase {
 
 	public function test_sodium_blob_missing_nonce_returns_null(): void {
 		$blob = wp_json_encode( array( 'version' => 1, 'ciphertext' => base64_encode( 'fake' ) ) );
-		$this->assertNull( DEF_Core_Encryption::decrypt( $blob ) );
+		$this->assertNull( Widrow_AI_Encryption::decrypt( $blob ) );
 	}
 
 	public function test_sodium_blob_missing_ciphertext_returns_null(): void {
 		$blob = wp_json_encode( array( 'version' => 1, 'nonce' => base64_encode( 'fake' ) ) );
-		$this->assertNull( DEF_Core_Encryption::decrypt( $blob ) );
+		$this->assertNull( Widrow_AI_Encryption::decrypt( $blob ) );
 	}
 
 	public function test_gcm_blob_missing_iv_returns_null(): void {
@@ -235,7 +235,7 @@ final class EncryptionTest extends TestCase {
 			'ciphertext' => base64_encode( 'fake' ),
 			'tag'        => base64_encode( 'fake' ),
 		) );
-		$this->assertNull( DEF_Core_Encryption::decrypt( $blob ) );
+		$this->assertNull( Widrow_AI_Encryption::decrypt( $blob ) );
 	}
 
 	public function test_gcm_blob_missing_tag_returns_null(): void {
@@ -244,7 +244,7 @@ final class EncryptionTest extends TestCase {
 			'iv'         => base64_encode( 'fake' ),
 			'ciphertext' => base64_encode( 'fake' ),
 		) );
-		$this->assertNull( DEF_Core_Encryption::decrypt( $blob ) );
+		$this->assertNull( Widrow_AI_Encryption::decrypt( $blob ) );
 	}
 
 	public function test_gcm_blob_missing_ciphertext_returns_null(): void {
@@ -253,7 +253,7 @@ final class EncryptionTest extends TestCase {
 			'iv'      => base64_encode( 'fake' ),
 			'tag'     => base64_encode( 'fake' ),
 		) );
-		$this->assertNull( DEF_Core_Encryption::decrypt( $blob ) );
+		$this->assertNull( Widrow_AI_Encryption::decrypt( $blob ) );
 	}
 
 	// ── 8. Malformed blob — invalid base64 ──────────────────────────────
@@ -267,7 +267,7 @@ final class EncryptionTest extends TestCase {
 			'nonce'      => '!!!not-valid-base64!!!',
 			'ciphertext' => base64_encode( 'fake' ),
 		) );
-		$this->assertNull( DEF_Core_Encryption::decrypt( $blob ) );
+		$this->assertNull( Widrow_AI_Encryption::decrypt( $blob ) );
 	}
 
 	public function test_sodium_invalid_base64_ciphertext_returns_null(): void {
@@ -279,7 +279,7 @@ final class EncryptionTest extends TestCase {
 			'nonce'      => base64_encode( str_repeat( 'x', SODIUM_CRYPTO_SECRETBOX_NONCEBYTES ) ),
 			'ciphertext' => '!!!not-valid-base64!!!',
 		) );
-		$this->assertNull( DEF_Core_Encryption::decrypt( $blob ) );
+		$this->assertNull( Widrow_AI_Encryption::decrypt( $blob ) );
 	}
 
 	public function test_gcm_invalid_base64_iv_returns_null(): void {
@@ -289,7 +289,7 @@ final class EncryptionTest extends TestCase {
 			'ciphertext' => base64_encode( 'fake' ),
 			'tag'        => base64_encode( str_repeat( 'x', 16 ) ),
 		) );
-		$this->assertNull( DEF_Core_Encryption::decrypt( $blob ) );
+		$this->assertNull( Widrow_AI_Encryption::decrypt( $blob ) );
 	}
 
 	// ── 9. Malformed blob — wrong lengths ───────────────────────────────
@@ -303,7 +303,7 @@ final class EncryptionTest extends TestCase {
 			'nonce'      => base64_encode( str_repeat( 'x', 10 ) ),
 			'ciphertext' => base64_encode( 'fake' ),
 		) );
-		$this->assertNull( DEF_Core_Encryption::decrypt( $blob ) );
+		$this->assertNull( Widrow_AI_Encryption::decrypt( $blob ) );
 	}
 
 	public function test_sodium_nonce_too_long_returns_null(): void {
@@ -315,7 +315,7 @@ final class EncryptionTest extends TestCase {
 			'nonce'      => base64_encode( str_repeat( 'x', 48 ) ),
 			'ciphertext' => base64_encode( 'fake' ),
 		) );
-		$this->assertNull( DEF_Core_Encryption::decrypt( $blob ) );
+		$this->assertNull( Widrow_AI_Encryption::decrypt( $blob ) );
 	}
 
 	public function test_gcm_iv_too_short_returns_null(): void {
@@ -325,7 +325,7 @@ final class EncryptionTest extends TestCase {
 			'ciphertext' => base64_encode( 'fake' ),
 			'tag'        => base64_encode( str_repeat( 'x', 16 ) ),
 		) );
-		$this->assertNull( DEF_Core_Encryption::decrypt( $blob ) );
+		$this->assertNull( Widrow_AI_Encryption::decrypt( $blob ) );
 	}
 
 	public function test_gcm_iv_too_long_returns_null(): void {
@@ -335,7 +335,7 @@ final class EncryptionTest extends TestCase {
 			'ciphertext' => base64_encode( 'fake' ),
 			'tag'        => base64_encode( str_repeat( 'x', 16 ) ),
 		) );
-		$this->assertNull( DEF_Core_Encryption::decrypt( $blob ) );
+		$this->assertNull( Widrow_AI_Encryption::decrypt( $blob ) );
 	}
 
 	public function test_gcm_tag_too_short_returns_null(): void {
@@ -345,7 +345,7 @@ final class EncryptionTest extends TestCase {
 			'ciphertext' => base64_encode( 'fake' ),
 			'tag'        => base64_encode( str_repeat( 'x', 8 ) ),
 		) );
-		$this->assertNull( DEF_Core_Encryption::decrypt( $blob ) );
+		$this->assertNull( Widrow_AI_Encryption::decrypt( $blob ) );
 	}
 
 	public function test_gcm_tag_too_long_returns_null(): void {
@@ -355,14 +355,14 @@ final class EncryptionTest extends TestCase {
 			'ciphertext' => base64_encode( 'fake' ),
 			'tag'        => base64_encode( str_repeat( 'x', 32 ) ),
 		) );
-		$this->assertNull( DEF_Core_Encryption::decrypt( $blob ) );
+		$this->assertNull( Widrow_AI_Encryption::decrypt( $blob ) );
 	}
 
 	// ── 10. Unknown version ─────────────────────────────────────────────
 
 	public function test_unknown_version_returns_null(): void {
 		$blob = wp_json_encode( array( 'version' => 99, 'data' => 'something' ) );
-		$this->assertNull( DEF_Core_Encryption::decrypt( $blob ) );
+		$this->assertNull( Widrow_AI_Encryption::decrypt( $blob ) );
 	}
 
 	// ── 11. JSON without version → plaintext ────────────────────────────
@@ -370,33 +370,33 @@ final class EncryptionTest extends TestCase {
 	public function test_json_without_version_treated_as_plaintext(): void {
 		$json_value = '{"foo":"bar","baz":123}';
 		update_option( 'test_option', $json_value );
-		$this->assertSame( $json_value, DEF_Core_Encryption::get_secret( 'test_option' ) );
+		$this->assertSame( $json_value, Widrow_AI_Encryption::get_secret( 'test_option' ) );
 	}
 
 	// ── 12. Successful decrypt does not set error transient ─────────────
 
 	public function test_successful_decrypt_no_error_transient(): void {
-		DEF_Core_Encryption::set_secret( 'def_core_api_key', 'valid-secret' );
-		$this->assertSame( 'valid-secret', DEF_Core_Encryption::get_secret( 'def_core_api_key' ) );
-		$this->assertFalse( get_transient( DEF_Core_Encryption::TRANSIENT_ENCRYPTION_ERROR ) );
+		Widrow_AI_Encryption::set_secret( 'widrow_ai_api_key', 'valid-secret' );
+		$this->assertSame( 'valid-secret', Widrow_AI_Encryption::get_secret( 'widrow_ai_api_key' ) );
+		$this->assertFalse( get_transient( Widrow_AI_Encryption::TRANSIENT_ENCRYPTION_ERROR ) );
 	}
 
 	// ── 13. Multiple secrets independent ────────────────────────────────
 
 	public function test_multiple_secrets_independent(): void {
-		DEF_Core_Encryption::set_secret( 'def_core_api_key', 'api-key-value' );
-		DEF_Core_Encryption::set_secret( 'def_service_auth_secret', 'service-secret-value' );
+		Widrow_AI_Encryption::set_secret( 'widrow_ai_api_key', 'api-key-value' );
+		Widrow_AI_Encryption::set_secret( 'widrow_service_auth_secret', 'service-secret-value' );
 
-		$this->assertSame( 'api-key-value', DEF_Core_Encryption::get_secret( 'def_core_api_key' ) );
-		$this->assertSame( 'service-secret-value', DEF_Core_Encryption::get_secret( 'def_service_auth_secret' ) );
+		$this->assertSame( 'api-key-value', Widrow_AI_Encryption::get_secret( 'widrow_ai_api_key' ) );
+		$this->assertSame( 'service-secret-value', Widrow_AI_Encryption::get_secret( 'widrow_service_auth_secret' ) );
 	}
 
 	// ── 14. Special characters ──────────────────────────────────────────
 
 	public function test_special_characters_survive_roundtrip(): void {
 		$special = 'key-with-"quotes"-and-{braces}-and-$dollar-and-nüll-bytes-and-✓-unicode';
-		DEF_Core_Encryption::set_secret( 'test_special', $special );
-		$this->assertSame( $special, DEF_Core_Encryption::get_secret( 'test_special' ) );
+		Widrow_AI_Encryption::set_secret( 'test_special', $special );
+		$this->assertSame( $special, Widrow_AI_Encryption::get_secret( 'test_special' ) );
 	}
 
 }

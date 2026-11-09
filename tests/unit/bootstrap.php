@@ -5,7 +5,7 @@
  * Loads WordPress stubs and source classes under test
  * WITHOUT bootstrapping a full WordPress environment.
  *
- * @package def-core/tests/unit
+ * @package widrow-ai/tests/unit
  */
 
 declare(strict_types=1);
@@ -315,24 +315,24 @@ $_wp_test_exported_types = array();
 
 // ── Load source classes under test ──────────────────────────────────────
 // Note: Encryption is already loaded by wp-stubs.php.
-require_once DEF_CORE_PLUGIN_DIR . 'includes/class-def-core-jwt.php';
-require_once DEF_CORE_PLUGIN_DIR . 'includes/class-def-core-cache.php';
-require_once DEF_CORE_PLUGIN_DIR . 'includes/class-def-core-api-registry.php';
-require_once DEF_CORE_PLUGIN_DIR . 'includes/class-def-core-github-updater.php';
-// Stubs needed by DEF_Core_Tools (only anonymous token path tested here).
+require_once WIDROW_AI_PLUGIN_DIR . 'includes/class-widrow-ai-jwt.php';
+require_once WIDROW_AI_PLUGIN_DIR . 'includes/class-widrow-ai-cache.php';
+require_once WIDROW_AI_PLUGIN_DIR . 'includes/class-widrow-ai-api-registry.php';
+require_once WIDROW_AI_PLUGIN_DIR . 'includes/class-widrow-ai-github-updater.php';
+// Stubs needed by Widrow_AI_Tools (only anonymous token path tested here).
 if ( ! function_exists( 'is_user_logged_in' ) ) {
 	function is_user_logged_in(): bool { return false; }
 }
 if ( ! function_exists( 'wp_get_current_user' ) ) {
 	function wp_get_current_user() { return (object) array( 'ID' => 0 ); }
 }
-require_once DEF_CORE_PLUGIN_DIR . 'includes/class-def-core-tools.php';
+require_once WIDROW_AI_PLUGIN_DIR . 'includes/class-widrow-ai-tools.php';
 
-// Minimal DEF_Core_Knowledge_Export stub — the sync-nudge relevance gate calls
+// Minimal Widrow_AI_Knowledge_Export stub — the sync-nudge relevance gate calls
 // get_exported_post_types(); the real (heavy REST) class isn't needed for unit
 // tests. Returns the per-test list in $_wp_test_exported_types.
-if ( ! class_exists( 'DEF_Core_Knowledge_Export' ) ) {
-	class DEF_Core_Knowledge_Export {
+if ( ! class_exists( 'Widrow_AI_Knowledge_Export' ) ) {
+	class Widrow_AI_Knowledge_Export {
 		public static function get_exported_post_types(): array {
 			global $_wp_test_exported_types;
 			return is_array( $_wp_test_exported_types ) ? $_wp_test_exported_types : array();
@@ -340,4 +340,4 @@ if ( ! class_exists( 'DEF_Core_Knowledge_Export' ) ) {
 	}
 }
 
-require_once DEF_CORE_PLUGIN_DIR . 'includes/class-def-core-sync-nudge.php';
+require_once WIDROW_AI_PLUGIN_DIR . 'includes/class-widrow-ai-sync-nudge.php';

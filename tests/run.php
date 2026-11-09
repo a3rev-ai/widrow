@@ -1,17 +1,17 @@
 <?php
 /**
- * Test runner for def-core.
+ * Test runner for widrow-ai.
  *
  * Usage: php tests/run.php
  *
  * Runs all test-*.php files and reports aggregated results.
  *
- * @package def-core/tests
+ * @package widrow-ai/tests
  */
 
 declare(strict_types=1);
 
-echo "=== def-core test suite ===\n";
+echo "=== widrow-ai test suite ===\n";
 echo "PHP " . PHP_VERSION . "\n\n";
 
 $test_dir = __DIR__;

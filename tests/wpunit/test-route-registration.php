@@ -5,7 +5,7 @@
  * Verifies that all expected REST routes are registered with
  * correct HTTP methods and permission callbacks.
  *
- * @package def-core
+ * @package widrow-ai
  * @group routes
  */
 

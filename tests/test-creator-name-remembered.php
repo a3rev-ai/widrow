@@ -25,7 +25,7 @@
  *
  * Runs standalone (no WordPress bootstrap).
  *
- * @package def-core/tests
+ * @package widrow-ai/tests
  */
 
 declare(strict_types=1);
@@ -33,10 +33,10 @@ declare(strict_types=1);
 require_once __DIR__ . '/wp-stubs.php';
 
 global $_wp_test_current_user, $_wp_test_user_caps;
-$_wp_test_user_caps = array( 'def_staff_access' );
+$_wp_test_user_caps = array( 'widrow_staff_access' );
 
 // What the page asked WordPress for.
-$GLOBALS['_def_localized'] = array();
+$GLOBALS['_widrow_localized'] = array();
 
 // ── WP stubs the page reaches for ───────────────────────────────────────
 if ( ! class_exists( 'WP_User' ) ) {
@@ -79,7 +79,7 @@ if ( ! function_exists( 'wp_enqueue_script' ) ) {
 }
 if ( ! function_exists( 'wp_localize_script' ) ) {
 	function wp_localize_script( $handle, $name, $data ): bool {
-		$GLOBALS['_def_localized'][ $name ] = $data;
+		$GLOBALS['_widrow_localized'][ $name ] = $data;
 		return true;
 	}
 }
@@ -120,9 +120,9 @@ if ( ! function_exists( 'get_bloginfo' ) ) {
 	function get_bloginfo( string $show = '' ): string { return 'Test Site'; }
 }
 
-require_once DEF_CORE_PLUGIN_DIR . 'includes/class-def-core-staff-ai.php';
-require_once DEF_CORE_PLUGIN_DIR . 'includes/class-def-core-content-drafts-page.php';
-require_once DEF_CORE_PLUGIN_DIR . 'includes/class-def-core-oauth.php';
+require_once WIDROW_AI_PLUGIN_DIR . 'includes/class-widrow-ai-staff-ai.php';
+require_once WIDROW_AI_PLUGIN_DIR . 'includes/class-widrow-ai-content-drafts-page.php';
+require_once WIDROW_AI_PLUGIN_DIR . 'includes/class-widrow-ai-oauth.php';
 
 $_wp_test_current_user = new WP_User( 5 );
 
@@ -137,14 +137,14 @@ function check( bool $cond, string $label, string $detail = '' ): void {
 /** Render the Content AI page with $stored remembered (null = never stored). */
 function render_page_with( $stored ): string {
 	global $_wp_test_options;
-	unset( $_wp_test_options['def_core_creator_name'] );
+	unset( $_wp_test_options['widrow_ai_creator_name'] );
 	if ( null !== $stored ) {
-		$_wp_test_options['def_core_creator_name'] = $stored;
+		$_wp_test_options['widrow_ai_creator_name'] = $stored;
 	}
-	$GLOBALS['_def_localized'] = array();
+	$GLOBALS['_widrow_localized'] = array();
 	ob_start();
 	try {
-		DEF_Core_Content_Drafts_Page::render_page();
+		Widrow_AI_Content_Drafts_Page::render_page();
 	} catch ( Throwable $e ) {
 		ob_end_clean();
 		return 'THREW: ' . $e->getMessage();
@@ -185,15 +185,15 @@ check( 2 === substr_count( $copy['clusters'] ?? '', 'Caz' ), 'the Clusters sente
 
 // The point of the fix: the JS is handed the name PHP rendered, so the repaint
 // off the first list response changes nothing.
-check( 'Caz' === ( $GLOBALS['_def_localized']['DefDraftCards']['creator']['name'] ?? null ),
+check( 'Caz' === ( $GLOBALS['_widrow_localized']['DefDraftCards']['creator']['name'] ?? null ),
 	'the same name is localized for the JS, so the repaint is a no-op',
-	json_encode( $GLOBALS['_def_localized']['DefDraftCards']['creator']['name'] ?? null ) );
+	json_encode( $GLOBALS['_widrow_localized']['DefDraftCards']['creator']['name'] ?? null ) );
 
 // ── [2] Nothing remembered yet ──────────────────────────────────────────
 echo "\n[2] before DEF has ever answered, the platform default stands\n";
 $html = render_page_with( null );
 check( 'Carol - Creator' === rendered_title( $html ), 'a site that has never listed content renders the default', rendered_title( $html ) );
-check( 'Carol' === ( $GLOBALS['_def_localized']['DefDraftCards']['creator']['name'] ?? null ),
+check( 'Carol' === ( $GLOBALS['_widrow_localized']['DefDraftCards']['creator']['name'] ?? null ),
 	'and localizes the default' );
 
 // ── [3] The stored value is read back through the BFF's sanitiser ───────
@@ -212,13 +212,13 @@ check( false !== strpos( render_page_with( '<b>Caz</b>' ), '&lt;b&gt;Caz&lt;/b&g
 
 // ── [4] It goes when the tenant does ────────────────────────────────────
 echo "\n[4] uninstall and disconnect remove it\n";
-check( false !== strpos( (string) file_get_contents( DEF_CORE_PLUGIN_DIR . 'uninstall.php' ), "'def_core_creator_name'" ),
+check( false !== strpos( (string) file_get_contents( WIDROW_AI_PLUGIN_DIR . 'uninstall.php' ), "'widrow_ai_creator_name'" ),
 	'uninstall.php deletes the option with its neighbours' );
 
-$m      = new ReflectionMethod( 'DEF_Core_OAuth', 'ajax_disconnect' );
+$m      = new ReflectionMethod( 'Widrow_AI_OAuth', 'ajax_disconnect' );
 $lines  = file( (string) $m->getFileName() );
 $source = implode( '', array_slice( $lines, $m->getStartLine() - 1, $m->getEndLine() - $m->getStartLine() + 1 ) );
-check( false !== strpos( $source, "delete_option( 'def_core_creator_name' )" ),
+check( false !== strpos( $source, "delete_option( 'widrow_ai_creator_name' )" ),
 	'disconnecting forgets the name — it belonged to that tenant' );
 
 echo "\n$pass passed, $fail failed\n";
