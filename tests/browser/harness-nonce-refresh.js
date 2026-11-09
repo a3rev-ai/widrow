@@ -63,7 +63,7 @@ function boot(script, opts) {
     messages: [], renderMessages() {}, autoResize() {}, updateSendButton() {}, hideInfo() {},
     hasActiveFiles: () => false, stagedFiles: [], classifySuggestionOutcome: () => ({}),
     endConversation() {}, browserTimezone: () => '', clearStagedFiles() {}, readBack() {},
-    loadConversations() {}, updateReadOnlyState() {}, recoverTurn: async () => false, afterSpokenTurn() {},
+    loadConversations() {}, rememberConversation() {}, updateReadOnlyState() {}, recoverTurn: async () => false, afterSpokenTurn() {},
     removeTypingMessage() { const i = deps.messages.findIndex(m => m.isTyping); if (i >= 0) deps.messages.splice(i, 1); },
     dropUnfilledTranscript() {}, uploadAllStagedFiles: async () => ({ success: true, fileIds: [] }),
     console: { info() {}, error() {} }

@@ -6,6 +6,13 @@
 const { JSDOM } = require('jsdom');
 const extract = require('./extract');
 const BLOCK = extract.pageShell();
+// W88: the open chat per tab, its boot restore and loadConversation; New chat forgets it.
+const W88 = extract.slice('W88 restore',
+  l => l.includes('// W88: the open chat, per tab'), l => l.includes('// Update read-only state'),
+  ['function rememberConversation', 'function restoreConversation', 'async function loadConversation'], 'W88_RESTORE');
+const NEW_CHAT = extract.slice('resetToNewChat',
+  l => l.includes('function resetToNewChat() {'), l => l.includes('\tnewChatBtn.addEventListener'),
+  ['rememberConversation(null)']);
 
 const HTML = `<!doctype html><html><body>
 <nav>
@@ -55,6 +62,40 @@ function boot(startUrl) {
     dom, window, document, location, api, enters, leaves,
     chatVisible: () => messagesContainer.style.display !== 'none' && composerContainer.style.display !== 'none'
   };
+}
+
+// The console booting with a stored chat: the page shell, then (as at boot) the list
+// resolves after applyRoute has run and restoreConversation reads the tab's storage.
+async function bootChat(startUrl, stored, ids) {
+  const dom = new JSDOM(HTML, { url: startUrl || 'https://e.test/staff-ai/', pretendToBeVisual: true });
+  const window = dom.window, document = window.document;
+  if (stored) window.sessionStorage.setItem('def:conversation', stored);
+  const fetched = [], noop = function () {};
+  const deps = {
+    window, document, location: window.location, sessionStorage: window.sessionStorage,
+    messagesContainer: document.getElementById('messagesContainer'),
+    composerContainer: document.getElementById('composerContainer'),
+    conversationList: document.getElementById('conversationList'), enters: [], leaves: [],
+    conversations: ids.map(id => ({ id, is_shared: false })),
+    apiRequest: async p => { fetched.push(p); return { messages: [{ role: 'user', content: 'hi' }] }; },
+    composerInput: document.getElementById('composerInput'), sidebar: document.createElement('div'),
+    t: (k, d) => d, recoverTurn: async () => true, endConversation: noop, clearActiveProject: noop,
+    clearConfirmChips: noop, updateReadOnlyState: noop, renderConversationList: noop, renderMessages: noop,
+    showError: noop, removeTypingMessage: noop, toggleSidebar: noop, renderProjectChip: noop,
+    updateSendButton: noop, hideError: noop, hideInfo: noop
+  };
+  const names = Object.keys(deps);
+  const api = new window.Function(...names,
+    'var currentConversationId = null, messages = [], isReadOnly = false, conversationOn = false,' +
+    ' spokenTurn = false, _streamAbort = null, turnReleased = false, stopTurn = null;\n' +
+    BLOCK + '\n' + W88 + '\n' + NEW_CHAT + REG.replace('return {', 'return { restore: restoreConversation,' +
+      ' reset: resetToNewChat, load: loadConversation, conversation: function () { return currentConversationId; },')
+  )(...names.map(k => deps[k]));
+  api.applyRoute();
+  api.restore();
+  await new Promise(r => window.setTimeout(r, 30));
+  return { window, document, api, fetched, stored: () => window.sessionStorage.getItem('def:conversation'),
+    chatVisible: () => deps.messagesContainer.style.display !== 'none' };
 }
 
 const tick = (w, n) => new Promise(r => w.setTimeout(r, n === undefined ? 30 : n));
@@ -511,6 +552,31 @@ function check(n, label, cond, detail) {
     check(45, "an entry's own click listener runs BEFORE onEnter (the exclusion is dropped before the load)",
       order[0] === 'entry-listener' && t.enters.length === before + 1 && t.enters[before] === 'documents',
       'order=[' + order + '] enters=' + JSON.stringify(t.enters.slice(before)));
+  }
+  // W88: a reload reopens the chat this tab had open.
+  {
+    const t = await bootChat(null, 'c2', ['c1', 'c2']);
+    check(46, 'W88: boot with a stored chat that is in the list opens it',
+      t.api.conversation() === 'c2' && t.fetched.join() === '/conversations/c2' && t.stored() === 'c2' && t.chatVisible(),
+      'conv=' + t.api.conversation() + ' fetched=' + t.fetched + ' stored=' + t.stored());
+    t.api.reset();
+    check(47, 'W88: New chat forgets the stored chat',
+      t.api.conversation() === null && t.stored() === null, 'stored=' + t.stored());
+  }
+  {
+    const t = await bootChat(null, 'gone', ['c1']);
+    check(48, 'W88: boot with a stored chat deleted elsewhere lands on New Chat and drops the key',
+      t.api.conversation() === null && t.fetched.length === 0 && t.stored() === null,
+      'conv=' + t.api.conversation() + ' fetched=' + t.fetched + ' stored=' + t.stored());
+    await t.api.load('c1');
+    check(49, 'W88: opening a chat stores it for the tab', t.stored() === 'c1', 'stored=' + t.stored());
+  }
+  {
+    const t = await bootChat('https://e.test/staff-ai/#documents', 'c2', ['c1', 'c2']);
+    check(50, 'W88: reload on #documents still opens Documents, and the chat behind it is the stored one',
+      t.api.open() === 'documents' && !t.document.getElementById('documentsPane').hidden && !t.chatVisible() &&
+      t.api.conversation() === 'c2' && t.fetched.join() === '/conversations/c2',
+      'open=' + t.api.open() + ' conv=' + t.api.conversation() + ' fetched=' + t.fetched);
   }
 
   console.log(results.join('\n'));

@@ -38,7 +38,7 @@ function boot() {
     composerInput: document.getElementById('composerInput'), newChatBtn: document.getElementById('newChatBtn'),
     sidebar: document.createElement('div'), toggleSidebar: noop, endConversation: noop, showChat: noop,
     clearConfirmChips: noop, updateReadOnlyState: noop, renderConversationList: noop, renderMessages: noop,
-    updateSendButton: noop, hideError: noop, hideInfo: noop, showError: noop,
+    updateSendButton: noop, hideError: noop, hideInfo: noop, showError: noop, rememberConversation: noop,
     apiRequest: async () => ({ messages: [] })
   };
   const names = Object.keys(deps);

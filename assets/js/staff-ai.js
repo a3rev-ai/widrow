@@ -365,8 +365,8 @@ function t(key, fallback) {
 	var stagedFiles = [];
 	var uploadIdCounter = 0;
 
-	// Initialize
-	loadConversations();
+	// Initialize. A reload reopens the chat this tab had open (W88).
+	loadConversations().then(restoreConversation);
 
 	// Sidebar toggle (mobile)
 	function toggleSidebar() {
@@ -872,10 +872,30 @@ function t(key, fallback) {
 		return date.toLocaleDateString();
 	}
 
+	// W88: the open chat, per tab — sessionStorage, so two tabs never fight over one id.
+	function rememberConversation(id) {
+		try {
+			if (id) sessionStorage.setItem('def:conversation', id);
+			else sessionStorage.removeItem('def:conversation');
+		} catch (e) {}
+	}
+
+	// At boot, once the list is in: the stored chat if it is still there (a hash page opens
+	// over it as ever), else New Chat. Not if the person has already opened or sent something.
+	function restoreConversation() {
+		var id = null;
+		try { id = sessionStorage.getItem('def:conversation'); } catch (e) {}
+		if (!id || currentConversationId || messages.length) return;
+		var conv = conversations.find(function (c) { return c.id === id; });
+		if (conv) loadConversation(conv.id, conv.is_shared);
+		else rememberConversation(null);   // deleted elsewhere
+	}
+
 	// Load a specific conversation
 	async function loadConversation(id, shared) {
 		if (conversationOn) endConversation();   // a spoken turn never lands in a thread she just opened
 		currentConversationId = id;
+		rememberConversation(id);
 		// After the id: an opened chat shows no chip, and the chip reads the id (P-E2).
 		clearActiveProject();
 		isReadOnly = !!shared;
@@ -888,13 +908,28 @@ function t(key, fallback) {
 		try {
 			const result = await apiRequest('/conversations/' + encodeURIComponent(id));
 			messages = result.messages || [];
+			// W88: a reply still being written is DEF's empty placeholder: it shows as the
+			// employee working. This tab's own stream, if it is still running, fills it;
+			// otherwise the thread is polled until DEF marks it complete.
+			var last = messages[messages.length - 1];
+			var working = last && last.role === 'assistant' && last.is_complete === false;
+			if (working) messages[messages.length - 1] = { role: 'assistant', content: '', isTyping: true };
 			renderMessages();
+			if (working && !(stopTurn && stopTurn.thread === id)) {
+				recoverTurn().then(function (recovered) {
+					if (recovered || currentConversationId !== id) return;
+					removeTypingMessage();
+					renderMessages();
+					showError(t('stillWorking', 'Your assistant is still working on this — reopen the chat in a minute to see the reply.'));
+				});
+			}
 		} catch (err) {
 			console.error('Failed to load conversation:', err);
 			showError(t('failedToLoad', 'Failed to load conversation.'));
 		}
 
-		if (window.innerWidth <= 768) {
+		// Only a drawer that is open: a boot restore reaches here with it closed.
+		if (window.innerWidth <= 768 && sidebar.classList.contains('open')) {
 			toggleSidebar();
 		}
 	}
@@ -1198,6 +1233,7 @@ function t(key, fallback) {
 		// a project row's "New chat", every Ask button.
 		showChat({ focus: false });
 		currentConversationId = null;
+		rememberConversation(null);
 		renderProjectChip();
 		isReadOnly = false;
 		messages = [];
@@ -3387,6 +3423,7 @@ function t(key, fallback) {
 
 			if (result.thread_id) {
 				currentConversationId = result.thread_id;
+				rememberConversation(currentConversationId);
 			}
 
 			loadConversations();
@@ -3493,6 +3530,7 @@ function t(key, fallback) {
 				renderMessages();
 				if (jsonResult.thread_id) {
 					currentConversationId = jsonResult.thread_id;
+					rememberConversation(currentConversationId);
 				}
 				readBack(jsonResult.choices?.[0]?.message?.content || '');
 				loadConversations();
@@ -3630,7 +3668,10 @@ function t(key, fallback) {
 					// Every event names its thread (DEF #1118), so a brand-new chat knows where
 					// its reply lives from the first chunk — what recoverTurn() reloads if the
 					// stream dies before `done` (7.6.9).
-					if (evt.thread_id && !currentConversationId) currentConversationId = evt.thread_id;
+					if (evt.thread_id && !currentConversationId) {
+						currentConversationId = evt.thread_id;
+						rememberConversation(currentConversationId);
+					}
 					persona.handleEvent(evt, thinkingStatusEl);
 					if (evt.type === 'thinking') {
 						workingLine().textContent = persona.formatThinkingLabel(evt.message);
@@ -3643,6 +3684,27 @@ function t(key, fallback) {
 					} else if (evt.type === 'tool_done') {
 						completeToolStatus(toolStatusElements[evt.tool], evt.tool, evt.status, evt.label);
 						await new Promise(function(r) { setTimeout(r, SSE_TOOL_PACING_MS); });
+					} else if (evt.type === 'text_delta' && turnThread && currentConversationId !== turnThread) {
+						// W88: another chat is showing. The words are kept, not drawn; come back
+						// mid-reply and the next delta takes over the bubble loadConversation drew.
+						if (wordDrainTimer) { clearTimeout(wordDrainTimer); wordDrainTimer = null; }
+						streamBuffer += evt.text;
+						if (evt.step === 0) stepStart = streamBuffer.length;
+						streamEl = null;
+						thinkingStatusEl = null;
+						lastRenderedLen = 0;
+					} else if (evt.type === 'done' && turnThread && currentConversationId !== turnThread) {
+						// W88: another chat is showing. DEF saved the reply; opening the chat shows it.
+						if (wordDrainTimer) clearTimeout(wordDrainTimer);
+						streamBuffer = '';
+						stepStart = 0;
+						streamEl = null;
+						wordDrainTimer = null;
+						lastRenderedLen = 0;
+						thinkingStatusEl = null;
+						_isStreaming = false;
+						persona.reset();
+						loadConversations();
 					} else if (evt.type === 'text_delta') {
 						if (thinkingStatusEl) { thinkingStatusEl.remove(); thinkingStatusEl = null; }
 						if (!streamEl) {
@@ -3765,6 +3827,7 @@ function t(key, fallback) {
 
 						if (evt.thread_id) {
 							currentConversationId = evt.thread_id;
+							rememberConversation(currentConversationId);
 						}
 						dirtyInput = false;
 						loadConversations();

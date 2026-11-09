@@ -4,7 +4,7 @@ Tags: ai, chat, digital employee, ai assistant, customer support
 Requires at least: 6.2
 Tested up to: 7.1
 Requires PHP: 8.0
-Stable tag: 9.8.0
+Stable tag: 9.8.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -119,6 +119,10 @@ Chat messages, user display name, session context, and the visitor's IP address 
 4. Admin Settings — Branding, Chat Settings, Escalation, User Roles, and Connection tabs
 
 == Changelog ==
+
+= 9.8.1 - 2026-11-09 =
+* Fix - Reloading the Staff AI console reopens the conversation you had open in that tab, instead of a new chat.
+* Fix - Going back to a conversation while its reply is still being written shows the employee working, and the reply appears when it is ready, instead of an empty message. A reply finishing in one conversation no longer lands in another you have opened.
 
 = 9.8.0 - 2026-11-09 =
 * New - The Staff AI console can run on a page other than WordPress. That page supplies its own sign-in, file links and feature switches, and each release now carries the console as a static copy, staff-ai-console.zip, for it. On a WordPress site the console works exactly as before.

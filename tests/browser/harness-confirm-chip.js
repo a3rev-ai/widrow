@@ -15,7 +15,7 @@ const extract = require('./extract');
 const STREAM = extract.staffAiStream();
 // New chat and opening a conversation both clear the chips (the epoch check rests on it).
 const LEAVERS = [['function resetToNewChat() {', '\tnewChatBtn.addEventListener'],
-  ['async function loadConversation(id, shared) {', '\t\tif (window.innerWidth <= 768)']].map(([from, to]) =>
+  ['async function loadConversation(id, shared) {', '// Only a drawer that is open']].map(([from, to]) =>
   extract.slice(from, l => l.includes(from), l => l.includes(to), ['clearConfirmChips();']));
 const SEND = extract.slice('send path',
   l => l.startsWith('\tasync function sendMessage() {'),
@@ -50,7 +50,7 @@ function boot() {
     messages: [], renderMessages() {}, autoResize() {}, updateSendButton() {}, hideInfo() {}, hideError() {},
     showError() {}, showSessionExpired() {}, hasActiveFiles: () => false, stagedFiles: [],
     classifySuggestionOutcome: () => ({}), endConversation() {}, browserTimezone: () => '', clearStagedFiles() {},
-    readBack() {}, readBackSoFar() {}, loadConversations() {}, updateReadOnlyState() {}, recoverTurn: async () => false,
+    readBack() {}, readBackSoFar() {}, loadConversations() {}, rememberConversation() {}, updateReadOnlyState() {}, recoverTurn: async () => false,
     afterSpokenTurn() {}, removeTypingMessage() {}, dropUnfilledTranscript() {}, renderMarkdown: s => s,
     renderToolStatus: () => document.createElement('div'), completeToolStatus() {}, applyCitations() {},
     buildCitationMap: () => ({}), createToolOutputCard: () => null, handleSpokenStop: () => false,
@@ -63,7 +63,7 @@ function boot() {
     ' lastSuggestion = null, selectedModel = "", currentConversationId = null, activeProjectId = null,' +
     ' _streamAbort = null, _turnReachedServer = false, turnReleased = false, _eventsSeen = 0, _isStreaming = false,' +
     ' _userScrolledUp = false, dirtyInput = false, SSE_TOOL_PACING_MS = 0, eventQueue = [], processing = false,' +
-    ' chipEpoch = 0,' +
+    ' chipEpoch = 0, turnThread = null,' +
     ' toolStatusElements = {}, readbackBuffer = "", speaker = null;\n' + STREAM + '\n' + SEND +
     '\nreturn { push: async function (evts) { for (var i = 0; i < evts.length; i++) eventQueue.push(evts[i]);' +
     ' await processEventQueue(); }, leave: function () { clearConfirmChips(); },' +
