@@ -271,7 +271,9 @@ drive( 'cut_mid_stream' );
 $row = json_decode( $GLOBALS['last_log'], true );
 assert_true(
 	'warning' === ( $row['level'] ?? '' ) && 18 === ( $row['context']['errno'] ?? null )
-	&& false !== strpos( (string) ( $row['message'] ?? '' ), 'transfer closed' ),
+	// curl 8.x (ubuntu-26.04 runners, 2026-11) says "end of response with N bytes missing"; older curl said
+	// "transfer closed with N bytes remaining to read". Same errno 18, either wording.
+	&& 1 === preg_match( '/transfer closed|bytes missing/', (string) ( $row['message'] ?? '' ) ),
 	'a cut stream: one warning row carrying curl\'s errno and error (got ' . $GLOBALS['last_log'] . ')'
 );
 
