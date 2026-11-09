@@ -555,7 +555,7 @@ const PEOPLE = [
 		cap(2, 'widrow_staff_access') === '0' &&
 		// And nothing the catalog does not name can be in it: the inputs are the
 		// only source, and the server builds its writable set from the catalog too.
-		Object.keys(t.payload()).every(k => /def_(staff|management|admin)_access|widrow_role_(finance|hr|legal)/.test(k)),
+		Object.keys(t.payload()).every(k => /widrow_(staff|management|admin)_access|widrow_role_(finance|hr|legal)/.test(k)),
 		'legal=' + cap(2, 'widrow_role_legal') + ' mgmt=' + cap(2, 'widrow_management_access'));
 }
 
