@@ -479,7 +479,7 @@ final class Widrow_AI_OAuth {
 
 		// Store secrets via encryption layer.
 		Widrow_AI_Encryption::set_secret( 'widrow_ai_api_key', sanitize_text_field( $config['api_key'] ) );
-		Widrow_AI_Encryption::set_secret( 'widrow_service_auth_secret', sanitize_text_field( $config['service_auth_secret'] ) );
+		Widrow_AI_Encryption::set_secret( Widrow_AI_Encryption::SERVICE_SECRET_OPTION, sanitize_text_field( $config['service_auth_secret'] ) );
 
 		// Store allowed origins if provided.
 		if ( isset( $config['allowed_origins'] ) && is_array( $config['allowed_origins'] ) ) {
@@ -543,7 +543,7 @@ final class Widrow_AI_OAuth {
 		// Clear local connection config.
 		delete_option( 'widrow_ai_staff_ai_api_url' );
 		delete_option( 'widrow_ai_api_key' );
-		delete_option( 'widrow_service_auth_secret' );
+		delete_option( Widrow_AI_Encryption::SERVICE_SECRET_OPTION );
 		delete_option( 'widrow_ai_conn_config_revision' );
 		delete_option( 'widrow_ai_conn_last_sync_at' );
 		delete_option( self::OPTION_DEFHO_SITE_URL );

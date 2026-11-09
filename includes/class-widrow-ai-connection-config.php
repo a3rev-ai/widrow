@@ -116,7 +116,7 @@ final class Widrow_AI_Connection_Config {
 			);
 		}
 
-		$stored_secret = Widrow_AI_Encryption::get_secret( 'widrow_service_auth_secret' );
+		$stored_secret = Widrow_AI_Encryption::get_service_secret();
 
 		if ( empty( $stored_secret ) ) {
 			return new \WP_Error(
@@ -241,7 +241,7 @@ final class Widrow_AI_Connection_Config {
 		}
 
 		// Handle service auth secret update.
-		$current_secret = Widrow_AI_Encryption::get_secret( 'widrow_service_auth_secret' );
+		$current_secret = Widrow_AI_Encryption::get_service_secret();
 		$new_secret     = sanitize_text_field( $body['service_auth_secret'] );
 		if ( $new_secret !== $current_secret ) {
 			// Store previous secret for dual-key rotation window.
@@ -249,7 +249,7 @@ final class Widrow_AI_Connection_Config {
 				Widrow_AI_Encryption::set_secret( self::OPTION_PREVIOUS_SECRET, $current_secret );
 				update_option( self::OPTION_ROTATION_EXPIRES, time() + self::ROTATION_WINDOW_SECONDS, false );
 			}
-			Widrow_AI_Encryption::set_secret( 'widrow_service_auth_secret', $new_secret );
+			Widrow_AI_Encryption::set_secret( Widrow_AI_Encryption::SERVICE_SECRET_OPTION, $new_secret );
 		}
 
 		// Handle previous API key for dual-key rotation.

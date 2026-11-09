@@ -47,13 +47,6 @@ final class Widrow_AI_Escalation {
 	private const OPTION_PREFIX = 'widrow_ai_escalation_';
 
 	/**
-	 * Option key for service auth secret.
-	 *
-	 * @var string
-	 */
-	private const SERVICE_SECRET_OPTION = 'widrow_service_auth_secret';
-
-	/**
 	 * Rate-limit window length in seconds for anonymous escalation endpoints.
 	 *
 	 * @var int
@@ -193,7 +186,7 @@ final class Widrow_AI_Escalation {
 	 * @version 1.2.1
 	 */
 	public static function get_service_secret( bool $force_regenerate = false ): string {
-		$secret = Widrow_AI_Encryption::get_secret( self::SERVICE_SECRET_OPTION );
+		$secret = Widrow_AI_Encryption::get_service_secret();
 
 		if ( empty( $secret ) || $force_regenerate ) {
 			// Generate a strong random secret using hex characters only.
@@ -201,7 +194,7 @@ final class Widrow_AI_Escalation {
 			// This avoids issues with special characters being altered by
 			// sanitize_text_field() or wp_unslash() during validation.
 			$secret = bin2hex( random_bytes( 32 ) );
-			Widrow_AI_Encryption::set_secret( self::SERVICE_SECRET_OPTION, $secret );
+			Widrow_AI_Encryption::set_secret( Widrow_AI_Encryption::SERVICE_SECRET_OPTION, $secret );
 		}
 
 		return $secret;
@@ -230,7 +223,7 @@ final class Widrow_AI_Escalation {
 		}
 
 		// Get stored secret (decrypted).
-		$stored_secret = Widrow_AI_Encryption::get_secret( self::SERVICE_SECRET_OPTION );
+		$stored_secret = Widrow_AI_Encryption::get_service_secret();
 
 		// Secret not configured.
 		if ( empty( $stored_secret ) ) {

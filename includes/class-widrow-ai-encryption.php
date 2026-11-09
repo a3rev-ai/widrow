@@ -59,6 +59,12 @@ final class Widrow_AI_Encryption {
 	public const TRANSIENT_ENCRYPTION_ERROR = 'widrow_ai_encryption_error';
 
 	/**
+	 * Option holding the DEF service secret (encrypted). Read it with
+	 * get_service_secret(); dependent plugins do, rather than by name.
+	 */
+	public const SERVICE_SECRET_OPTION = 'widrow_service_auth_secret';
+
+	/**
 	 * Encrypt a plaintext secret.
 	 *
 	 * Uses sodium if available, otherwise falls back to OpenSSL GCM.
@@ -100,6 +106,17 @@ final class Widrow_AI_Encryption {
 
 		// Unknown version.
 		return null;
+	}
+
+	/**
+	 * The DEF service secret, decrypted — the accessor for this plugin's own
+	 * readers and for dependent plugins.
+	 *
+	 * @return string|null The secret, or null if unset or unreadable.
+	 * @since 10.0.0
+	 */
+	public static function get_service_secret(): ?string {
+		return self::get_secret( self::SERVICE_SECRET_OPTION );
 	}
 
 	/**
