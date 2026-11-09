@@ -121,7 +121,7 @@ Chat messages, user display name, session context, and the visitor's IP address 
 == Changelog ==
 
 = 9.7.1 - 2026-11-09 =
-* Tweak - The plugin's icon on the Updates and plugin-details screens is now the Widrow mark. Where the screen can show it, the mark is the animated one; it stays still if your system prefers reduced motion.
+* Tweak - The plugin's icon on the Updates screen is now the Widrow mark. It is animated where your browser allows it, and stays still if your system prefers reduced motion.
 
 = 9.7.0 - 2026-11-09 =
 * New - This plugin is now Widrow AI. Its name, the wp-admin menu, its screens and notices, and its block category and editor panel all say Widrow AI. Your settings and your connection stay exactly as they are.
