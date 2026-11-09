@@ -4,7 +4,7 @@ Tags: ai, chat, digital employee, ai assistant, customer support
 Requires at least: 6.2
 Tested up to: 7.1
 Requires PHP: 8.0
-Stable tag: 9.8.0
+Stable tag: 10.0.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -119,6 +119,12 @@ Chat messages, user display name, session context, and the visitor's IP address 
 4. Admin Settings — Branding, Chat Settings, Escalation, User Roles, and Connection tabs
 
 == Changelog ==
+
+= 10.0.0 - 2026-11-09 =
+* New - A major release: the plugin's code names, file names and text domain are now Widrow AI. Its folder and main file are now widrow-ai/widrow-ai.php.
+* Tweak - Install this release by hand, not from Updates: deactivate the old plugin, upload widrow-ai.zip and activate it, and only then delete the old plugin. Your settings and your connection are preserved.
+* Tweak - Your stored settings and staff roles move to their new names once, when the plugin is activated or updated.
+* Tweak - Developers: hooks, filters, classes and constants are now named widrow_ai_*, Widrow_AI_* and WIDROW_AI_*. Code that used the def_core_* names needs the new ones.
 
 = 9.8.0 - 2026-11-09 =
 * New - The Staff AI console can run on a page other than WordPress. That page supplies its own sign-in, file links and feature switches, and each release now carries the console as a static copy, staff-ai-console.zip, for it. On a WordPress site the console works exactly as before.
@@ -1083,6 +1089,9 @@ Chat messages, user display name, session context, and the visitor's IP address 
 * GitHub Releases auto-updater for interim distribution
 
 == Upgrade Notice ==
+
+= 10.0.0 =
+Install by hand, not from Updates: deactivate the old plugin, upload widrow-ai.zip and activate it, then delete the old plugin. Delete the old plugin last, after the new one is active and its check has passed. Your settings and your connection are preserved. Custom code that hooks def_core_* names must move to widrow_ai_*.
 
 = 1.1.0 =
 Security update: Connection secrets are now encrypted at rest. Existing plaintext secrets are automatically migrated on first use. No action required — update and re-push connection config from DEFHO portal.

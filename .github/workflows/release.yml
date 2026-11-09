@@ -34,17 +34,10 @@ jobs:
           cd build
           zip -r ../widrow-ai.zip widrow-ai/
 
-          # Sites on 9.6.1 or earlier look for widrow-ai.zip by name, so a
-          # release without it gives them no update. It goes when every live site
-          # is on 9.7.0 or later (W86 W6).
-          mv widrow-ai widrow-ai
-          zip -r ../widrow-ai.zip widrow-ai/
-
           # Verify structure
           echo "=== Zip contents (first 20 entries) ==="
           unzip -l ../widrow-ai.zip | head -25
           echo "=== Verifying main plugin file ==="
-          unzip -p ../widrow-ai.zip widrow-ai/widrow-ai.php | head -5
           unzip -p ../widrow-ai.zip widrow-ai/widrow-ai.php | head -5
 
       - name: Export the Staff AI console
@@ -62,7 +55,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release upload "${{ github.event.release.tag_name }}" \
-            widrow-ai.zip widrow-ai.zip staff-ai-console.zip \
+            widrow-ai.zip staff-ai-console.zip \
             --clobber
 
       # Note: README download badge is updated manually as part of the
