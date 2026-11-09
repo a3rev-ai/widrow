@@ -194,6 +194,17 @@ class DEF_Core_Staff_Roster {
 		}
 
 		$code = (int) wp_remote_retrieve_response_code( $response );
+		$body = json_decode( (string) wp_remote_retrieve_body( $response ), true );
+		if ( 409 === $code && is_array( $body ) && 'staff_ai_home_portal' === ( $body['code'] ?? null ) ) {
+			// This site's Staff AI has moved to the Tenant Portal, which keeps the
+			// roster now. Expected, so it is not a warning, and DEF wrote nothing.
+			DEF_Core_Logger::info(
+				DEF_Core_Logger::SOURCE_SYNC,
+				'Staff roster kept by the Tenant Portal',
+				array( 'status' => $code )
+			);
+			return;
+		}
 		if ( $code >= 400 ) {
 			// The status is the actionable half: 413 means the roster is over
 			// DEF's 2000-user bound, 422 that a row was malformed. Both mean

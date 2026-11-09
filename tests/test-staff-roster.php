@@ -177,7 +177,16 @@ if ( ! function_exists( 'wp_remote_post' ) ) {
 		if ( isset( $GLOBALS['_test_http_error'] ) && $GLOBALS['_test_http_error'] ) {
 			return new WP_Error( 'http_request_failed', 'Connection refused' );
 		}
-		return array( 'response' => array( 'code' => $GLOBALS['_test_http_code'] ?? 200 ) );
+		return array(
+			'response' => array( 'code' => $GLOBALS['_test_http_code'] ?? 200 ),
+			'body'     => $GLOBALS['_test_http_body'] ?? '',
+		);
+	}
+}
+
+if ( ! function_exists( 'wp_remote_retrieve_body' ) ) {
+	function wp_remote_retrieve_body( $response ) {
+		return is_array( $response ) ? ( $response['body'] ?? '' ) : '';
 	}
 }
 
@@ -438,6 +447,22 @@ foreach ( array( 413, 422, 503 ) as $code ) {
 	assert_equals( $code, $_test_logs[0]['context']['status'] ?? 0, "a $code refusal logs its response code" );
 }
 $GLOBALS['_test_http_code'] = 200;
+
+// W85 S5: on a tenancy whose Staff AI is in the Tenant Portal, DEF answers the
+// key-only push 409 with this code. That is expected: info, not a warning.
+$_test_logs                 = array();
+$GLOBALS['_test_http_code'] = 409;
+$GLOBALS['_test_http_body'] = '{"code": "staff_ai_home_portal"}';
+DEF_Core_Staff_Roster::send_roster();
+assert_equals( 'info', $_test_logs[0]['level'] ?? '', "DEF's staff_ai_home_portal 409 logs at info" );
+assert_equals( 1, count( $_test_logs ), '... and nothing else' );
+// Any other 409 is still a refusal worth a warning.
+$_test_logs                 = array();
+$GLOBALS['_test_http_body'] = '{"detail": "conflict"}';
+DEF_Core_Staff_Roster::send_roster();
+assert_equals( 'warning', $_test_logs[0]['level'] ?? '', 'another 409 still logs a warning' );
+$GLOBALS['_test_http_code'] = 200;
+$GLOBALS['_test_http_body'] = '';
 
 // ── 6. The push fires where access actually changes ─────────────────────
 echo "\n[6] Save + upgrade queue a push\n";
