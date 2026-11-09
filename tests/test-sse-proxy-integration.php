@@ -271,7 +271,10 @@ drive( 'cut_mid_stream' );
 $row = json_decode( $GLOBALS['last_log'], true );
 assert_true(
 	'warning' === ( $row['level'] ?? '' ) && 18 === ( $row['context']['errno'] ?? null )
-	&& false !== strpos( (string) ( $row['message'] ?? '' ), 'transfer closed' ),
+	// The row carries curl's own error text, whatever its wording (curl's errno-18 sentence changed
+	// between versions), never the 'normal end' fallback.
+	&& 0 === strpos( (string) ( $row['message'] ?? '' ), 'Stream ended: ' )
+	&& 'Stream ended: normal end' !== ( $row['message'] ?? '' ),
 	'a cut stream: one warning row carrying curl\'s errno and error (got ' . $GLOBALS['last_log'] . ')'
 );
 
