@@ -4,17 +4,17 @@ This guide explains how to create **module plugins** for the Widrow AI plugin th
 
 ## When to Build a Module vs a Built-in Tool
 
-widrow-ai includes **built-in tools** that conditionally register when their dependencies are detected (e.g., WooCommerce, bbPress). These are part of the core plugin and require no additional installation.
+Widrow AI includes **built-in tools** that conditionally register when their dependencies are detected (e.g., WooCommerce, bbPress). These are part of the core plugin and require no additional installation.
 
 Build a **separate module plugin** when:
 
 - The integration is **private or custom to your business** (e.g., a proprietary license system, an internal API)
-- The tool depends on **non-public or commercial plugins** that most widrow-ai users won't have (e.g., WooCommerce Subscriptions)
-- You need to **distribute the tool independently** from widrow-ai (e.g., sold separately, different release cycle)
+- The tool depends on **non-public or commercial plugins** that most Widrow AI users won't have (e.g., WooCommerce Subscriptions)
+- You need to **distribute the tool independently** from Widrow AI (e.g., sold separately, different release cycle)
 
 For a real-world example of a module plugin, see [def-wc-subscriptions](https://github.com/a3rev-ai/def-wc-subscriptions) — a WooCommerce Subscriptions integration built as a separate module because WC Subscriptions is a commercial plugin.
 
-If your integration is for a **widely-used free/open-source plugin** (bbPress, etc.), consider contributing a built-in tool to widrow-ai instead — submit a PR at [github.com/a3rev-ai/widrow](https://github.com/a3rev-ai/widrow). Built-in tools use the same `Widrow_AI_Tool_Base` class with `should_register()` for conditional activation.
+If your integration is for a **widely-used free/open-source plugin** (bbPress, etc.), consider contributing a built-in tool to Widrow AI instead — submit a PR at [github.com/a3rev-ai/widrow](https://github.com/a3rev-ai/widrow). Built-in tools use the same `Widrow_AI_Tool_Base` class with `should_register()` for conditional activation.
 
 ## Overview
 

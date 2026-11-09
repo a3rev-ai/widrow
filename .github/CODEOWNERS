@@ -1,4 +1,4 @@
-# CODEOWNERS — widrow-ai (public WordPress plugin)
+# CODEOWNERS — Widrow AI (public WordPress plugin)
 #
 # Owners listed here become REQUIRED reviewers on any PR touching the matched paths
 # (the main-branch ruleset enforces "require code owner review").
@@ -7,7 +7,7 @@
 # Write here (his only repo) but is NOT a core-maintainer, so every PR — and every
 # crown-jewel path — needs a core-maintainer's review before it can merge.
 
-# Default: every change to widrow-ai requires a core-maintainer review.
+# Default: every change to Widrow AI requires a core-maintainer review.
 *                                               @a3rev-ai/core-maintainers
 
 # --- Bridge security: HMAC, OAuth, JWT, encryption (the DEF<->WP trust boundary) ---
