@@ -2,7 +2,7 @@
  * Customer Chat opening message - behavioural harness (v8.6.0), 6 checks.
  *
  * Runs the SHIPPED renderOpeningMessage() block (extracted by marker from
- * assets/js/def-core-customer-chat.js) inside jsdom over a fake of its closure.
+ * assets/js/widrow-ai-customer-chat.js) inside jsdom over a fake of its closure.
  *
  * What it holds: a site's own opening message replaces the built-in greeting,
  * as text with its line breaks; markup in it stays literal; blank or missing

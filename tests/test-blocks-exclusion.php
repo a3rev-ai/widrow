@@ -2,8 +2,8 @@
 /**
  * Block-edit bridge (Adapter G) — ingestion-exclusion guard tests.
  *
- * Verifies that DEF_Core_Blocks honours the existing per-item exclusion flag
- * (DEF_Core_Knowledge_Exclusion::is_excluded — the _def_exclude_from_ingestion
+ * Verifies that Widrow_AI_Blocks honours the existing per-item exclusion flag
+ * (Widrow_AI_Knowledge_Exclusion::is_excluded — the _widrow_exclude_from_ingestion
  * meta) at the live-write boundary:
  *  - GET  /content/blocks manifest reports `excluded` true/false.
  *  - POST /content/blocks/{id}/apply REFUSES an excluded item with
@@ -16,7 +16,7 @@
  *
  * Runs standalone (no WordPress bootstrap).
  *
- * @package def-core/tests
+ * @package widrow-ai/tests
  */
 
 declare(strict_types=1);
@@ -123,8 +123,8 @@ if ( ! function_exists( 'wp_update_post' ) ) {
 	}
 }
 
-require_once DEF_CORE_PLUGIN_DIR . 'includes/class-def-core-knowledge-exclusion.php';
-require_once DEF_CORE_PLUGIN_DIR . 'includes/class-def-core-blocks.php';
+require_once WIDROW_AI_PLUGIN_DIR . 'includes/class-widrow-ai-knowledge-exclusion.php';
+require_once WIDROW_AI_PLUGIN_DIR . 'includes/class-widrow-ai-blocks.php';
 
 $_SERVER['HTTP_X_DEF_USER'] = '5';
 
@@ -147,7 +147,7 @@ function assert_same( $expected, $actual, string $label ): void {
 
 // Reflection helpers to compute fingerprint / sha / extract_inner the same way
 // the handler does, so the non-excluded apply uses real matching values.
-$ref = new ReflectionClass( 'DEF_Core_Blocks' );
+$ref = new ReflectionClass( 'Widrow_AI_Blocks' );
 function priv( ReflectionClass $ref, string $m, array $args ) {
 	$mm = $ref->getMethod( $m );
 	$mm->setAccessible( true );
@@ -169,10 +169,10 @@ $base_sha    = priv( $ref, 'sha', array( (string) $inner_old ) );
 
 // ── 1. Manifest reports excluded = true ─────────────────────────────────
 echo "[1] manifest reports excluded=true for a flagged item\n";
-$GLOBALS['t_meta'] = array( '_def_exclude_from_ingestion' => '1' );
+$GLOBALS['t_meta'] = array( '_widrow_exclude_from_ingestion' => '1' );
 $req = new WP_REST_Request( 'GET', '' );
 $req->set_param( 'item_id', 5 );
-$resp = DEF_Core_Blocks::rest_manifest( $req );
+$resp = Widrow_AI_Blocks::rest_manifest( $req );
 assert_true( $resp instanceof WP_REST_Response, 'manifest returns a response' );
 $data = $resp->get_data();
 assert_same( true, $data['excluded'], 'excluded=true present in manifest' );
@@ -180,15 +180,15 @@ assert_same( true, $data['body_editable'], 'still reports body_editable (manifes
 
 // ── 2. Manifest reports excluded = false ────────────────────────────────
 echo "[2] manifest reports excluded=false for an unflagged item\n";
-$GLOBALS['t_meta'] = array( '_def_exclude_from_ingestion' => '' );
+$GLOBALS['t_meta'] = array( '_widrow_exclude_from_ingestion' => '' );
 $req = new WP_REST_Request( 'GET', '' );
 $req->set_param( 'item_id', 5 );
-$data = DEF_Core_Blocks::rest_manifest( $req )->get_data();
+$data = Widrow_AI_Blocks::rest_manifest( $req )->get_data();
 assert_same( false, $data['excluded'], 'excluded=false present in manifest' );
 
 // ── 3. Apply REFUSES an excluded item — no parse, no write ──────────────
 echo "[3] apply refuses an excluded item before any write\n";
-$GLOBALS['t_meta']        = array( '_def_exclude_from_ingestion' => '1' );
+$GLOBALS['t_meta']        = array( '_widrow_exclude_from_ingestion' => '1' );
 $GLOBALS['t_parse_calls'] = 0;
 $GLOBALS['t_update_calls'] = array();
 $req = new WP_REST_Request( 'POST', '' );
@@ -197,7 +197,7 @@ $req->set_json( array(
 	'fingerprint' => $fingerprint,
 	'patches'     => array( array( 'path' => '0', 'inner_html' => 'new', 'base_sha' => $base_sha ) ),
 ) );
-$resp = DEF_Core_Blocks::rest_apply( $req );
+$resp = Widrow_AI_Blocks::rest_apply( $req );
 $data = $resp->get_data();
 assert_same( 'excluded', $data['status'], 'apply returns status=excluded' );
 assert_same( 0, $GLOBALS['t_parse_calls'], 'no parse_blocks — refused before parse/serialize' );
@@ -205,7 +205,7 @@ assert_same( array(), $GLOBALS['t_update_calls'], 'no wp_update_post — no writ
 
 // ── 4. Apply on a NON-excluded item still writes the patch ──────────────
 echo "[4] apply still applies a non-excluded item\n";
-$GLOBALS['t_meta']         = array( '_def_exclude_from_ingestion' => '' );
+$GLOBALS['t_meta']         = array( '_widrow_exclude_from_ingestion' => '' );
 $GLOBALS['t_parse_calls']  = 0;
 $GLOBALS['t_update_calls'] = array();
 $req = new WP_REST_Request( 'POST', '' );
@@ -214,7 +214,7 @@ $req->set_json( array(
 	'fingerprint' => $fingerprint,
 	'patches'     => array( array( 'path' => '0', 'inner_html' => 'new', 'base_sha' => $base_sha ) ),
 ) );
-$data = DEF_Core_Blocks::rest_apply( $req )->get_data();
+$data = Widrow_AI_Blocks::rest_apply( $req )->get_data();
 assert_same( 'applied', $data['status'], 'non-excluded item applies' );
 assert_same( 1, count( $GLOBALS['t_update_calls'] ), 'wp_update_post called exactly once' );
 assert_same( 5, (int) $GLOBALS['t_update_calls'][0]['ID'], 'write targets the right post' );

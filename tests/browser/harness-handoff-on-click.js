@@ -40,7 +40,7 @@ const OFFER = { type: 'escalation_offer', reason: 'Wants a partner to set up the
 // ── Joe ──────────────────────────────────────────────────────────────────────
 const CC_MODULE = extract.customerChatSource();
 const CC_VENDOR = ['assets/js/def-persona.js', 'assets/js/vendor/marked.min.js', 'assets/js/vendor/purify.min.js',
-	'assets/js/def-core-product-cards.js'].map(read);
+	'assets/js/widrow-ai-product-cards.js'].map(read);
 const CC = {
 	apiBaseUrl: 'https://api.example.test',
 	chatStreamUrl: 'https://shop.test/wp-json/def-core/v1/chat/stream',

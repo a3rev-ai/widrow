@@ -6,7 +6,7 @@
  * anyone adds. It is now one row per person: Staff | Management | neither as a
  * pill control, the vault roles as wrapping chips with a + Add role listbox, and
  * a filter above the list. The capability state did NOT move: every capability
- * is still carried by a .def-core-role-cb input, and the payload the save
+ * is still carried by a .widrow-ai-role-cb input, and the payload the save
  * submits is the payload the matrix submitted. That is the claim this file
  * holds — and it holds it by calling the SHIPPED accessPayload(), not by
  * rebuilding the loop, because a rebuilt loop only ever tests its own copy.
@@ -14,7 +14,7 @@
  * Four parts, because the screen has four:
  *
  *  1-42. THE BEHAVIOUR, in jsdom, over the SHIPPED block — sliced out of
- *        assets/js/def-core-admin.js by the S3 markers (extract.userAccess), so
+ *        assets/js/widrow-ai-admin.js by the S3 markers (extract.userAccess), so
  *        these are the shipped lines and not a copy that can drift. Every check
  *        drives the DOM the way a person would, through the shipped
  *        initAccessRows(): nothing here calls the renderer or the filter behind
@@ -32,7 +32,7 @@
  *        9-12 and 20-21 — the render must not INVENT a level for a row that
  *        stores none. A DEF Admin who never opens the console is a supported
  *        setup ("DEF-Admin alone is NOT a roster row",
- *        class-def-core-staff-roster.php), so a render that defaults such rows
+ *        class-widrow-ai-staff-roster.php), so a render that defaults such rows
  *        to Staff hands every one of them a console login the moment anyone
  *        presses Save — for someone else, with nothing on screen to show for it.
  *        20-21 are the same bug reached from the Setup Assistant: it revokes a
@@ -64,7 +64,7 @@
  *        capabilities with no branch that turns "neither" into a level.
  *
  * 54-60. THE RESPONSIVE RULES AND THE HIDDEN INPUTS, read out of
- *        assets/css/def-core-admin.css. Below
+ *        assets/css/widrow-ai-admin.css. Below
  *        782px the table presentation is REPLACED by stacked blocks with visible
  *        cell labels. Check 56 is subtle and was a real bug: the stacked layout
  *        sets display:block on every tr, `hidden` is only display:none in the UA
@@ -100,7 +100,7 @@
  * Two targeted mutations of the CURRENT block, which are the ones to re-run
  * after touching either area:
  *
- *   - narrow accessPayload's selector to `.def-core-role-cb:not([hidden])` —
+ *   - narrow accessPayload's selector to `.widrow-ai-role-cb:not([hidden])` —
  *     which would revoke every access level and every vault role on Save, those
  *     inputs being exactly the hidden ones — and 12 checks go red.
  *   - make the pill click always select (`setAccessLevel(row, pair[0])`) instead
@@ -118,8 +118,8 @@ const extract = require('./extract');
 
 const BLOCK = extract.userAccess();
 const TEMPLATE = fs.readFileSync(path.join(extract.REPO, 'templates/admin-settings.php'), 'utf8');
-const ADMIN_JS = fs.readFileSync(path.join(extract.REPO, 'assets/js/def-core-admin.js'), 'utf8');
-const ADMIN_CSS = fs.readFileSync(path.join(extract.REPO, 'assets/css/def-core-admin.css'), 'utf8');
+const ADMIN_JS = fs.readFileSync(path.join(extract.REPO, 'assets/js/widrow-ai-admin.js'), 'utf8');
+const ADMIN_CSS = fs.readFileSync(path.join(extract.REPO, 'assets/css/widrow-ai-admin.css'), 'utf8');
 
 let pass = 0, fail = 0;
 const results = [];
@@ -133,7 +133,7 @@ function check(label, cond, detail) {
 // ── The fixture ─────────────────────────────────────────────────────────────
 //
 // The tenant's catalog, as the server resolves it: {slug, name} and nothing
-// else — there is no description to put under a name (class-def-core-tools.php
+// else — there is no description to put under a name (class-widrow-ai-tools.php
 // sanitize_roles_catalog drops everything but the two).
 const CATALOG = [
 	{ slug: 'finance', name: 'Finance' },
@@ -146,60 +146,60 @@ const CATALOG = [
 // a DOM the screen never produces.
 function rowMarkup(u) {
 	const cap = (c, on, hidden) =>
-		'<input type="checkbox" class="def-core-role-cb' + (c === 'def_admin_access' ? ' def-core-admin-cb' : '') +
+		'<input type="checkbox" class="widrow-ai-role-cb' + (c === 'widrow_admin_access' ? ' widrow-ai-admin-cb' : '') +
 		'" data-user="' + u.id + '" data-cap="' + c + '"' + (on ? ' checked' : '') + (hidden ? ' hidden' : '') + ' />';
 	const roles = u.roles || [];
-	return '<tr class="def-core-user-row" data-user-id="' + u.id + '" data-roles="' + roles.join(' ') + '">' +
-		'<td class="def-core-cell-user" data-label="User"><strong>' + u.name + '</strong></td>' +
-		'<td class="def-core-cell-wp" data-label="WordPress role">' + (u.wp || 'Subscriber') + '</td>' +
-		'<td class="def-core-cell-access" data-label="Access level">' +
-			cap('def_staff_access', u.level === 'staff', true) +
-			cap('def_management_access', u.level === 'management', true) +
+	return '<tr class="widrow-ai-user-row" data-user-id="' + u.id + '" data-roles="' + roles.join(' ') + '">' +
+		'<td class="widrow-ai-cell-user" data-label="User"><strong>' + u.name + '</strong></td>' +
+		'<td class="widrow-ai-cell-wp" data-label="WordPress role">' + (u.wp || 'Subscriber') + '</td>' +
+		'<td class="widrow-ai-cell-access" data-label="Access level">' +
+			cap('widrow_staff_access', u.level === 'staff', true) +
+			cap('widrow_management_access', u.level === 'management', true) +
 		'</td>' +
-		'<td class="def-core-cell-roles" data-label="Roles">' +
-			CATALOG.map(r => cap('def_role_' + r.slug, roles.indexOf(r.slug) !== -1, true)).join('') +
+		'<td class="widrow-ai-cell-roles" data-label="Roles">' +
+			CATALOG.map(r => cap('widrow_role_' + r.slug, roles.indexOf(r.slug) !== -1, true)).join('') +
 		'</td>' +
-		'<td class="def-core-cell-admin" data-label="DEF Admin">' + cap('def_admin_access', !!u.admin, false) + '</td>' +
-		'<td class="def-core-cell-actions" data-label="Actions">' +
-			'<button type="button" class="def-core-remove-user-btn" data-user-id="' + u.id + '">&times;</button>' +
+		'<td class="widrow-ai-cell-admin" data-label="DEF Admin">' + cap('widrow_admin_access', !!u.admin, false) + '</td>' +
+		'<td class="widrow-ai-cell-actions" data-label="Actions">' +
+			'<button type="button" class="widrow-ai-remove-user-btn" data-user-id="' + u.id + '">&times;</button>' +
 		'</td></tr>';
 }
 
 // A role name out of the DEFHO catalog carrying $& and $' — the characters a
 // string-form String.replace() expands. Used by the i18n checks below.
 function accessNameProbe(window, api, document) {
-	window.defCoreAdmin.rolesCatalog = [{ slug: 'legal', name: "$& Legal $'" }];
-	const row = document.querySelector('tr.def-core-user-row');
-	const cb = row.querySelector('[data-cap="def_role_legal"]');
+	window.widrowAiAdmin.rolesCatalog = [{ slug: 'legal', name: "$& Legal $'" }];
+	const row = document.querySelector('tr.widrow-ai-user-row');
+	const cb = row.querySelector('[data-cap="widrow_role_legal"]');
 	cb.checked = true;
 	cb.dispatchEvent(new window.Event('change', { bubbles: true }));
-	const x = row.querySelector('.def-core-chip-remove');
+	const x = row.querySelector('.widrow-ai-chip-remove');
 	return x && x.getAttribute('aria-label');
 }
 
 function boot(users) {
 	const dom = new JSDOM('<!doctype html><html><body>' +
-		'<div class="def-core-access-toolbar">' +
-		'<label for="def-core-role-filter">Show people with role</label>' +
-		'<select id="def-core-role-filter" class="def-core-role-filter">' +
+		'<div class="widrow-ai-access-toolbar">' +
+		'<label for="widrow-ai-role-filter">Show people with role</label>' +
+		'<select id="widrow-ai-role-filter" class="widrow-ai-role-filter">' +
 		'<option value="">All roles</option>' +
 		CATALOG.map(r => '<option value="' + r.slug + '">' + r.name + '</option>').join('') +
-		'</select><span id="def-core-access-count" class="def-core-access-count"></span></div>' +
-		'<table class="def-core-roles-table"><tbody id="def-core-roles-tbody">' +
+		'</select><span id="widrow-ai-access-count" class="widrow-ai-access-count"></span></div>' +
+		'<table class="widrow-ai-roles-table"><tbody id="widrow-ai-roles-tbody">' +
 		users.map(rowMarkup).join('') +
 		'</tbody></table></body></html>');
 
 	const window = dom.window, document = window.document;
-	window.defCoreAdmin = { rolesCatalog: CATALOG };
+	window.widrowAiAdmin = { rolesCatalog: CATALOG };
 
 	const api = new window.Function('window', 'document',
 		BLOCK + '\nreturn { initAccessRows: initAccessRows, accessPayload: accessPayload };'
 	)(window, document);
 
-	const tbody = document.getElementById('def-core-roles-tbody');
-	const countEl = document.getElementById('def-core-access-count');
-	const filterEl = document.getElementById('def-core-role-filter');
-	const rows = () => Array.from(tbody.querySelectorAll('tr.def-core-user-row'));
+	const tbody = document.getElementById('widrow-ai-roles-tbody');
+	const countEl = document.getElementById('widrow-ai-access-count');
+	const filterEl = document.getElementById('widrow-ai-role-filter');
+	const rows = () => Array.from(tbody.querySelectorAll('tr.widrow-ai-user-row'));
 
 	// The whole screen, wired by the SHIPPED function — the rows decorated, the
 	// row listener attached, the select bound and the count filled. Nothing
@@ -210,7 +210,7 @@ function boot(users) {
 	const row = id => tbody.querySelector('tr[data-user-id="' + id + '"]');
 	// The SHIPPED accessPayload, not a re-implementation of it. A harness that
 	// rebuilds the payload loop tests its own copy and nothing else: narrow the
-	// real selector to `.def-core-role-cb:not([hidden])` — which revokes every
+	// real selector to `.widrow-ai-role-cb:not([hidden])` — which revokes every
 	// access level and every vault role on Save, those inputs being exactly the
 	// hidden ones — and a copied loop stays green straight through it.
 	const payload = () => {
@@ -222,7 +222,7 @@ function boot(users) {
 		document, tbody, row, payload,
 		// Exactly what the Setup Assistant drawer does: write the inputs the
 		// server has already committed, then announce it with one change.
-		syncRow: id => row(id).querySelector('.def-core-role-cb')
+		syncRow: id => row(id).querySelector('.widrow-ai-role-cb')
 			.dispatchEvent(new window.Event('change', { bubbles: true })),
 		// Through the select, so the shipped binding is what runs.
 		filter: slug => {
@@ -231,16 +231,16 @@ function boot(users) {
 		},
 		visible: () => rows().filter(r => !r.hidden).map(r => r.dataset.userId),
 		count: () => countEl.textContent,
-		chips: id => Array.from(row(id).querySelectorAll('.def-core-chip')).map(c => c.dataset.role),
-		chipLabels: id => Array.from(row(id).querySelectorAll('.def-core-chip-label')).map(c => c.textContent),
-		choices: id => Array.from(row(id).querySelectorAll('.def-core-role-option')).map(o => o.dataset.role),
-		addBtn: id => row(id).querySelector('.def-core-add-role'),
-		menu: id => row(id).querySelector('.def-core-role-menu'),
+		chips: id => Array.from(row(id).querySelectorAll('.widrow-ai-chip')).map(c => c.dataset.role),
+		chipLabels: id => Array.from(row(id).querySelectorAll('.widrow-ai-chip-label')).map(c => c.textContent),
+		choices: id => Array.from(row(id).querySelectorAll('.widrow-ai-role-option')).map(o => o.dataset.role),
+		addBtn: id => row(id).querySelector('.widrow-ai-add-role'),
+		menu: id => row(id).querySelector('.widrow-ai-role-menu'),
 		// One option in one row's menu, or null. Null-safe on purpose: a bite
 		// fixture that renders no menu at all must fail CHECKS, not crash the
 		// file before the checks that are meant to catch it have run.
 		option: (id, slug) => {
-			const m = row(id).querySelector('.def-core-role-menu');
+			const m = row(id).querySelector('.widrow-ai-role-menu');
 			return m && m.querySelector('[data-role="' + slug + '"]');
 		},
 		focused: () => (document.activeElement && document.activeElement.className) || '(none)',
@@ -255,7 +255,7 @@ const PEOPLE = [
 	{ id: 2, name: 'Sam Staff', wp: 'Editor', level: 'staff', roles: ['finance'], admin: false },
 	{ id: 3, name: 'Robin Roleless', wp: 'Subscriber', level: 'staff', roles: [], admin: false },
 	// Stores NEITHER level: a DEF Admin who administers the settings page and has
-	// no Staff-AI seat. class-def-core-staff-roster.php calls this out in so many
+	// no Staff-AI seat. class-widrow-ai-staff-roster.php calls this out in so many
 	// words — "DEF-Admin alone is NOT a roster row" — so it is a supported setup
 	// and not a gap to be tidied away by the screen that renders it.
 	{ id: 4, name: 'Dana DefAdmin', wp: 'Administrator', level: '', roles: [], admin: true },
@@ -264,7 +264,7 @@ const PEOPLE = [
 // ── 1-4. Staff ↔ Management: exactly one, always ────────────────────────────
 {
 	const t = boot(PEOPLE);
-	const opts = id => Array.from(t.row(id).querySelectorAll('.def-core-access-opt[aria-checked="true"]'))
+	const opts = id => Array.from(t.row(id).querySelectorAll('.widrow-ai-access-opt[aria-checked="true"]'))
 		.map(o => o.dataset.level);
 
 	check('the rendered level is the one the inputs carry — exactly one option selected',
@@ -274,67 +274,67 @@ const PEOPLE = [
 	// The whole reason the two checkboxes are gone: they could BOTH be cleared,
 	// and a person with neither capability has no console access while still
 	// sitting in the list looking like they do.
-	t.click(t.row(3).querySelector('.def-core-access-opt[data-level="management"]'));
+	t.click(t.row(3).querySelector('.widrow-ai-access-opt[data-level="management"]'));
 	check('choosing Management selects exactly one option and writes both inputs',
 		opts(3).join() === 'management' &&
-		t.row(3).querySelector('[data-cap="def_management_access"]').checked === true &&
-		t.row(3).querySelector('[data-cap="def_staff_access"]').checked === false,
+		t.row(3).querySelector('[data-cap="widrow_management_access"]').checked === true &&
+		t.row(3).querySelector('[data-cap="widrow_staff_access"]').checked === false,
 		'selected=' + opts(3).join());
 
-	t.click(t.row(3).querySelector('.def-core-access-opt[data-level="staff"]'));
+	t.click(t.row(3).querySelector('.widrow-ai-access-opt[data-level="staff"]'));
 	check('choosing Staff back again leaves exactly one selected, the other cleared',
 		opts(3).join() === 'staff' &&
-		t.row(3).querySelector('[data-cap="def_staff_access"]').checked === true &&
-		t.row(3).querySelector('[data-cap="def_management_access"]').checked === false,
+		t.row(3).querySelector('[data-cap="widrow_staff_access"]').checked === true &&
+		t.row(3).querySelector('[data-cap="widrow_management_access"]').checked === false,
 		'selected=' + opts(3).join());
 
 	// A seat has to be REVOCABLE. Clicking the lit pill clears it, leaving
 	// neither — otherwise the only way to take away a person's Staff AI access
 	// is the × that strips their DEF Admin and every vault role with it, which
 	// is a different decision than the one being made.
-	t.click(t.row(3).querySelector('.def-core-access-opt[data-level="staff"]'));
+	t.click(t.row(3).querySelector('.widrow-ai-access-opt[data-level="staff"]'));
 	check('clicking the lit pill again clears it, leaving neither selected',
 		opts(3).length === 0 &&
-		t.row(3).querySelector('[data-cap="def_staff_access"]').checked === false &&
-		t.row(3).querySelector('[data-cap="def_management_access"]').checked === false,
+		t.row(3).querySelector('[data-cap="widrow_staff_access"]').checked === false &&
+		t.row(3).querySelector('[data-cap="widrow_management_access"]').checked === false,
 		'selected=' + opts(3).join());
 
 	check('and the cleared level submits both capabilities as 0',
-		t.payload()['roles[3][def_staff_access]'] === '0' &&
-		t.payload()['roles[3][def_management_access]'] === '0',
-		'staff=' + t.payload()['roles[3][def_staff_access]'] +
-		' mgmt=' + t.payload()['roles[3][def_management_access]']);
+		t.payload()['roles[3][widrow_staff_access]'] === '0' &&
+		t.payload()['roles[3][widrow_management_access]'] === '0',
+		'staff=' + t.payload()['roles[3][widrow_staff_access]'] +
+		' mgmt=' + t.payload()['roles[3][widrow_management_access]']);
 
 	// Revoking the seat is not revoking everything else.
 	{
 		const t2 = boot(PEOPLE);
 		const before = t2.payload();
-		t2.click(t2.row(2).querySelector('.def-core-access-opt[data-level="staff"]'));
+		t2.click(t2.row(2).querySelector('.widrow-ai-access-opt[data-level="staff"]'));
 		const after = t2.payload();
 		check('clearing the level leaves DEF Admin and the vault roles untouched',
-			after['roles[2][def_role_finance]'] === before['roles[2][def_role_finance]'] &&
-			after['roles[2][def_admin_access]'] === before['roles[2][def_admin_access]'] &&
+			after['roles[2][widrow_role_finance]'] === before['roles[2][widrow_role_finance]'] &&
+			after['roles[2][widrow_admin_access]'] === before['roles[2][widrow_admin_access]'] &&
 			t2.chips(2).join() === 'finance' &&
-			after['roles[2][def_staff_access]'] === '0',
-			'finance=' + after['roles[2][def_role_finance]'] + ' chips=' + t2.chips(2));
+			after['roles[2][widrow_staff_access]'] === '0',
+			'finance=' + after['roles[2][widrow_role_finance]'] + ' chips=' + t2.chips(2));
 
 		// Management clears the same way — it is the pill, not the level.
 		const t3 = boot(PEOPLE);
-		t3.click(t3.row(1).querySelector('.def-core-access-opt[data-level="management"]'));
+		t3.click(t3.row(1).querySelector('.widrow-ai-access-opt[data-level="management"]'));
 		check('Management clears on a second click too',
-			t3.row(1).querySelectorAll('.def-core-access-opt[aria-checked="true"]').length === 0 &&
-			t3.payload()['roles[1][def_management_access]'] === '0' &&
-			t3.payload()['roles[1][def_staff_access]'] === '0' &&
-			t3.payload()['roles[1][def_admin_access]'] === '1',
-			'mgmt=' + t3.payload()['roles[1][def_management_access]']);
+			t3.row(1).querySelectorAll('.widrow-ai-access-opt[aria-checked="true"]').length === 0 &&
+			t3.payload()['roles[1][widrow_management_access]'] === '0' &&
+			t3.payload()['roles[1][widrow_staff_access]'] === '0' &&
+			t3.payload()['roles[1][widrow_admin_access]'] === '1',
+			'mgmt=' + t3.payload()['roles[1][widrow_management_access]']);
 	}
 
 	// And out of neither, a pill still lands exactly one.
-	t.click(t.row(3).querySelector('.def-core-access-opt[data-level="management"]'));
+	t.click(t.row(3).querySelector('.widrow-ai-access-opt[data-level="management"]'));
 	check('selecting from neither lands exactly one again',
 		opts(3).join() === 'management' &&
-		t.payload()['roles[3][def_management_access]'] === '1' &&
-		t.payload()['roles[3][def_staff_access]'] === '0',
+		t.payload()['roles[3][widrow_management_access]'] === '1' &&
+		t.payload()['roles[3][widrow_staff_access]'] === '0',
 		'selected=' + opts(3).join());
 
 	// THE ONE THE PANEL CAUGHT. A row that stores neither level must render as
@@ -344,33 +344,33 @@ const PEOPLE = [
 	// Save — for someone else entirely, with nothing on screen to show for it.
 	check('a person who stores neither level renders as neither, and keeps it',
 		opts(4).length === 0 &&
-		t.row(4).querySelector('[data-cap="def_staff_access"]').checked === false &&
-		t.row(4).querySelector('[data-cap="def_management_access"]').checked === false,
+		t.row(4).querySelector('[data-cap="widrow_staff_access"]').checked === false &&
+		t.row(4).querySelector('[data-cap="widrow_management_access"]').checked === false,
 		'selected=' + opts(4).join());
 
 	check('and submits neither — the render did not stage a grant',
-		t.payload()['roles[4][def_staff_access]'] === '0' &&
-		t.payload()['roles[4][def_management_access]'] === '0' &&
-		t.payload()['roles[4][def_admin_access]'] === '1',
-		JSON.stringify(t.payload()['roles[4][def_staff_access]']));
+		t.payload()['roles[4][widrow_staff_access]'] === '0' &&
+		t.payload()['roles[4][widrow_management_access]'] === '0' &&
+		t.payload()['roles[4][widrow_admin_access]'] === '1',
+		JSON.stringify(t.payload()['roles[4][widrow_staff_access]']));
 
 	// The group is still reachable: with nothing selected there is no obvious
 	// tab stop, so the first option carries it.
 	check('a row with no level chosen is still reachable from the keyboard',
-		(t.row(4).querySelector('.def-core-access-opt[data-level="staff"]') || {}).tabIndex === 0);
+		(t.row(4).querySelector('.widrow-ai-access-opt[data-level="staff"]') || {}).tabIndex === 0);
 
 	// And a person can still choose one — "exactly one" is a property of the
 	// interaction, which is the half of the rule that protects the reader.
-	t.click(t.row(4).querySelector('.def-core-access-opt[data-level="staff"]'));
+	t.click(t.row(4).querySelector('.widrow-ai-access-opt[data-level="staff"]'));
 	check('choosing on such a row lands exactly one, as everywhere else',
 		opts(4).join() === 'staff' &&
-		t.payload()['roles[4][def_staff_access]'] === '1' &&
-		t.payload()['roles[4][def_management_access]'] === '0',
+		t.payload()['roles[4][widrow_staff_access]'] === '1' &&
+		t.payload()['roles[4][widrow_management_access]'] === '0',
 		'selected=' + opts(4).join());
 
 	// One radiogroup per row, all announcing "Access level", names whose it is
 	// nowhere — and this is a list of people.
-	const groups = Array.from(t.tbody.querySelectorAll('.def-core-access-level'))
+	const groups = Array.from(t.tbody.querySelectorAll('.widrow-ai-access-level'))
 		.map(g => g.getAttribute('aria-label'));
 	check('a row’s access control announces the person it belongs to',
 		groups.length === PEOPLE.length && new Set(groups).size === PEOPLE.length &&
@@ -395,14 +395,14 @@ const PEOPLE = [
 	t.click(t.option(3, 'hr'));
 	check('adding a role creates its chip and removes it from the + Add role choices',
 		t.chips(3).join() === 'hr' && t.choices(3).join() === 'finance,legal' &&
-		t.row(3).querySelector('[data-cap="def_role_hr"]').checked === true,
+		t.row(3).querySelector('[data-cap="widrow_role_hr"]').checked === true,
 		'chips=' + t.chips(3) + ' choices=' + t.choices(3));
 
 	// Removing: the reverse, including the capability input.
-	t.click(t.row(3).querySelector('.def-core-chip[data-role="hr"] .def-core-chip-remove'));
+	t.click(t.row(3).querySelector('.widrow-ai-chip[data-role="hr"] .widrow-ai-chip-remove'));
 	check('removing a chip returns the role to the choices and clears its capability',
 		t.chips(3).length === 0 && t.choices(3).join() === 'finance,hr,legal' &&
-		t.row(3).querySelector('[data-cap="def_role_hr"]').checked === false,
+		t.row(3).querySelector('[data-cap="widrow_role_hr"]').checked === false,
 		'chips=' + t.chips(3) + ' choices=' + t.choices(3));
 }
 
@@ -411,10 +411,10 @@ const PEOPLE = [
 	const t = boot(PEOPLE);
 	check('a person holding every role is told so instead of being offered an empty menu',
 		t.addBtn(1) === null &&
-		(t.row(1).querySelector('.def-core-roles-all-on') || {}).textContent === 'Every role is on',
+		(t.row(1).querySelector('.widrow-ai-roles-all-on') || {}).textContent === 'Every role is on',
 		'addBtn=' + t.addBtn(1));
 
-	t.click(t.row(1).querySelector('.def-core-chip[data-role="hr"] .def-core-chip-remove'));
+	t.click(t.row(1).querySelector('.widrow-ai-chip[data-role="hr"] .widrow-ai-chip-remove'));
 	check('removing one of them brings + Add role back, offering exactly that role',
 		t.addBtn(1) !== null && t.choices(1).join() === 'hr', 'choices=' + t.choices(1));
 }
@@ -433,25 +433,25 @@ const PEOPLE = [
 	const t = boot(PEOPLE);
 
 	// The drawer's write: the server committed "neither".
-	t.row(2).querySelector('[data-cap="def_staff_access"]').checked = false;
-	t.row(2).querySelector('[data-cap="def_management_access"]').checked = false;
+	t.row(2).querySelector('[data-cap="widrow_staff_access"]').checked = false;
+	t.row(2).querySelector('[data-cap="widrow_management_access"]').checked = false;
 	t.syncRow(2);
 
 	check('a revoke mirrored from the server survives the redraw it triggers',
-		t.payload()['roles[2][def_staff_access]'] === '0' &&
-		t.payload()['roles[2][def_management_access]'] === '0',
-		'staff=' + t.payload()['roles[2][def_staff_access]'] +
-		' mgmt=' + t.payload()['roles[2][def_management_access]']);
+		t.payload()['roles[2][widrow_staff_access]'] === '0' &&
+		t.payload()['roles[2][widrow_management_access]'] === '0',
+		'staff=' + t.payload()['roles[2][widrow_staff_access]'] +
+		' mgmt=' + t.payload()['roles[2][widrow_management_access]']);
 
 	// The same path must still FOLLOW a real grant — it is a sync, not a freeze.
-	t.row(2).querySelector('[data-cap="def_management_access"]').checked = true;
+	t.row(2).querySelector('[data-cap="widrow_management_access"]').checked = true;
 	t.syncRow(2);
-	const selected = Array.from(t.row(2).querySelectorAll('.def-core-access-opt[aria-checked="true"]'))
+	const selected = Array.from(t.row(2).querySelectorAll('.widrow-ai-access-opt[aria-checked="true"]'))
 		.map(o => o.dataset.level);
 	check('and a grant mirrored from the server is picked up and shown',
 		selected.join() === 'management' &&
-		t.payload()['roles[2][def_management_access]'] === '1' &&
-		t.payload()['roles[2][def_staff_access]'] === '0',
+		t.payload()['roles[2][widrow_management_access]'] === '1' &&
+		t.payload()['roles[2][widrow_staff_access]'] === '0',
 		'selected=' + selected.join());
 }
 
@@ -484,8 +484,8 @@ const PEOPLE = [
 	t.filter('legal');
 	const p = t.payload();
 	check('a filtered-out person still submits their capabilities — hiding is not revoking',
-		p['roles[2][def_staff_access]'] === '1' && p['roles[2][def_role_finance]'] === '1',
-		JSON.stringify({ staff: p['roles[2][def_staff_access]'], finance: p['roles[2][def_role_finance]'] }));
+		p['roles[2][widrow_staff_access]'] === '1' && p['roles[2][widrow_role_finance]'] === '1',
+		JSON.stringify({ staff: p['roles[2][widrow_staff_access]'], finance: p['roles[2][widrow_role_finance]'] }));
 
 	// And the filter reads the chips rather than a copy of them: add a role to a
 	// hidden person and they appear under that role's filter.
@@ -512,7 +512,7 @@ const PEOPLE = [
 		'visible=' + t.visible() + ' count=' + t.count());
 
 	// Take Finance off someone ON the filtered list.
-	t.click(t.row(2).querySelector('.def-core-chip[data-role="finance"] .def-core-chip-remove'));
+	t.click(t.row(2).querySelector('.widrow-ai-chip[data-role="finance"] .widrow-ai-chip-remove'));
 	check('removing the filtered role drops that person from the list and the count',
 		t.visible().join() === '1' && t.count() === '1 person',
 		'visible=' + t.visible() + ' count=' + t.count());
@@ -532,37 +532,37 @@ const PEOPLE = [
 
 	check('the payload carries every writable capability for every person, 1 or 0',
 		Object.keys(t.payload()).length === PEOPLE.length * (3 + CATALOG.length) &&
-		cap(2, 'def_staff_access') === '1' && cap(2, 'def_management_access') === '0' &&
-		cap(2, 'def_role_finance') === '1' && cap(2, 'def_role_hr') === '0' &&
-		cap(2, 'def_role_legal') === '0' && cap(2, 'def_admin_access') === '0',
+		cap(2, 'widrow_staff_access') === '1' && cap(2, 'widrow_management_access') === '0' &&
+		cap(2, 'widrow_role_finance') === '1' && cap(2, 'widrow_role_hr') === '0' &&
+		cap(2, 'widrow_role_legal') === '0' && cap(2, 'widrow_admin_access') === '0',
 		'keys=' + Object.keys(t.payload()).length);
 
 	// The DEF Admin toggle is an ordinary capability input and reaches the
 	// payload as one — it is not folded into the access level.
-	const adminCb = t.row(2).querySelector('.def-core-admin-cb');
+	const adminCb = t.row(2).querySelector('.widrow-ai-admin-cb');
 	adminCb.checked = true;
 	check('the DEF Admin toggle contributes to the payload on its own axis',
-		cap(2, 'def_admin_access') === '1' && cap(2, 'def_staff_access') === '1',
-		'admin=' + cap(2, 'def_admin_access') + ' staff=' + cap(2, 'def_staff_access'));
+		cap(2, 'widrow_admin_access') === '1' && cap(2, 'widrow_staff_access') === '1',
+		'admin=' + cap(2, 'widrow_admin_access') + ' staff=' + cap(2, 'widrow_staff_access'));
 
 	// Chips and the level are the same payload the matrix submitted: a role
 	// added and the level switched both land as '1'/'0' under the same keys.
-	t.click(t.row(2).querySelector('.def-core-access-opt[data-level="management"]'));
+	t.click(t.row(2).querySelector('.widrow-ai-access-opt[data-level="management"]'));
 	t.click(t.addBtn(2));
 	t.click(t.option(2, 'legal'));
 	check('a chip added and a level switched reach the payload under the old keys',
-		cap(2, 'def_role_legal') === '1' && cap(2, 'def_management_access') === '1' &&
-		cap(2, 'def_staff_access') === '0' &&
+		cap(2, 'widrow_role_legal') === '1' && cap(2, 'widrow_management_access') === '1' &&
+		cap(2, 'widrow_staff_access') === '0' &&
 		// And nothing the catalog does not name can be in it: the inputs are the
 		// only source, and the server builds its writable set from the catalog too.
-		Object.keys(t.payload()).every(k => /def_(staff|management|admin)_access|def_role_(finance|hr|legal)/.test(k)),
-		'legal=' + cap(2, 'def_role_legal') + ' mgmt=' + cap(2, 'def_management_access'));
+		Object.keys(t.payload()).every(k => /def_(staff|management|admin)_access|widrow_role_(finance|hr|legal)/.test(k)),
+		'legal=' + cap(2, 'widrow_role_legal') + ' mgmt=' + cap(2, 'widrow_management_access'));
 }
 
 // ── The listbox from the keyboard ───────────────────────────────────────────
 {
 	const t = boot(PEOPLE);
-	const active = id => Array.from(t.row(id).querySelectorAll('.def-core-role-option.is-active'))
+	const active = id => Array.from(t.row(id).querySelectorAll('.widrow-ai-role-option.is-active'))
 		.map(o => o.dataset.role).join();
 
 	t.click(t.addBtn(3));
@@ -607,8 +607,8 @@ const PEOPLE = [
 	// it there), Enter takes the one under focus rather than a remembered index.
 	check('options are out of the tab order, and Enter reads the option under focus',
 		t.choices(3).length > 0 &&
-		Array.from(t.row(3).querySelectorAll('.def-core-role-option')).every(o => o.tabIndex === -1),
-		'tabIndexes=' + Array.from(t.row(3).querySelectorAll('.def-core-role-option')).map(o => o.tabIndex).join());
+		Array.from(t.row(3).querySelectorAll('.widrow-ai-role-option')).every(o => o.tabIndex === -1),
+		'tabIndexes=' + Array.from(t.row(3).querySelectorAll('.widrow-ai-role-option')).map(o => o.tabIndex).join());
 
 	// A redraw while the menu is open detaches the wrap, and its outside-click
 	// listener is on the DOCUMENT — it would outlive the element it closes over
@@ -632,11 +632,11 @@ const PEOPLE = [
 // English, so a key that goes missing degrades to what the grid used to say.
 {
 	const dom = new JSDOM('<!doctype html><html><body>' +
-		'<span id="def-core-access-count"></span>' +
-		'<table><tbody id="def-core-roles-tbody">' + rowMarkup(PEOPLE[2]) + '</tbody></table>' +
+		'<span id="widrow-ai-access-count"></span>' +
+		'<table><tbody id="widrow-ai-roles-tbody">' + rowMarkup(PEOPLE[2]) + '</tbody></table>' +
 		'</body></html>');
 	const window = dom.window, document = window.document;
-	window.defCoreAdmin = {
+	window.widrowAiAdmin = {
 		rolesCatalog: CATALOG,
 		userAccessI18n: {
 			staff: 'Personal', management: 'Direction',
@@ -647,17 +647,17 @@ const PEOPLE = [
 	};
 	const api = new window.Function('window', 'document',
 		BLOCK + '\nreturn { initAccessRows: initAccessRows };')(window, document);
-	const tbody = document.getElementById('def-core-roles-tbody');
-	api.initAccessRows(tbody, null, document.getElementById('def-core-access-count'));
+	const tbody = document.getElementById('widrow-ai-roles-tbody');
+	api.initAccessRows(tbody, null, document.getElementById('widrow-ai-access-count'));
 	const row = tbody.querySelector('tr');
 
 	check('the words the script writes come from the server, not from the script',
-		Array.from(row.querySelectorAll('.def-core-access-opt')).map(o => o.textContent).join() === 'Personal,Direction' &&
-		row.querySelector('.def-core-add-role').textContent === '+ Ajouter un rôle' &&
-		row.querySelector('.def-core-access-level').getAttribute('aria-label') === 'Niveau pour Robin Roleless' &&
-		document.getElementById('def-core-access-count').textContent === '1 personne',
-		'opts=' + Array.from(row.querySelectorAll('.def-core-access-opt')).map(o => o.textContent).join() +
-		' count=' + document.getElementById('def-core-access-count').textContent);
+		Array.from(row.querySelectorAll('.widrow-ai-access-opt')).map(o => o.textContent).join() === 'Personal,Direction' &&
+		row.querySelector('.widrow-ai-add-role').textContent === '+ Ajouter un rôle' &&
+		row.querySelector('.widrow-ai-access-level').getAttribute('aria-label') === 'Niveau pour Robin Roleless' &&
+		document.getElementById('widrow-ai-access-count').textContent === '1 personne',
+		'opts=' + Array.from(row.querySelectorAll('.widrow-ai-access-opt')).map(o => o.textContent).join() +
+		' count=' + document.getElementById('widrow-ai-access-count').textContent);
 
 	// %s is filled by a function replacement, so a name carrying $& or $' goes
 	// in as itself rather than being expanded by the replacer.
@@ -667,7 +667,7 @@ const PEOPLE = [
 
 	// And the server sends every key the block asks for — a typo on either side
 	// is a silent fall back to English on a translated page.
-	const ADMIN_PHP = fs.readFileSync(path.join(extract.REPO, 'includes/class-def-core-admin.php'), 'utf8');
+	const ADMIN_PHP = fs.readFileSync(path.join(extract.REPO, 'includes/class-widrow-ai-admin.php'), 'utf8');
 	const asked = Array.from(BLOCK.matchAll(/accessText\('([a-zA-Z]+)'/g)).map(m => m[1]);
 	const sent = Array.from(ADMIN_PHP.matchAll(/'([a-zA-Z]+)'\s*=> __\( '/g)).map(m => m[1]);
 	const missing = Array.from(new Set(asked)).filter(k => sent.indexOf(k) === -1);
@@ -685,8 +685,8 @@ const PEOPLE = [
 // initUserRoles' one call. Without it the block is correct and the page is dead.
 check('the settings page actually wires the screen up',
 	/var refreshFilter = initAccessRows\(tbody, filterEl, countEl\);/.test(ADMIN_JS) &&
-	/getElementById\('def-core-role-filter'\)/.test(ADMIN_JS) &&
-	/getElementById\('def-core-access-count'\)/.test(ADMIN_JS));
+	/getElementById\('widrow-ai-role-filter'\)/.test(ADMIN_JS) &&
+	/getElementById\('widrow-ai-access-count'\)/.test(ADMIN_JS));
 
 // The other side of the Setup Assistant contract, in the drawer's own file:
 // writing .checked fires nothing, so the drawer has to say so. Checks 16-17
@@ -715,46 +715,46 @@ check('no column is emitted per vault role any more',
 	!/foreach\s*\(\s*\$roles_catalog[\s\S]{0,200}?<th/.test(headRow) &&
 	!/<th[^>]*>\s*<\?php echo esc_html\( \$def_role\['name'\] \)/.test(TEMPLATE));
 
-const bodyRow = extract.element(TEMPLATE, 'tr', l => l.includes('class="def-core-user-row"'), 'roles tr');
+const bodyRow = extract.element(TEMPLATE, 'tr', l => l.includes('class="widrow-ai-user-row"'), 'roles tr');
 const labels = (bodyRow.match(/data-label="<\?php esc_attr_e\(\s*'([^']+)'/g) || [])
 	.map(m => m.replace(/.*'([^']+)'.*/, '$1'));
 check('every cell carries the label the phone layout reveals',
 	labels.join(' · ') === 'User · WordPress role · Access level · Roles · DEF Admin · Actions',
 	'got: ' + labels.join(' · '));
 
-// map_def_capabilities() answers TRUE to has_cap('def_staff_access') for every
+// map_def_capabilities() answers TRUE to has_cap('widrow_staff_access') for every
 // Management and DEF-Admin user, so asking it what the STORED level is gives the
-// wrong answer for exactly the people it matters most for. def_management_access
+// wrong answer for exactly the people it matters most for. widrow_management_access
 // carries no such filter. Getting this wrong renders a Management user as Staff.
 check('the level is read from the STORED capabilities, never through has_cap()',
 	// allcaps is the raw merged array; map_meta_cap — where map_def_capabilities
-	// lives — never touches it. has_cap('def_staff_access') does go through that
+	// lives — never touches it. has_cap('widrow_staff_access') does go through that
 	// filter and answers TRUE for every Management and DEF-Admin user, so asking
 	// it here would render a tick that is not a stored fact.
 	/\$level\s*=\s*'';/.test(TEMPLATE) &&
-	/if \( ! empty\( \$u->allcaps\['def_management_access'\] \) \) \{\s*\$level = 'management';/.test(TEMPLATE) &&
-	/\} elseif \( ! empty\( \$u->allcaps\['def_staff_access'\] \) \) \{\s*\$level = 'staff';/.test(TEMPLATE) &&
-	!/has_cap\( 'def_staff_access' \)/.test(TEMPLATE));
+	/if \( ! empty\( \$u->allcaps\['widrow_management_access'\] \) \) \{\s*\$level = 'management';/.test(TEMPLATE) &&
+	/\} elseif \( ! empty\( \$u->allcaps\['widrow_staff_access'\] \) \) \{\s*\$level = 'staff';/.test(TEMPLATE) &&
+	!/has_cap\( 'widrow_staff_access' \)/.test(TEMPLATE));
 
 // The third state is the whole of the fix: there must be no branch that turns
 // "stores neither" into a level. A `: 'staff'` fallback anywhere in this
 // derivation is the bug the panel caught, re-introduced.
 check('a row that stores neither level is given neither, server-side',
 	!/\$level\s*=\s*[^;]*\?\s*'management'\s*:\s*'staff'/.test(TEMPLATE) &&
-	/data-cap="def_staff_access" <\?php checked\( 'staff' === \$level \); \?> hidden/.test(TEMPLATE));
+	/data-cap="widrow_staff_access" <\?php checked\( 'staff' === \$level \); \?> hidden/.test(TEMPLATE));
 
 check('the level is exactly one capability, server-side, before any script runs',
-	/data-cap="def_staff_access" <\?php checked\( 'staff' === \$level \); \?> hidden/.test(bodyRow) &&
-	/data-cap="def_management_access" <\?php checked\( 'management' === \$level \); \?> hidden/.test(bodyRow));
+	/data-cap="widrow_staff_access" <\?php checked\( 'staff' === \$level \); \?> hidden/.test(bodyRow) &&
+	/data-cap="widrow_management_access" <\?php checked\( 'management' === \$level \); \?> hidden/.test(bodyRow));
 
-check('one hidden capability input per catalog role, still a .def-core-role-cb',
-	/foreach \( \$roles_catalog as \$def_role \) :[\s\S]{0,400}?class="def-core-role-cb"[\s\S]{0,300}?'def_role_' \. \$def_role\['slug'\][\s\S]{0,200}?hidden/.test(bodyRow));
+check('one hidden capability input per catalog role, still a .widrow-ai-role-cb',
+	/foreach \( \$roles_catalog as \$def_role \) :[\s\S]{0,400}?class="widrow-ai-role-cb"[\s\S]{0,300}?'widrow_role_' \. \$def_role\['slug'\][\s\S]{0,200}?hidden/.test(bodyRow));
 
 check('the filter offers All roles and then the catalog, and a count sits beside it',
-	/<select id="def-core-role-filter"/.test(TEMPLATE) &&
+	/<select id="widrow-ai-role-filter"/.test(TEMPLATE) &&
 	/esc_html_e\( 'All roles'/.test(TEMPLATE) &&
 	/foreach \( \$roles_catalog as \$def_role \) :[\s\S]{0,200}?<option value="<\?php echo esc_attr\( \$def_role\['slug'\] \); \?>"/.test(TEMPLATE) &&
-	/id="def-core-access-count"[^>]*aria-live="polite"/.test(TEMPLATE));
+	/id="widrow-ai-access-count"[^>]*aria-live="polite"/.test(TEMPLATE));
 
 // ── 34-37. The phone, and the scroll that is NOT here ───────────────────────
 function mediaBlock(css, re) {
@@ -782,24 +782,24 @@ const ruleIn = (css, selector) => {
 	return m ? m[1] : null;
 };
 
-const stacked = ruleIn(PHONE, '.def-core-roles-table,\n\t.def-core-roles-table tbody,\n\t.def-core-roles-table tr,\n\t.def-core-roles-table td');
+const stacked = ruleIn(PHONE, '.widrow-ai-roles-table,\n\t.widrow-ai-roles-table tbody,\n\t.widrow-ai-roles-table tr,\n\t.widrow-ai-roles-table td');
 check('below 782px the table, its rows and its cells all become blocks',
 	!!stacked && /display:\s*block/.test(stacked) && /(?:^|;)\s*width:\s*auto/.test(stacked),
 	'got: ' + String(stacked).replace(/\s+/g, ' ').trim());
 
 check('the column headings go, since each cell now carries its own',
-	/display:\s*none/.test(ruleIn(PHONE, '.def-core-roles-table thead') || ''));
+	/display:\s*none/.test(ruleIn(PHONE, '.widrow-ai-roles-table thead') || ''));
 
 // The stacked layout above sets display:block on every tr. `hidden` is only
 // display:none in the UA stylesheet, and an author rule beats a UA rule — so
 // without this the filter would hide nobody on a phone while working perfectly
 // on a laptop. The rule has to come AFTER the block rule and out-specify it.
 {
-	const blockAt = PHONE.indexOf('.def-core-roles-table,');
-	const hiddenAt = PHONE.indexOf('.def-core-roles-table tr[hidden]');
+	const blockAt = PHONE.indexOf('.widrow-ai-roles-table,');
+	const hiddenAt = PHONE.indexOf('.widrow-ai-roles-table tr[hidden]');
 	check('a filtered-out row is still hidden once the rows become blocks',
 		hiddenAt > blockAt && blockAt !== -1 &&
-		/display:\s*none/.test(ruleIn(PHONE, '.def-core-roles-table tr[hidden]') || ''),
+		/display:\s*none/.test(ruleIn(PHONE, '.widrow-ai-roles-table tr[hidden]') || ''),
 		'blockAt=' + blockAt + ' hiddenAt=' + hiddenAt);
 }
 
@@ -807,28 +807,28 @@ check('the column headings go, since each cell now carries its own',
 // reads as something missing, so the cell goes instead of standing empty.
 check('a cell with nothing in it is not given a heading of its own on a phone',
 	/\$is_locked \? ' is-empty' : ''/.test(TEMPLATE) &&
-	/display:\s*none/.test(ruleIn(PHONE, '.def-core-roles-table td.is-empty') || ''));
+	/display:\s*none/.test(ruleIn(PHONE, '.widrow-ai-roles-table td.is-empty') || ''));
 
-const before = ruleIn(PHONE, '.def-core-roles-table td::before');
+const before = ruleIn(PHONE, '.widrow-ai-roles-table td::before');
 check('every cell shows its label, taken from the markup rather than repeated in the CSS',
 	!!before && /content:\s*attr\(data-label\)/.test(before) && /display:\s*block/.test(before),
 	'got: ' + String(before).replace(/\s+/g, ' ').trim());
 
 // The rule that makes this a layout and not a workaround. S1 gave the Connection
-// Logs table a min-width and a .def-core-table-scroll wrapper, which is right for
+// Logs table a min-width and a .widrow-ai-table-scroll wrapper, which is right for
 // a log line and wrong for this: a person's row has nothing in it that must stay
 // wide. If this screen ever acquires either, it has stopped being responsive.
-const rolesTableRules = (extract.cssRules(ADMIN_CSS).byClass.get('def-core-roles-table') || []);
+const rolesTableRules = (extract.cssRules(ADMIN_CSS).byClass.get('widrow-ai-roles-table') || []);
 const floored = Array.from(rolesTableRules)
 	.map(i => extract.cssRules(ADMIN_CSS).rules[i])
 	.filter(r => /(?:^|;)\s*min-width:/.test(r.body));
 check('User Access uses NO sideways-scroll workaround: no floor on the table, no scroller around it',
 	floored.length === 0 &&
-	!/<div class="def-core-table-scroll"[\s\S]{0,400}?<table class="def-core-roles-table"/.test(TEMPLATE) &&
-	!/overflow-x/.test(PHONE.slice(PHONE.indexOf('.def-core-roles-table'))),
+	!/<div class="widrow-ai-table-scroll"[\s\S]{0,400}?<table class="widrow-ai-roles-table"/.test(TEMPLATE) &&
+	!/overflow-x/.test(PHONE.slice(PHONE.indexOf('.widrow-ai-roles-table'))),
 	floored.length ? 'floored: ' + floored.map(r => r.selector).join(', ') : 'a scroller wraps the table');
 
-// 60 — the canary check. Every capability is carried by a .def-core-role-cb
+// 60 — the canary check. Every capability is carried by a .widrow-ai-role-cb
 // input and all but DEF Admin are `hidden`, driven by the chips and the pills.
 // WordPress core's forms.css sets display:inline-block on EVERY checkbox input
 // — an author rule, which beats the UA stylesheet's [hidden] { display: none }
@@ -839,13 +839,13 @@ check('User Access uses NO sideways-scroll workaround: no floor on the table, no
 // the canary saw it. The `[hidden]` in the selector is load-bearing too —
 // unqualified, this rule would take the DEF Admin tick off the screen as well.
 {
-	const SELECTOR = '.def-core-roles-table .def-core-role-cb[hidden]';
+	const SELECTOR = '.widrow-ai-roles-table .widrow-ai-role-cb[hidden]';
 	const body = ruleIn(ADMIN_CSS, SELECTOR);
 	const at = ADMIN_CSS.indexOf(SELECTOR + ' {');
 	const phoneAt = ADMIN_CSS.indexOf(PHONE);
 	const atEveryWidth = at !== -1 && (at < phoneAt || at > phoneAt + PHONE.length);
 	const all = extract.cssRules(ADMIN_CSS);
-	const blanket = Array.from(all.byClass.get('def-core-role-cb') || [])
+	const blanket = Array.from(all.byClass.get('widrow-ai-role-cb') || [])
 		.map(i => all.rules[i])
 		.filter(r => /display:\s*none/.test(r.body) && !/\[hidden\]/.test(r.selector));
 	// The rule's premise, read off the shipped template: the inputs it is for
@@ -855,11 +855,11 @@ check('User Access uses NO sideways-scroll workaround: no floor on the table, no
 	// inputs are read here; the per-role ones are check 52's.
 	const tags = TEMPLATE.split('<input').slice(1)
 		.map(t => t.slice(0, t.indexOf('/>') + 2))
-		.filter(t => /class="def-core-role-cb/.test(t));
+		.filter(t => /class="widrow-ai-role-cb/.test(t));
 	const cbFor = cap => tags.find(t => t.indexOf('data-cap="' + cap + '"') !== -1);
-	const staffCb = cbFor('def_staff_access');
-	const mgmtCb = cbFor('def_management_access');
-	const adminCb = cbFor('def_admin_access');
+	const staffCb = cbFor('widrow_staff_access');
+	const mgmtCb = cbFor('widrow_management_access');
+	const adminCb = cbFor('widrow_admin_access');
 	const premise =
 		!!staffCb && /\bhidden\b/.test(staffCb) &&
 		!!mgmtCb && /\bhidden\b/.test(mgmtCb) &&
@@ -869,7 +869,7 @@ check('User Access uses NO sideways-scroll workaround: no floor on the table, no
 		!body ? 'no rule for ' + SELECTOR
 			: !/display:\s*none/.test(body) ? 'got: ' + body.replace(/\s+/g, ' ').trim()
 			: !atEveryWidth ? 'the rule sits inside the 782px query — the laptop is still broken'
-			: blanket.length ? 'hides .def-core-role-cb unqualified, DEF Admin with it: ' + blanket.map(r => r.selector).join(', ')
+			: blanket.length ? 'hides .widrow-ai-role-cb unqualified, DEF Admin with it: ' + blanket.map(r => r.selector).join(', ')
 			: 'the template no longer marks the access-level inputs hidden, or DEF Admin now is');
 }
 

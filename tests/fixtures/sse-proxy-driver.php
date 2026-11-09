@@ -11,13 +11,13 @@
  * Usage: php sse-proxy-driver.php <upstream-url>           (stream_proxy, a POST)
  *        php sse-proxy-driver.php <upstream-base> resume  (the Staff AI turn resume, a GET)
  *
- * @package def-core/tests
+ * @package widrow-ai/tests
  */
 
 declare(strict_types=1);
 
 define( 'ABSPATH', dirname( __DIR__, 2 ) . '/' );
-define( 'DEF_CORE_PLUGIN_DIR', dirname( __DIR__, 2 ) . '/' );
+define( 'WIDROW_AI_PLUGIN_DIR', dirname( __DIR__, 2 ) . '/' );
 
 require_once dirname( __DIR__ ) . '/wp-stubs.php';
 
@@ -50,8 +50,8 @@ if ( ! function_exists( '_n' ) ) {
 		return 1 === $n ? $s : $p;
 	}
 }
-if ( ! class_exists( 'DEF_Core' ) ) {
-	class DEF_Core {
+if ( ! class_exists( 'Widrow_AI' ) ) {
+	class Widrow_AI {
 		public static function get_def_api_url_internal(): string {
 			global $argv;
 			return 'resume' === ( $argv[2] ?? '' ) ? (string) $argv[1] : 'http://127.0.0.1:1';
@@ -60,8 +60,8 @@ if ( ! class_exists( 'DEF_Core' ) ) {
 }
 // Each log row goes to STDERR as one JSON line: the test reads how the stream ended
 // there, and STDOUT stays exactly what the client received.
-if ( ! class_exists( 'DEF_Core_Logger' ) ) {
-	class DEF_Core_Logger {
+if ( ! class_exists( 'Widrow_AI_Logger' ) ) {
+	class Widrow_AI_Logger {
 		const LEVEL_INFO    = 'info';
 		const LEVEL_WARNING = 'warning';
 		public static function log( string $level, string $source, string $message, array $context = array() ): void {
@@ -70,21 +70,21 @@ if ( ! class_exists( 'DEF_Core_Logger' ) ) {
 	}
 }
 
-require_once DEF_CORE_PLUGIN_DIR . 'includes/class-def-core-tools.php';
+require_once WIDROW_AI_PLUGIN_DIR . 'includes/class-widrow-ai-tools.php';
 
 if ( 'resume' === ( $argv[2] ?? '' ) ) {
 	// The REST callback itself (8.7.14), its upstream base being argv[1]. A finite PHP limit
 	// going in, so the limit stream_proxy sets is what the caller reads back off the end of
 	// STDERR.
 	set_time_limit( 30 );
-	DEF_Core_Tools::rest_proxy_staff_ai_turn_resume( new class() {
+	Widrow_AI_Tools::rest_proxy_staff_ai_turn_resume( new class() {
 		public function get_param( string $key ) {
 			return array( 'id' => 'staff-1a2b3c', 'turn' => '0f0e9d8c-uuid', 'after' => 3 )[ $key ] ?? null;
 		}
 	} );
 	fwrite( STDERR, 'limit=' . ini_get( 'max_execution_time' ) );
 } else {
-	$method = new ReflectionMethod( 'DEF_Core_Tools', 'stream_proxy' );
+	$method = new ReflectionMethod( 'Widrow_AI_Tools', 'stream_proxy' );
 	$method->setAccessible( true );
 	$method->invoke( null, (string) $argv[1], array( 'Content-Type: application/json' ), '{}' );
 }

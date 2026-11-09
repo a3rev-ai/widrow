@@ -13,7 +13,7 @@
  *
  * Runs standalone with WP stubs (no WordPress bootstrap).
  *
- * @package def-core/tests
+ * @package widrow-ai/tests
  */
 
 declare(strict_types=1);
@@ -98,7 +98,7 @@ if ( ! function_exists( 'is_wp_error' ) ) {
 }
 
 // Load the class under test.
-require_once __DIR__ . '/../includes/class-def-core-export.php';
+require_once __DIR__ . '/../includes/class-widrow-ai-export.php';
 
 // ── Test Runner ────────────────────────────────────────────────────────
 
@@ -119,7 +119,7 @@ function assert_test( bool $condition, string $name ): void {
 }
 
 // Reflect the private helper for direct test access.
-$reflection = new ReflectionClass( 'DEF_Core_Export' );
+$reflection = new ReflectionClass( 'Widrow_AI_Export' );
 $collect    = $reflection->getMethod( 'collect_taxonomy_terms' );
 $collect->setAccessible( true );
 

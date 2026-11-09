@@ -4,17 +4,17 @@ This guide explains how to create **module plugins** for the Widrow AI plugin th
 
 ## When to Build a Module vs a Built-in Tool
 
-def-core includes **built-in tools** that conditionally register when their dependencies are detected (e.g., WooCommerce, bbPress). These are part of the core plugin and require no additional installation.
+widrow-ai includes **built-in tools** that conditionally register when their dependencies are detected (e.g., WooCommerce, bbPress). These are part of the core plugin and require no additional installation.
 
 Build a **separate module plugin** when:
 
 - The integration is **private or custom to your business** (e.g., a proprietary license system, an internal API)
-- The tool depends on **non-public or commercial plugins** that most def-core users won't have (e.g., WooCommerce Subscriptions)
-- You need to **distribute the tool independently** from def-core (e.g., sold separately, different release cycle)
+- The tool depends on **non-public or commercial plugins** that most widrow-ai users won't have (e.g., WooCommerce Subscriptions)
+- You need to **distribute the tool independently** from widrow-ai (e.g., sold separately, different release cycle)
 
 For a real-world example of a module plugin, see [def-wc-subscriptions](https://github.com/a3rev-ai/def-wc-subscriptions) — a WooCommerce Subscriptions integration built as a separate module because WC Subscriptions is a commercial plugin.
 
-If your integration is for a **widely-used free/open-source plugin** (bbPress, etc.), consider contributing a built-in tool to def-core instead — submit a PR at [github.com/a3rev-ai/widrow](https://github.com/a3rev-ai/widrow). Built-in tools use the same `DEF_Core_Tool_Base` class with `should_register()` for conditional activation.
+If your integration is for a **widely-used free/open-source plugin** (bbPress, etc.), consider contributing a built-in tool to widrow-ai instead — submit a PR at [github.com/a3rev-ai/widrow](https://github.com/a3rev-ai/widrow). Built-in tools use the same `Widrow_AI_Tool_Base` class with `should_register()` for conditional activation.
 
 ## Overview
 
@@ -48,19 +48,19 @@ The Widrow AI plugin is extensible, allowing modules to register their own API t
 
 ### Components
 
-1. **API Registry** (`DEF_Core_API_Registry`)
+1. **API Registry** (`Widrow_AI_API_Registry`)
    - Central registry for all API tools
    - Handles registration and routing
    - Prevents duplicate registrations
-   - Uses `DEF_CORE_API_NAME_SPACE` constant for namespace
+   - Uses `WIDROW_AI_API_NAME_SPACE` constant for namespace
 
-2. **Tool Base Class** (`DEF_Core_Tool_Base`)
+2. **Tool Base Class** (`Widrow_AI_Tool_Base`)
    - Abstract base class for tool implementations
    - Provides helper methods and common functionality
    - Ensures consistency across tools
    - **Auto-registers tools** when instantiated (no manual registration needed)
 
-3. **Registration Hook** (`def_core_register_tools`)
+3. **Registration Hook** (`widrow_ai_register_tools`)
    - Action hook fired during tool registration
    - Modules can hook into this for manual registration (if not using base class)
 
@@ -92,7 +92,7 @@ Create the main plugin file following the naming convention:
  * Author: a3rev
  * Requires at least: 6.0
  * Requires PHP: 8.0
- * Requires Plugins: def-core
+ * Requires Plugins: widrow-ai
  *
  * @package def-<integration>
  */
@@ -107,7 +107,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 add_action(
 	'admin_notices',
 	function () {
-		if ( class_exists( 'DEF_Core' ) ) {
+		if ( class_exists( 'Widrow_AI' ) ) {
 			return;
 		}
 
@@ -123,7 +123,7 @@ define( 'DEF_MODULE_<INTEGRATION>_VERSION', '0.1.0' );
 define( 'DEF_MODULE_<INTEGRATION>_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'DEF_MODULE_<INTEGRATION>_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 
-add_action( 'def_core_inited', 'def_module_<integration>_load', 10, 0 );
+add_action( 'widrow_ai_inited', 'def_module_<integration>_load', 10, 0 );
 
 /**
  * Load module files.
@@ -171,7 +171,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  * @since 0.1.0
  * @version 0.1.0
  */
-class DEF_<Integration>_Tool extends DEF_Core_Tool_Base {
+class DEF_<Integration>_Tool extends Widrow_AI_Tool_Base {
 
 	/**
 	 * Initialize the tool.
@@ -245,9 +245,9 @@ add_action(
 
 **Important Notes:**
 - The base class **automatically registers** the tool when instantiated
-- No need to manually call `register()` or use `add_action( 'def_core_register_tools' )`
+- No need to manually call `register()` or use `add_action( 'widrow_ai_register_tools' )`
 - Override `should_register()` for conditional registration (e.g., only if a plugin is active)
-- The namespace is automatically set to `DEF_CORE_API_NAME_SPACE` (you don't need to set it)
+- The namespace is automatically set to `WIDROW_AI_API_NAME_SPACE` (you don't need to set it)
 
 ### Step 4: Load the Base Class (Required)
 
@@ -258,7 +258,7 @@ The module needs to load the base class from the main plugin. Add this to your m
 add_action(
 	'admin_notices',
 	function () {
-		if ( class_exists( 'DEF_Core' ) ) {
+		if ( class_exists( 'Widrow_AI' ) ) {
 			return;
 		}
 
@@ -277,9 +277,9 @@ You can also register tools directly without extending the base class:
 
 ```php
 add_action(
-	'def_core_register_tools',
+	'widrow_ai_register_tools',
 	function () {
-		$registry = DEF_Core_API_Registry::instance();
+		$registry = Widrow_AI_API_Registry::instance();
 		
 		$registry->register_tool(
 			'/tools/my-module/my-tool',     // Route (namespace is automatic)
@@ -310,7 +310,7 @@ function my_callback_function(): \WP_REST_Response {
 }
 ```
 
-**Note:** When using direct registry registration, the namespace is automatically set to `DEF_CORE_API_NAME_SPACE`. You don't need to specify it.
+**Note:** When using direct registry registration, the namespace is automatically set to `WIDROW_AI_API_NAME_SPACE`. You don't need to specify it.
 
 ## Helper Methods
 
@@ -398,7 +398,7 @@ return $this->error_response( 'Error message', 400 );
 ### 5. Use Caching When Appropriate
 
 ```php
-$data = DEF_Core_Cache::get_or_set(
+$data = Widrow_AI_Cache::get_or_set(
 	'my_cache_key',
 	$user->ID,
 	3600, // 1 hour
@@ -426,7 +426,7 @@ See [def-wc-subscriptions](https://github.com/a3rev-ai/def-wc-subscriptions) for
 
 ## API Reference
 
-### `DEF_Core_API_Registry::instance()`
+### `Widrow_AI_API_Registry::instance()`
 Get the registry instance.
 
 ### `register_tool( $route, $name, $methods, $callback, $permission_callback, $args, $module )`
@@ -443,7 +443,7 @@ Register a new tool.
 
 **Returns:** `bool` - True on success, false on failure
 
-**Note:** The namespace is automatically set to `DEF_CORE_API_NAME_SPACE`. You don't need to specify it.
+**Note:** The namespace is automatically set to `WIDROW_AI_API_NAME_SPACE`. You don't need to specify it.
 
 ### `get_tools( $module = '' )`
 Get all registered tools, optionally filtered by module.
@@ -477,7 +477,7 @@ If your route conflicts with an existing route, the registry will log a warning 
 ### Base Class Not Found
 
 1. Ensure the main plugin is installed and activated
-2. Check that `DEF_CORE_PLUGIN_DIR` constant is defined
+2. Check that `WIDROW_AI_PLUGIN_DIR` constant is defined
 3. Verify the base class file exists in the main plugin
 
 ## Support

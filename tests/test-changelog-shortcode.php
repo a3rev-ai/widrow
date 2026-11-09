@@ -7,7 +7,7 @@
  * shortcode itself, which pins that the shipped version has a changelog entry
  * at the top.
  *
- * @package def-core/tests
+ * @package widrow-ai/tests
  */
 
 declare(strict_types=1);
@@ -15,8 +15,8 @@ declare(strict_types=1);
 if ( ! defined( 'ABSPATH' ) ) {
 	define( 'ABSPATH', dirname( __DIR__ ) . '/' );
 }
-if ( ! defined( 'DEF_CORE_PLUGIN_DIR' ) ) {
-	define( 'DEF_CORE_PLUGIN_DIR', dirname( __DIR__ ) . '/' );
+if ( ! defined( 'WIDROW_AI_PLUGIN_DIR' ) ) {
+	define( 'WIDROW_AI_PLUGIN_DIR', dirname( __DIR__ ) . '/' );
 }
 
 require_once __DIR__ . '/wp-stubs.php';
@@ -45,7 +45,7 @@ if ( ! function_exists( 'esc_html' ) ) {
 	}
 }
 
-require_once DEF_CORE_PLUGIN_DIR . 'includes/class-def-core-changelog.php';
+require_once WIDROW_AI_PLUGIN_DIR . 'includes/class-widrow-ai-changelog.php';
 
 $pass = 0;
 $fail = 0;
@@ -69,7 +69,7 @@ $fixture = "=== Digital Employees ===\nStable tag: 9.9.9\n\n== Description ==\nW
 echo "=== [def_changelog] Tests ===\n";
 
 echo "\n[1] Parse: three releases, newest first, the Upgrade Notice ignored\n";
-$releases = DEF_Core_Changelog::parse( $fixture );
+$releases = Widrow_AI_Changelog::parse( $fixture );
 assert_same( 3, count( $releases ), 'three releases' );
 assert_same( array( '9.9.9', '9.9.8', '9.9.7' ), array_column( $releases, 'version' ), 'file order kept' );
 assert_same( '2026-09-22', $releases[0]['date'], 'date read' );
@@ -80,7 +80,7 @@ assert_same( true, str_ends_with( $releases[0]['entries'][1], 'last byte is 0x85
 assert_same( true, mb_check_encoding( $releases[0]['entries'][1], 'UTF-8' ), 'the entry is still valid UTF-8' );
 
 echo "\n[2] Render: headings with the date, the dateless one bare, everything escaped\n";
-$html = DEF_Core_Changelog::html( $releases, 12 );
+$html = Widrow_AI_Changelog::html( $releases, 12 );
 assert_same( 3, substr_count( $html, '<h3>' ), 'three headings' );
 assert_same( true, strpos( $html, '<h3>9.9.9 — 22 September 2026</h3>' ) !== false, 'version and date in the heading' );
 assert_same( true, strpos( $html, '<h3>9.9.8</h3>' ) !== false, 'dateless version renders version only' );
@@ -93,30 +93,30 @@ echo "\n[2b] The day never shifts with the site's timezone\n";
 // East of UTC is the side that catches it: without the UTC pin, midnight on the
 // 22nd in Auckland is the 21st in UTC, and a site there would read the 21st.
 date_default_timezone_set( 'Pacific/Auckland' );
-assert_same( true, strpos( DEF_Core_Changelog::html( $releases, 12 ), '9.9.9 — 22 September 2026' ) !== false, 'an Auckland site still reads the 22nd' );
+assert_same( true, strpos( Widrow_AI_Changelog::html( $releases, 12 ), '9.9.9 — 22 September 2026' ) !== false, 'an Auckland site still reads the 22nd' );
 date_default_timezone_set( 'UTC' );
 
 echo "\n[3] The versions count limits and clamps\n";
-assert_same( 1, substr_count( DEF_Core_Changelog::html( $releases, 1 ), '<h3>' ), 'one shows one' );
-assert_same( 1, substr_count( DEF_Core_Changelog::html( $releases, 0 ), '<h3>' ), 'zero clamps to one' );
-assert_same( 3, substr_count( DEF_Core_Changelog::html( $releases, 500 ), '<h3>' ), 'more than exist shows all' );
+assert_same( 1, substr_count( Widrow_AI_Changelog::html( $releases, 1 ), '<h3>' ), 'one shows one' );
+assert_same( 1, substr_count( Widrow_AI_Changelog::html( $releases, 0 ), '<h3>' ), 'zero clamps to one' );
+assert_same( 3, substr_count( Widrow_AI_Changelog::html( $releases, 500 ), '<h3>' ), 'more than exist shows all' );
 
 echo "\n[4] No changelog renders nothing\n";
-assert_same( array(), DEF_Core_Changelog::parse( "== Description ==\nNo changelog here.\n" ), 'no section parses to nothing' );
-assert_same( '', DEF_Core_Changelog::html( array(), 12 ), 'no releases render an empty string' );
+assert_same( array(), Widrow_AI_Changelog::parse( "== Description ==\nNo changelog here.\n" ), 'no section parses to nothing' );
+assert_same( '', Widrow_AI_Changelog::html( array(), 12 ), 'no releases render an empty string' );
 
 echo "\n[5] The shortcode on the bundled readme.txt: the shipped version is the top entry\n";
-$readme = (string) file_get_contents( DEF_CORE_PLUGIN_DIR . 'readme.txt' );
-$real   = DEF_Core_Changelog::parse( $readme );
+$readme = (string) file_get_contents( WIDROW_AI_PLUGIN_DIR . 'readme.txt' );
+$real   = Widrow_AI_Changelog::parse( $readme );
 preg_match( '/^Stable tag:\s*(\S+)/m', $readme, $stable );
 assert_same( true, count( $real ) >= 200, 'the full changelog parses (' . count( $real ) . ' versions)' );
 assert_same( 0, count( array_filter( $real, fn( $r ) => empty( $r['entries'] ) ) ), 'every release has at least one entry' );
 assert_same( $stable[1] ?? '', $real[0]['version'] ?? '', 'the top entry is the Stable tag version' );
 assert_same( true, '' !== ( $real[0]['date'] ?? '' ), 'the top entry is dated' );
-$rendered = DEF_Core_Changelog::render( array( 'versions' => '3' ) );
+$rendered = Widrow_AI_Changelog::render( array( 'versions' => '3' ) );
 assert_same( 3, substr_count( $rendered, '<h3>' ), 'the shortcode reads the bundled readme and shows three' );
 assert_same( true, strpos( $rendered, '<h3>' . ( $stable[1] ?? '?' ) ) !== false, 'the shortcode shows the shipped version first' );
-assert_same( 1, substr_count( DEF_Core_Changelog::render( array( 'versions' => 'abc' ) ), '<h3>' ), 'a non-numeric versions clamps to one' );
+assert_same( 1, substr_count( Widrow_AI_Changelog::render( array( 'versions' => 'abc' ) ), '<h3>' ), 'a non-numeric versions clamps to one' );
 
 echo "\n=== $pass passed, $fail failed ===\n";
 exit( $fail > 0 ? 1 : 0 );

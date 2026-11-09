@@ -24,7 +24,7 @@ const extract = require('./extract');
 const read = f => fs.readFileSync(path.join(extract.REPO, f), 'utf8');
 const TPL = read('templates/setup-assistant-drawer.php');
 const JS = read('assets/js/setup-assistant-drawer.js');
-const PHP = read('includes/class-def-core-admin.php');
+const PHP = read('includes/class-widrow-ai-admin.php');
 
 let pass = 0, fail = 0;
 const results = [];
@@ -38,12 +38,12 @@ let n = 0;
 // ── 1-2. The header, and what stays the role ────────────────────────────────
 const title = /<h2 class="def-sa-title">(.*?)<\/h2>/.exec(TPL);
 check(++n, 'the drawer header is "Sam - Setup Assistant"',
-	!!title && /esc_html_e\( 'Sam - Setup Assistant', 'digital-employees' \)/.test(title[1]),
+	!!title && /esc_html_e\( 'Sam - Setup Assistant', 'widrow-ai' \)/.test(title[1]),
 	title ? 'header renders: ' + title[1] : 'no .def-sa-title h2 found at all');
 
 check(++n, 'the panel\'s aria-labels still name the role, not the speaker',
-	/aria-label="<\?php esc_attr_e\( 'Setup Assistant', 'digital-employees' \); \?>"/.test(TPL) &&
-	/esc_attr_e\( 'Close Setup Assistant', 'digital-employees' \)/.test(TPL));
+	/aria-label="<\?php esc_attr_e\( 'Setup Assistant', 'widrow-ai' \); \?>"/.test(TPL) &&
+	/esc_attr_e\( 'Close Setup Assistant', 'widrow-ai' \)/.test(TPL));
 
 // ── 3-4. The greeting ───────────────────────────────────────────────────────
 // showWelcome's body: from its own name to the next method on the prototype.
@@ -62,12 +62,12 @@ check(++n, 'nothing in the drawer still says "I\'m your Setup Assistant"',
 
 // ── 5. Both strings reach a translator ──────────────────────────────────────
 //
-// A string only lands in the .pot from __( …, 'digital-employees' ) in PHP —
+// A string only lands in the .pot from __( …, 'widrow-ai' ) in PHP —
 // the drawer's JS carries the English as a fallback, not as the shipped text.
 const localized = PHP.slice(PHP.indexOf("'defSetupAssistant'"), PHP.indexOf("'defSetupAssistant'") + 1200);
 check(++n, 'both greetings ship through __() on defSetupAssistant',
-	/'welcomeNamed'\s*=> __\( "Hi %s! I'm Sam, your Setup Assistant\.", 'digital-employees' \)/.test(localized) &&
-	/'welcomeAnon'\s*=> __\( "Hi there! I'm Sam, your Setup Assistant\.", 'digital-employees' \)/.test(localized));
+	/'welcomeNamed'\s*=> __\( "Hi %s! I'm Sam, your Setup Assistant\.", 'widrow-ai' \)/.test(localized) &&
+	/'welcomeAnon'\s*=> __\( "Hi there! I'm Sam, your Setup Assistant\.", 'widrow-ai' \)/.test(localized));
 
 console.log('\n' + results.join('\n'));
 console.log('\n=== ' + pass + ' passed, ' + fail + ' failed (of ' + (pass + fail) + ') ===');

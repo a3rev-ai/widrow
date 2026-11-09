@@ -3,7 +3,7 @@
  * Content Drafts "last run" status strip — BFF tests.
  *
  * Verifies:
- *  - DEF_Core_Staff_AI::normalize_last_run_payload() shapes the backend payload
+ *  - Widrow_AI_Staff_AI::normalize_last_run_payload() shapes the backend payload
  *    safely: null/never-run collapses to null; counts are coerced to
  *    non-negative ints; status/timestamps are strings-or-null; optional
  *    audit_failed_types is a clean list of non-empty strings.
@@ -11,7 +11,7 @@
  *
  * Runs standalone (no WordPress bootstrap).
  *
- * @package def-core/tests
+ * @package widrow-ai/tests
  */
 
 declare(strict_types=1);
@@ -29,7 +29,7 @@ if ( ! function_exists( 'register_rest_route' ) ) {
 	}
 }
 
-require_once DEF_CORE_PLUGIN_DIR . 'includes/class-def-core-staff-ai.php';
+require_once WIDROW_AI_PLUGIN_DIR . 'includes/class-widrow-ai-staff-ai.php';
 
 // ── Tiny assertion harness ──────────────────────────────────────────────
 
@@ -50,14 +50,14 @@ function assert_same( $expected, $actual, string $label ): void {
 
 // ── 1. last_run: null → "no runs yet" (null) ────────────────────────────
 echo "[1] last_run null → null\n";
-assert_same( null, DEF_Core_Staff_AI::normalize_last_run_payload( array( 'last_run' => null ) ), 'explicit null collapses to null' );
-assert_same( null, DEF_Core_Staff_AI::normalize_last_run_payload( array() ), 'missing key collapses to null' );
-assert_same( null, DEF_Core_Staff_AI::normalize_last_run_payload( 'not-an-array' ), 'non-array payload collapses to null' );
-assert_same( null, DEF_Core_Staff_AI::normalize_last_run_payload( array( 'last_run' => 'oops' ) ), 'malformed last_run collapses to null' );
+assert_same( null, Widrow_AI_Staff_AI::normalize_last_run_payload( array( 'last_run' => null ) ), 'explicit null collapses to null' );
+assert_same( null, Widrow_AI_Staff_AI::normalize_last_run_payload( array() ), 'missing key collapses to null' );
+assert_same( null, Widrow_AI_Staff_AI::normalize_last_run_payload( 'not-an-array' ), 'non-array payload collapses to null' );
+assert_same( null, Widrow_AI_Staff_AI::normalize_last_run_payload( array( 'last_run' => 'oops' ) ), 'malformed last_run collapses to null' );
 
 // ── 2. Finished run: counts coerced to non-negative ints ────────────────
 echo "[2] finished run normalizes counts to ints\n";
-$norm = DEF_Core_Staff_AI::normalize_last_run_payload( array(
+$norm = Widrow_AI_Staff_AI::normalize_last_run_payload( array(
 	'last_run' => array(
 		'status'      => 'completed',
 		'started_at'  => '2026-06-09T10:00:00Z',
@@ -84,7 +84,7 @@ assert_true( ! isset( $norm['counts']['audit_failed_types'] ), 'no audit_failed_
 
 // ── 3. In-flight run: finished_at null preserved ────────────────────────
 echo "[3] in-flight run keeps finished_at null\n";
-$run = DEF_Core_Staff_AI::normalize_last_run_payload( array(
+$run = Widrow_AI_Staff_AI::normalize_last_run_payload( array(
 	'last_run' => array(
 		'status'      => 'running',
 		'started_at'  => '2026-06-09T11:00:00Z',
@@ -98,7 +98,7 @@ assert_same( 0, $run['counts']['audited'], 'missing counts default to 0' );
 
 // ── 4. audit_failed_types: keep non-empty strings only ──────────────────
 echo "[4] audit_failed_types cleaned to non-empty strings\n";
-$ft = DEF_Core_Staff_AI::normalize_last_run_payload( array(
+$ft = Widrow_AI_Staff_AI::normalize_last_run_payload( array(
 	'last_run' => array(
 		'status'      => 'completed',
 		'started_at'  => '2026-06-09T10:00:00Z',
@@ -113,7 +113,7 @@ assert_same( array( 'product', 'post' ), $ft['counts']['audit_failed_types'], 'd
 
 // ── 5. Bad status/timestamp types degrade safely ────────────────────────
 echo "[5] bad scalar types degrade safely\n";
-$bad = DEF_Core_Staff_AI::normalize_last_run_payload( array(
+$bad = Widrow_AI_Staff_AI::normalize_last_run_payload( array(
 	'last_run' => array(
 		'status'      => 123,            // non-string → ''
 		'started_at'  => false,          // non-string → null
@@ -128,8 +128,8 @@ assert_same( 0, $bad['counts']['staged'], 'non-array counts → zeros' );
 
 // ── 6. Route registration: GET /staff-ai/content/last-run ───────────────
 echo "[6] last-run route is registered (GET)\n";
-DEF_Core_Staff_AI::register_rest_routes();
-$key = DEF_CORE_API_NAME_SPACE . '/staff-ai/content/last-run';
+Widrow_AI_Staff_AI::register_rest_routes();
+$key = WIDROW_AI_API_NAME_SPACE . '/staff-ai/content/last-run';
 assert_true( isset( $_wp_test_rest_routes[ $key ] ), 'last-run route registered' );
 if ( isset( $_wp_test_rest_routes[ $key ] ) ) {
 	assert_same( 'GET', $_wp_test_rest_routes[ $key ]['methods'], 'last-run route is GET' );

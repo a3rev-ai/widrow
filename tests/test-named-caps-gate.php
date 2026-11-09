@@ -1,6 +1,6 @@
 <?php
 /**
- * The NAMED-constant caps gate — def-core port of DEF's
+ * The NAMED-constant caps gate — widrow-ai port of DEF's
  * test_caps_inventory_guard.py (DEF #859), slice B of the caps sweep.
  *
  * The inline gate (test-inline-caps-guard.php) watches literal bounds written
@@ -41,7 +41,7 @@
  *
  * Runs standalone (no WordPress bootstrap).
  *
- * @package def-core/tests
+ * @package widrow-ai/tests
  */
 
 declare(strict_types=1);
@@ -107,107 +107,107 @@ function scan_named_caps(): array {
 // 'class' => system | ui_chrome | delete_required; 'why' => the one line.
 
 const CAPS_REGISTRY = array(
-	'includes/class-def-core-admin-api.php::AUDIT_LOG_MAX' => array(
+	'includes/class-widrow-ai-admin-api.php::AUDIT_LOG_MAX' => array(
 		'class' => 'system',
 		'why'   => 'FIFO retention on the settings audit trail — an unbounded wp_options row wedges the DB.',
 	),
-	'includes/class-def-core-admin-api.php::RATE_LIMIT_MAX' => array(
+	'includes/class-widrow-ai-admin-api.php::RATE_LIMIT_MAX' => array(
 		'class' => 'system',
 		'why'   => 'Write-flood ceiling on settings writes; refuses visibly with retry_after.',
 	),
-	'includes/class-def-core-admin-api.php::RATE_LIMIT_WINDOW' => array(
+	'includes/class-widrow-ai-admin-api.php::RATE_LIMIT_WINDOW' => array(
 		'class' => 'system',
 		'why'   => 'The window the write-flood ceiling counts in.',
 	),
-	'includes/class-def-core-admin-api.php::RATE_LIMIT_TTL' => array(
+	'includes/class-widrow-ai-admin-api.php::RATE_LIMIT_TTL' => array(
 		'class' => 'system',
 		'why'   => 'Transient TTL for the rate counter — must outlive the window or the count resets early.',
 	),
-	'includes/class-def-core-chat-attribution.php::MAX_LEN' => array(
+	'includes/class-widrow-ai-chat-attribution.php::MAX_LEN' => array(
 		'class' => 'system',
 		'why'   => 'Bound on an ID-shaped token already charset-scrubbed; a longer chat id is never legitimate.',
 	),
-	'includes/class-def-core-connection-config.php::ROTATION_WINDOW_SECONDS' => array(
+	'includes/class-widrow-ai-connection-config.php::ROTATION_WINDOW_SECONDS' => array(
 		'class' => 'system',
 		'why'   => 'Dual-secret rotation overlap — the security timing window itself.',
 	),
-	'includes/class-def-core-escalation.php::RATE_LIMIT_WINDOW_SECONDS' => array(
+	'includes/class-widrow-ai-escalation.php::RATE_LIMIT_WINDOW_SECONDS' => array(
 		'class' => 'system',
 		'why'   => 'Anonymous visitors can trigger wp_mail; this is the abuse window.',
 	),
-	'includes/class-def-core-escalation.php::RATE_LIMIT_MAX_REQUESTS' => array(
+	'includes/class-widrow-ai-escalation.php::RATE_LIMIT_MAX_REQUESTS' => array(
 		'class' => 'system',
 		'why'   => 'The abuse ceiling inside that window.',
 	),
-	'includes/class-def-core-escalation.php::ACK_NAME_MAX' => array(
+	'includes/class-widrow-ai-escalation.php::ACK_NAME_MAX' => array(
 		'class' => 'system',
 		'why'   => 'The acknowledgement can reach an address a stranger typed, from the site\'s domain: a typed name must stay too short to carry a message. Refuses: the email reads "there", and nothing is cut.',
 	),
-	'includes/class-def-core-goals.php::PAGE_PATH_MAX' => array(
+	'includes/class-widrow-ai-goals.php::PAGE_PATH_MAX' => array(
 		'class' => 'system',
 		'why'   => 'An anonymous route must not write an unbounded string into the cron option.',
 	),
-	'includes/class-def-core-goals.php::MAX_PENDING' => array(
+	'includes/class-widrow-ai-goals.php::MAX_PENDING' => array(
 		'class' => 'system',
 		'why'   => 'A ceiling on queued page reports when IPs rotate past PAGE_RATE_LIMIT; the cron option is autoloaded.',
 	),
-	'includes/class-def-core-goals.php::PAGE_RATE_LIMIT' => array(
+	'includes/class-widrow-ai-goals.php::PAGE_RATE_LIMIT' => array(
 		'class' => 'system',
 		'why'   => 'Anyone can POST the page route; each report is a WP-Cron event and an outbound call. Refuses with 429.',
 	),
-	'includes/class-def-core-logger.php::MAX_MESSAGE_LENGTH' => array(
+	'includes/class-widrow-ai-logger.php::MAX_MESSAGE_LENGTH' => array(
 		'class' => 'system',
 		'why'   => 'Bounded log line — logs are the sanctioned truncation target, not user data.',
 	),
-	'includes/class-def-core-logger.php::MAX_CONTEXT_LENGTH' => array(
+	'includes/class-widrow-ai-logger.php::MAX_CONTEXT_LENGTH' => array(
 		'class' => 'system',
 		'why'   => 'Bounded log context blob, same class as MAX_MESSAGE_LENGTH.',
 	),
-	'includes/class-def-core-logger.php::MAX_SQL_LENGTH' => array(
+	'includes/class-widrow-ai-logger.php::MAX_SQL_LENGTH' => array(
 		'class' => 'system',
 		'why'   => 'Bounded SQL echo in debug context, same class.',
 	),
-	'includes/class-def-core-logger.php::DEFAULT_MAX_ENTRIES' => array(
+	'includes/class-widrow-ai-logger.php::DEFAULT_MAX_ENTRIES' => array(
 		'class' => 'system',
 		'why'   => 'Log table retention — unbounded growth is a disk/DB problem, and rotation is reporting-safe.',
 	),
-	'includes/class-def-core-logs-page.php::PER_PAGE' => array(
+	'includes/class-widrow-ai-logs-page.php::PER_PAGE' => array(
 		'class' => 'ui_chrome',
 		'why'   => 'Admin log pagination size; nothing breaks at any value.',
 	),
-	'includes/class-def-core-media.php::MAX_BYTES' => array(
+	'includes/class-widrow-ai-media.php::MAX_BYTES' => array(
 		'class' => 'system',
 		'why'   => 'Acceptance bound on the inbound base64 image payload — refuses pre-decode with a stated reason; not a cap on stored content.',
 	),
-	'includes/class-def-core-oauth.php::PKCE_TTL' => array(
+	'includes/class-widrow-ai-oauth.php::PKCE_TTL' => array(
 		'class' => 'system',
 		'why'   => 'PKCE verifier lifetime — a security timing window.',
 	),
-	'includes/class-def-core-page-context.php::TERMS_CAP' => array(
+	'includes/class-widrow-ai-page-context.php::TERMS_CAP' => array(
 		'class' => 'system',
 		'why'   => 'Per-pageview context payload bound on the anonymous hot path. Honest note: it stops collecting silently — inherent to context assembly, there is no caller to refuse.',
 	),
-	'includes/class-def-core-site-tools.php::MAX_RESPONSE_BYTES' => array(
+	'includes/class-widrow-ai-site-tools.php::MAX_RESPONSE_BYTES' => array(
 		'class' => 'system',
 		'why'   => 'Tool-response bound protecting the LLM context window; oversize is reported in the payload.',
 	),
-	'includes/class-def-core-staff-ai.php::SHARE_MAX_ATTACHMENT_COUNT' => array(
+	'includes/class-widrow-ai-staff-ai.php::SHARE_MAX_ATTACHMENT_COUNT' => array(
 		'class' => 'system',
 		'why'   => 'Email transport ceiling on share attachments; refuses visibly and is documented (5.7.0).',
 	),
-	'includes/class-def-core-staff-ai.php::SHARE_MAX_ATTACHMENT_BYTES' => array(
+	'includes/class-widrow-ai-staff-ai.php::SHARE_MAX_ATTACHMENT_BYTES' => array(
 		'class' => 'system',
 		'why'   => 'The byte half of the same transport ceiling (~SMTP message limits).',
 	),
-	'includes/class-def-core-staff-ai.php::CREATE_MAX_REFERENCE_FILE_BYTES' => array(
+	'includes/class-widrow-ai-staff-ai.php::CREATE_MAX_REFERENCE_FILE_BYTES' => array(
 		'class' => 'system',
 		'why'   => 'Acceptance bound on the total DECODED size of reference files — refuses over-size, never slices.',
 	),
-	'includes/class-def-core-staff-ai.php::CREATE_MAX_REFERENCE_TEXT' => array(
+	'includes/class-widrow-ai-staff-ai.php::CREATE_MAX_REFERENCE_TEXT' => array(
 		'class' => 'system',
 		'why'   => 'Prompt-size bound on pasted reference text — LLM context protection.',
 	),
-	'includes/class-def-core-staff-ai.php::CREATOR_NAME_MAX' => array(
+	'includes/class-widrow-ai-staff-ai.php::CREATOR_NAME_MAX' => array(
 		'class' => 'ui_chrome',
 		'why'   => 'Bound on a name DEF already bounds, read back into a page title; nothing breaks at any value.',
 	),
@@ -243,7 +243,7 @@ assert_test(
 // ── [3] The token-split rule is exact — pinned against keyword additions ────
 echo "\n[3] Scanner token rule: per-token, never substring\n";
 
-assert_test( ! is_cap_shaped( 'DEF_CAPABILITIES' ), 'CAPABILITIES does not false-positive on CAP/CAPS' );
+assert_test( ! is_cap_shaped( 'WIDROW_CAPABILITIES' ), 'CAPABILITIES does not false-positive on CAP/CAPS' );
 assert_test( ! is_cap_shaped( 'MAXIMUM_RETRIES' ), 'MAXIMUM does not false-positive on MAX' );
 assert_test( ! is_cap_shaped( 'ENDPOINT_SLUG' ), 'an unrelated name stays out' );
 assert_test( is_cap_shaped( 'PER_PAGE' ), 'PER_PAGE is cap-shaped (pagination size)' );

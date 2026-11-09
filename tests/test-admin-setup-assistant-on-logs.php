@@ -7,10 +7,10 @@
  * one Digital Employees page that had neither: no trigger beside the h1, no
  * drawer markup, and neither of the drawer's two asset handles.
  *
- * This RUNS the shipped renderer rather than reading it. DEF_Core_Logs_Page::
+ * This RUNS the shipped renderer rather than reading it. Widrow_AI_Logs_Page::
  * render_page() is called under stubs and its output captured, so what is asserted
  * is the HTML a DEF Admin actually receives and the handles WordPress is actually
- * asked for — including the ones DEF_Core_Admin::enqueue_setup_assistant_drawer()
+ * asked for — including the ones Widrow_AI_Admin::enqueue_setup_assistant_drawer()
  * adds, which is the real helper here and not a stand-in.
  *
  * The bite: delete the include at the foot of render_page() and checks 4 and 5 go
@@ -21,7 +21,7 @@
  * METHOD's own source through Reflection — narrower than grepping the file, and it
  * still goes red if the line leaves render_settings_page().
  *
- * @package def-core/tests
+ * @package widrow-ai/tests
  */
 
 declare(strict_types=1);
@@ -30,16 +30,16 @@ require_once __DIR__ . '/wp-stubs.php';
 
 // ── Recorders ────────────────────────────────────────────────────────────
 // What the page asked WordPress for, and who the current user is.
-$GLOBALS['_def_styles']    = array();
-$GLOBALS['_def_scripts']   = array();
-$GLOBALS['_def_localized'] = array();
-$GLOBALS['_def_caps']      = array();
+$GLOBALS['_widrow_styles']    = array();
+$GLOBALS['_widrow_scripts']   = array();
+$GLOBALS['_widrow_localized'] = array();
+$GLOBALS['_widrow_caps']      = array();
 
-function _def_reset_recorders( array $caps ): void {
-	$GLOBALS['_def_styles']    = array();
-	$GLOBALS['_def_scripts']   = array();
-	$GLOBALS['_def_localized'] = array();
-	$GLOBALS['_def_caps']      = $caps;
+function _widrow_reset_recorders( array $caps ): void {
+	$GLOBALS['_widrow_styles']    = array();
+	$GLOBALS['_widrow_scripts']   = array();
+	$GLOBALS['_widrow_localized'] = array();
+	$GLOBALS['_widrow_caps']      = $caps;
 }
 
 // ── $wpdb: enough for the table-exists probe, the count and one page of rows ──
@@ -59,7 +59,7 @@ class WPDB_Logs_Page_Stub {
 		// SHOW TABLES LIKE — the page bails early on a falsy answer, so the
 		// table has to look present or nothing below this renders at all.
 		if ( false !== stripos( $query, 'SHOW TABLES' ) ) {
-			return 'wp_def_core_logs';
+			return 'wp_widrow_ai_logs';
 		}
 		return 1; // COUNT(*).
 	}
@@ -83,7 +83,7 @@ $wpdb = new WPDB_Logs_Page_Stub();
 // ── WordPress stubs this page and the drawer template reach for ──────────
 if ( ! function_exists( 'current_user_can' ) ) {
 	function current_user_can( string $cap, ...$args ): bool {
-		return in_array( $cap, $GLOBALS['_def_caps'], true );
+		return in_array( $cap, $GLOBALS['_widrow_caps'], true );
 	}
 }
 if ( ! function_exists( 'wp_die' ) ) {
@@ -93,17 +93,17 @@ if ( ! function_exists( 'wp_die' ) ) {
 }
 if ( ! function_exists( 'wp_enqueue_style' ) ) {
 	function wp_enqueue_style( $handle, ...$rest ): void {
-		$GLOBALS['_def_styles'][] = $handle;
+		$GLOBALS['_widrow_styles'][] = $handle;
 	}
 }
 if ( ! function_exists( 'wp_enqueue_script' ) ) {
 	function wp_enqueue_script( $handle, ...$rest ): void {
-		$GLOBALS['_def_scripts'][] = $handle;
+		$GLOBALS['_widrow_scripts'][] = $handle;
 	}
 }
 if ( ! function_exists( 'wp_localize_script' ) ) {
 	function wp_localize_script( $handle, $name, $data ): bool {
-		$GLOBALS['_def_localized'][ $name ] = $data;
+		$GLOBALS['_widrow_localized'][ $name ] = $data;
 		return true;
 	}
 }
@@ -192,9 +192,9 @@ if ( ! function_exists( 'esc_attr_e' ) ) {
 	}
 }
 
-require_once DEF_CORE_PLUGIN_DIR . 'includes/class-def-core-logger.php';
-require_once DEF_CORE_PLUGIN_DIR . 'includes/class-def-core-admin.php';
-require_once DEF_CORE_PLUGIN_DIR . 'includes/class-def-core-logs-page.php';
+require_once WIDROW_AI_PLUGIN_DIR . 'includes/class-widrow-ai-logger.php';
+require_once WIDROW_AI_PLUGIN_DIR . 'includes/class-widrow-ai-admin.php';
+require_once WIDROW_AI_PLUGIN_DIR . 'includes/class-widrow-ai-logs-page.php';
 
 $pass = 0;
 $fail = 0;
@@ -211,10 +211,10 @@ function check( bool $cond, string $label, string $detail = '' ): void {
 
 /** Render the Connection Logs page as a user holding exactly $caps. */
 function render_logs_as( array $caps ): string {
-	_def_reset_recorders( $caps );
+	_widrow_reset_recorders( $caps );
 	ob_start();
 	try {
-		DEF_Core_Logs_Page::render_page();
+		Widrow_AI_Logs_Page::render_page();
 	} catch ( Throwable $e ) {
 		ob_end_clean();
 		return 'THREW: ' . $e->getMessage();
@@ -226,19 +226,19 @@ echo "=== Setup Assistant on the Connection Logs page ===\n";
 
 // ── 1-6. A DEF Admin gets the drawer ─────────────────────────────────────
 echo "\n[1] A DEF Admin opening Connection Logs gets the Setup Assistant\n";
-$html = render_logs_as( array( 'manage_options', 'def_admin_access' ) );
+$html = render_logs_as( array( 'manage_options', 'widrow_admin_access' ) );
 
 check( 0 !== strpos( $html, 'THREW:' ), 'the page renders', $html );
 
-check( in_array( 'def-core-setup-assistant', $GLOBALS['_def_styles'], true ),
+check( in_array( 'widrow-ai-setup-assistant', $GLOBALS['_widrow_styles'], true ),
 	'the drawer stylesheet is enqueued',
-	'styles: ' . implode( ', ', $GLOBALS['_def_styles'] ) );
+	'styles: ' . implode( ', ', $GLOBALS['_widrow_styles'] ) );
 
-check( in_array( 'def-core-setup-assistant', $GLOBALS['_def_scripts'], true ),
+check( in_array( 'widrow-ai-setup-assistant', $GLOBALS['_widrow_scripts'], true ),
 	'the drawer script is enqueued',
-	'scripts: ' . implode( ', ', $GLOBALS['_def_scripts'] ) );
+	'scripts: ' . implode( ', ', $GLOBALS['_widrow_scripts'] ) );
 
-check( isset( $GLOBALS['_def_localized']['defSetupAssistant']['chatStreamUrl'] ),
+check( isset( $GLOBALS['_widrow_localized']['defSetupAssistant']['chatStreamUrl'] ),
 	'the drawer is handed its REST config (defSetupAssistant.chatStreamUrl)' );
 
 check( false !== strpos( $html, 'id="def-setup-assistant-drawer"' ),
@@ -256,17 +256,17 @@ $h1 = strstr( strstr( $html, '<h1>' ) ?: '', '</h1>', true ) ?: '';
 check( false !== strpos( $h1, 'id="def-setup-assistant-trigger"' ),
 	'the trigger is inside the h1, as on the other pages' );
 
-// ── 7-9. A manage_options user without def_admin_access gets none of it ──
-echo "\n[2] A user without def_admin_access is shipped none of it\n";
+// ── 7-9. A manage_options user without widrow_admin_access gets none of it ──
+echo "\n[2] A user without widrow_admin_access is shipped none of it\n";
 $html_plain = render_logs_as( array( 'manage_options' ) );
 
 check( 0 !== strpos( $html_plain, 'THREW:' ), 'the page still renders', $html_plain );
 
-check( ! in_array( 'def-core-setup-assistant', $GLOBALS['_def_styles'], true )
-	&& ! in_array( 'def-core-setup-assistant', $GLOBALS['_def_scripts'], true ),
+check( ! in_array( 'widrow-ai-setup-assistant', $GLOBALS['_widrow_styles'], true )
+	&& ! in_array( 'widrow-ai-setup-assistant', $GLOBALS['_widrow_scripts'], true ),
 	'no drawer assets are enqueued for a non-admin',
-	'styles: ' . implode( ', ', $GLOBALS['_def_styles'] )
-		. ' scripts: ' . implode( ', ', $GLOBALS['_def_scripts'] ) );
+	'styles: ' . implode( ', ', $GLOBALS['_widrow_styles'] )
+		. ' scripts: ' . implode( ', ', $GLOBALS['_widrow_scripts'] ) );
 
 check( false === strpos( $html_plain, 'def-setup-assistant-drawer' )
 	&& false === strpos( $html_plain, 'def-setup-assistant-trigger' ),
@@ -278,14 +278,14 @@ check( false === strpos( $html_plain, 'def-setup-assistant-drawer' )
 // actually encloses the table a reader receives.
 echo "\n[3] The log table is rendered inside the scroll container\n";
 
-check( false !== strpos( $html, 'class="def-core-table-scroll"' ),
+check( false !== strpos( $html, 'class="widrow-ai-table-scroll"' ),
 	'the scroll container is rendered' );
 
 // Containment, not mere order. "The table appears after the wrapper opens" is
 // satisfied by an empty wrapper standing next to the table, so assert the wrapper
 // is still OPEN where the table begins and CLOSES once it ends.
-$from_open    = strstr( $html, '<div class="def-core-table-scroll">' ) ?: '';
-$before_table = strstr( $from_open, '<table class="widefat striped def-core-logs-table"', true );
+$from_open    = strstr( $html, '<div class="widrow-ai-table-scroll">' ) ?: '';
+$before_table = strstr( $from_open, '<table class="widefat striped widrow-ai-logs-table"', true );
 check( is_string( $before_table ) && false === strpos( $before_table, '</div>' ),
 	'the wrapper is still open where the log table begins — the table is INSIDE it, not beside it' );
 
@@ -302,7 +302,7 @@ check( false === strpos( $html, 'table-layout: fixed' ),
 // out of render_settings_page() would leave the Logs checks above perfectly green.
 echo "\n[4] The settings page still carries the drawer\n";
 
-$m      = new ReflectionMethod( 'DEF_Core_Admin', 'render_settings_page' );
+$m      = new ReflectionMethod( 'Widrow_AI_Admin', 'render_settings_page' );
 $lines  = file( (string) $m->getFileName() );
 $source = implode( '', array_slice( $lines, $m->getStartLine() - 1, $m->getEndLine() - $m->getStartLine() + 1 ) );
 
@@ -313,10 +313,10 @@ check( false !== strpos( $source, 'enqueue_setup_assistant_drawer()' ),
 	'render_settings_page() still enqueues the drawer assets' );
 
 // The helper both pages share does what both pages depend on it doing.
-_def_reset_recorders( array( 'manage_options', 'def_admin_access' ) );
-DEF_Core_Admin::enqueue_setup_assistant_drawer();
-check( in_array( 'def-core-setup-assistant', $GLOBALS['_def_styles'], true )
-	&& in_array( 'def-core-setup-assistant', $GLOBALS['_def_scripts'], true ),
+_widrow_reset_recorders( array( 'manage_options', 'widrow_admin_access' ) );
+Widrow_AI_Admin::enqueue_setup_assistant_drawer();
+check( in_array( 'widrow-ai-setup-assistant', $GLOBALS['_widrow_styles'], true )
+	&& in_array( 'widrow-ai-setup-assistant', $GLOBALS['_widrow_scripts'], true ),
 	'the shared helper enqueues both drawer handles' );
 
 echo "\n$pass passed, $fail failed\n";

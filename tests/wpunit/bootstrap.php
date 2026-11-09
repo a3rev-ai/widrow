@@ -1,11 +1,11 @@
 <?php
 /**
- * PHPUnit bootstrap for def-core WP integration tests.
+ * PHPUnit bootstrap for widrow-ai WP integration tests.
  *
  * Loads the WP test library from wp-env's test environment,
- * then activates def-core so all hooks fire before tests run.
+ * then activates widrow-ai so all hooks fire before tests run.
  *
- * @package def-core
+ * @package widrow-ai
  */
 
 // Composer autoload (for PHPUnit + polyfills).
@@ -29,7 +29,7 @@ require_once $_tests_dir . '/includes/functions.php';
 tests_add_filter(
 	'muplugins_loaded',
 	function () {
-		require dirname( __DIR__, 2 ) . '/def-core.php';
+		require dirname( __DIR__, 2 ) . '/widrow-ai.php';
 	}
 );
 

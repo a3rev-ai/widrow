@@ -15,7 +15,7 @@
  *
  * Runs standalone (no WordPress bootstrap).
  *
- * @package def-core/tests
+ * @package widrow-ai/tests
  */
 
 declare(strict_types=1);
@@ -90,8 +90,8 @@ if ( ! defined( 'WPSEO_VERSION' ) ) {
 	define( 'WPSEO_VERSION', '99.0' );
 }
 
-require_once DEF_CORE_PLUGIN_DIR . 'includes/class-def-core-knowledge-exclusion.php';
-require_once DEF_CORE_PLUGIN_DIR . 'includes/class-def-core-seo-meta.php';
+require_once WIDROW_AI_PLUGIN_DIR . 'includes/class-widrow-ai-knowledge-exclusion.php';
+require_once WIDROW_AI_PLUGIN_DIR . 'includes/class-widrow-ai-seo-meta.php';
 
 $_SERVER['HTTP_X_DEF_USER'] = '5';
 
@@ -114,7 +114,7 @@ function assert_same( $expected, $actual, string $label ): void {
 
 // ── 1. Excluded item: write REFUSED, nothing written ────────────────────
 echo "[1] seo-meta write refuses an excluded item (no write)\n";
-$GLOBALS['t_meta']        = array( '_def_exclude_from_ingestion' => '1' );
+$GLOBALS['t_meta']        = array( '_widrow_exclude_from_ingestion' => '1' );
 $GLOBALS['t_meta_writes'] = array();
 $req = new WP_REST_Request( 'POST', '' );
 $req->set_json( array(
@@ -123,7 +123,7 @@ $req->set_json( array(
 	'seo_title'           => 'A New SEO Title',
 	'optimized_keyphrase' => 'blue widgets',
 ) );
-$resp = DEF_Core_SEO_Meta::rest_write( $req );
+$resp = Widrow_AI_SEO_Meta::rest_write( $req );
 assert_true( $resp instanceof WP_REST_Response, 'returns a response' );
 $data = $resp->get_data();
 assert_same( 'excluded', $data['status'], 'returns status=excluded' );
@@ -131,7 +131,7 @@ assert_same( array(), $GLOBALS['t_meta_writes'], 'no update_post_meta — nothin
 
 // ── 2. Non-excluded item: still writes (incl. the real SEO meta) ────────
 echo "[2] seo-meta write still applies to a non-excluded item\n";
-$GLOBALS['t_meta']        = array( '_def_exclude_from_ingestion' => '' );
+$GLOBALS['t_meta']        = array( '_widrow_exclude_from_ingestion' => '' );
 $GLOBALS['t_meta_writes'] = array();
 $req = new WP_REST_Request( 'POST', '' );
 $req->set_json( array(
@@ -140,7 +140,7 @@ $req->set_json( array(
 	'seo_title'           => 'A New SEO Title',
 	'optimized_keyphrase' => 'blue widgets',
 ) );
-$data = DEF_Core_SEO_Meta::rest_write( $req )->get_data();
+$data = Widrow_AI_SEO_Meta::rest_write( $req )->get_data();
 assert_true( ! isset( $data['status'] ) || 'excluded' !== $data['status'], 'non-excluded item is not refused' );
 assert_true( array_key_exists( 'written', $data ), 'normal write response shape (has "written")' );
 assert_same( 'yoast', $data['plugin'], 'active plugin resolved (yoast)' );
@@ -149,8 +149,8 @@ assert_true( in_array( 'seo_title', $data['written'], true ), 'seo_title written
 assert_true( count( $GLOBALS['t_meta_writes'] ) > 0, 'update_post_meta called for a non-excluded item' );
 // The actual SEO meta + the optimized stamp/keyphrase are all written.
 $keys_written = array_map( static function ( $w ) { return $w['key']; }, $GLOBALS['t_meta_writes'] );
-assert_true( in_array( '_def_content_optimized_at', $keys_written, true ), 'optimized stamp written' );
-assert_true( in_array( '_def_optimized_keyphrase', $keys_written, true ), 'optimized keyphrase written' );
+assert_true( in_array( '_widrow_content_optimized_at', $keys_written, true ), 'optimized stamp written' );
+assert_true( in_array( '_widrow_optimized_keyphrase', $keys_written, true ), 'optimized keyphrase written' );
 
 // ── Summary ─────────────────────────────────────────────────────────────
 echo "\n$pass passed, $fail failed\n";

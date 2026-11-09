@@ -10,7 +10,7 @@
  *
  * Runs standalone (no WordPress bootstrap).
  *
- * @package def-core/tests
+ * @package widrow-ai/tests
  */
 
 declare(strict_types=1);
@@ -72,11 +72,11 @@ if ( ! defined( 'ABSPATH' ) ) {
 	define( 'ABSPATH', __DIR__ . '/../' );
 }
 // content_deleted's trashed_query (and the topics/forums export above it) now
-// reach into DEF_Core_Export::normalize_modified_after_for_date_query() to
+// reach into Widrow_AI_Export::normalize_modified_after_for_date_query() to
 // strip the ISO timezone offset before handing it to WP_Date_Query. Load that
 // class first so the static call resolves under standalone tests.
-require_once __DIR__ . '/../includes/class-def-core-export.php';
-require_once __DIR__ . '/../includes/class-def-core-knowledge-export.php';
+require_once __DIR__ . '/../includes/class-widrow-ai-export.php';
+require_once __DIR__ . '/../includes/class-widrow-ai-knowledge-export.php';
 
 // ── Test Runner ────────────────────────────────────────────────────────
 
@@ -103,7 +103,7 @@ echo "Meta Denylist Tests:\n";
 
 // We can't test get_post_meta_filtered() directly without WP, but we can
 // test the denylist prefix logic by reflection.
-$reflection = new ReflectionClass( 'DEF_Core_Knowledge_Export' );
+$reflection = new ReflectionClass( 'Widrow_AI_Knowledge_Export' );
 $prop = $reflection->getProperty( 'meta_denylist_prefixes' );
 $prop->setAccessible( true );
 $prefixes = $prop->getValue();
@@ -147,7 +147,7 @@ echo "\n";
 echo "Embedded Document Link Tests:\n";
 
 $html_with_pdf = '<p>Download the <a href="https://test.example.com/wp-content/uploads/brochure.pdf">brochure</a></p>';
-$links = DEF_Core_Knowledge_Export::get_embedded_document_links( $html_with_pdf );
+$links = Widrow_AI_Knowledge_Export::get_embedded_document_links( $html_with_pdf );
 assert_test(
 	count( $links ) === 1,
 	'Finds PDF link in HTML'
@@ -158,41 +158,41 @@ assert_test(
 );
 
 $html_with_multiple = '<a href="https://test.example.com/spec.pdf">Spec</a> <a href="https://test.example.com/guide.docx">Guide</a>';
-$links = DEF_Core_Knowledge_Export::get_embedded_document_links( $html_with_multiple );
+$links = Widrow_AI_Knowledge_Export::get_embedded_document_links( $html_with_multiple );
 assert_test(
 	count( $links ) === 2,
 	'Finds multiple document links'
 );
 
 $html_external = '<a href="https://evil.example.org/malware.pdf">Bad PDF</a>';
-$links = DEF_Core_Knowledge_Export::get_embedded_document_links( $html_external );
+$links = Widrow_AI_Knowledge_Export::get_embedded_document_links( $html_external );
 assert_test(
 	count( $links ) === 0,
 	'Rejects external domain PDF links'
 );
 
 $html_with_images = '<img src="https://test.example.com/photo.jpg"> <a href="https://test.example.com/doc.pdf">Doc</a>';
-$links = DEF_Core_Knowledge_Export::get_embedded_document_links( $html_with_images );
+$links = Widrow_AI_Knowledge_Export::get_embedded_document_links( $html_with_images );
 assert_test(
 	count( $links ) === 1,
 	'Ignores image URLs, finds only document links'
 );
 
-$links = DEF_Core_Knowledge_Export::get_embedded_document_links( '' );
+$links = Widrow_AI_Knowledge_Export::get_embedded_document_links( '' );
 assert_test(
 	count( $links ) === 0,
 	'Returns empty for empty content'
 );
 
 $html_subdomain = '<a href="https://docs.test.example.com/guide.pdf">Guide</a>';
-$links = DEF_Core_Knowledge_Export::get_embedded_document_links( $html_subdomain );
+$links = Widrow_AI_Knowledge_Export::get_embedded_document_links( $html_subdomain );
 assert_test(
 	count( $links ) === 1,
 	'Accepts subdomain document links'
 );
 
 $html_duplicate = '<a href="https://test.example.com/doc.pdf">Link 1</a> <a href="https://test.example.com/doc.pdf">Link 2</a>';
-$links = DEF_Core_Knowledge_Export::get_embedded_document_links( $html_duplicate );
+$links = Widrow_AI_Knowledge_Export::get_embedded_document_links( $html_duplicate );
 assert_test(
 	count( $links ) === 1,
 	'Deduplicates same URL'
@@ -203,7 +203,7 @@ echo "\n";
 // ── Test: Exported post types exclude system types ─────────────────────
 echo "Post Type Discovery Tests:\n";
 
-$types = DEF_Core_Knowledge_Export::get_exported_post_types();
+$types = Widrow_AI_Knowledge_Export::get_exported_post_types();
 assert_test(
 	in_array( 'post', $types, true ),
 	'Includes post type'
@@ -260,20 +260,20 @@ echo "Exclusion Deindex Feed Tests:\n";
 
 // track_exclusion_change appends and prunes entries older than 90 days.
 _wp_test_reset_options();
-DEF_Core_Knowledge_Export::track_exclusion_change( 500, 'product', true );
-DEF_Core_Knowledge_Export::track_exclusion_change( 500, 'product', false );
-$tracked = get_option( 'def_core_exclusion_changes', array() );
+Widrow_AI_Knowledge_Export::track_exclusion_change( 500, 'product', true );
+Widrow_AI_Knowledge_Export::track_exclusion_change( 500, 'product', false );
+$tracked = get_option( 'widrow_ai_exclusion_changes', array() );
 assert_test(
 	count( $tracked ) === 2 && $tracked[0]['excluded'] === true && $tracked[1]['excluded'] === false,
 	'track_exclusion_change records both directions in order'
 );
 
 // An entry older than 90 days is pruned on the next write.
-update_option( 'def_core_exclusion_changes', array(
+update_option( 'widrow_ai_exclusion_changes', array(
 	array( 'id' => 999, 'type' => 'post', 'excluded' => true, 'time' => gmdate( 'c', strtotime( '-200 days' ) ) ),
 ) );
-DEF_Core_Knowledge_Export::track_exclusion_change( 501, 'page', true );
-$tracked = get_option( 'def_core_exclusion_changes', array() );
+Widrow_AI_Knowledge_Export::track_exclusion_change( 501, 'page', true );
+$tracked = get_option( 'widrow_ai_exclusion_changes', array() );
 $ids     = array_map( static fn( $e ) => $e['id'], $tracked );
 assert_test(
 	! in_array( 999, $ids, true ) && in_array( 501, $ids, true ),
@@ -283,7 +283,7 @@ assert_test(
 // content_deleted reports NET-latest excluded items only (re-included drop out,
 // pre-`since` entries excluded).
 _wp_test_reset_options();
-update_option( 'def_core_exclusion_changes', array(
+update_option( 'widrow_ai_exclusion_changes', array(
 	array( 'id' => 200, 'type' => 'product', 'excluded' => true,  'time' => '2026-05-01T00:00:00+00:00' ),
 	array( 'id' => 100, 'type' => 'post',    'excluded' => true,  'time' => '2026-05-01T00:00:00+00:00' ),
 	array( 'id' => 100, 'type' => 'post',    'excluded' => false, 'time' => '2026-05-02T00:00:00+00:00' ), // re-included → out
@@ -291,7 +291,7 @@ update_option( 'def_core_exclusion_changes', array(
 	array( 'id' => 300, 'type' => 'page',    'excluded' => true,  'time' => '2026-05-03T00:00:00+00:00' ), // latest excluded → in
 	array( 'id' => 400, 'type' => 'product', 'excluded' => true,  'time' => '2025-01-01T00:00:00+00:00' ), // before since → out
 ) );
-$resp     = DEF_Core_Knowledge_Export::content_deleted( new WP_REST_Request( array( 'since' => '2026-01-01T00:00:00+00:00' ) ) );
+$resp     = Widrow_AI_Knowledge_Export::content_deleted( new WP_REST_Request( array( 'since' => '2026-01-01T00:00:00+00:00' ) ) );
 $data     = $resp->get_data();
 $excluded = $data['excluded_ids'] ?? array();
 $ex_ids   = array_map( static fn( $e ) => $e['id'], $excluded );

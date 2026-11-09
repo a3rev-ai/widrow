@@ -33,7 +33,7 @@ Thank you for your interest in contributing to Widrow AI. This guide covers the 
    npm run env:start
    ```
 
-   This uses [wp-env](https://developer.wordpress.org/block-editor/reference-guides/packages/packages-env/) to spin up WordPress + Docker. The plugin is mounted at `wp-content/plugins/def-core` whatever your checkout folder is called, and starts inactive. `npm run smoke` activates it on the tests site (port 8889); on the development site (port 8888), activate it in wp-admin. The environment is configured in `.wp-env.json`.
+   This uses [wp-env](https://developer.wordpress.org/block-editor/reference-guides/packages/packages-env/) to spin up WordPress + Docker. The plugin is mounted at `wp-content/plugins/widrow-ai` whatever your checkout folder is called, and starts inactive. `npm run smoke` activates it on the tests site (port 8889); on the development site (port 8888), activate it in wp-admin. The environment is configured in `.wp-env.json`.
 
 4. **Run the tests to verify your setup:**
 
@@ -54,9 +54,9 @@ See [docs/TESTING.md](docs/TESTING.md) for the full testing guide.
 
 ### Full-stack testing (bridge with DEF backend)
 
-`npm run env:start` is enough for PHP-only changes and PHPUnit/smoke tests. Changes that exercise the bridge to DEF — JWT flows, API-key auth, REST passthrough, tool calls, chat streaming — need the full integration stack, which includes the DEF Python backend plus a pre-seeded WordPress with def-core activated.
+`npm run env:start` is enough for PHP-only changes and PHPUnit/smoke tests. Changes that exercise the bridge to DEF — JWT flows, API-key auth, REST passthrough, tool calls, chat streaming — need the full integration stack, which includes the DEF Python backend plus a pre-seeded WordPress with widrow-ai activated.
 
-The integration stack lives in the `digital-employee-framework` repository (private) and is available to a3rev staff and partner contributors with access. If you have access, see `DEV-SETUP.md` in that repo for the full setup. Community contributors working on the def-core plugin in isolation do not need it — `npm run env:start` covers the public contribution path.
+The integration stack lives in the `digital-employee-framework` repository (private) and is available to a3rev staff and partner contributors with access. If you have access, see `DEV-SETUP.md` in that repo for the full setup. Community contributors working on the widrow-ai plugin in isolation do not need it — `npm run env:start` covers the public contribution path.
 
 ## Workflow
 
@@ -117,7 +117,7 @@ Releases are cut **manually** after a version-bumping PR is merged to `main`. Th
 
 ### Steps
 
-1. Merge the version-bumping PR to `main` (PR includes the bump in `def-core.php` ×2, `readme.txt` Stable tag + changelog entry, `changelog.txt` entry, `README.md` badge URL).
+1. Merge the version-bumping PR to `main` (PR includes the bump in `widrow-ai.php` ×2, `readme.txt` Stable tag + changelog entry, `changelog.txt` entry, `README.md` badge URL).
 2. From your local clone with `gh` authenticated, run:
 
    ```bash
@@ -128,12 +128,12 @@ Releases are cut **manually** after a version-bumping PR is merged to `main`. Th
 
    Replace `X.Y.Z` (e.g. `2.7.0`) and the title. The `awk` extracts the matching `= X.Y.Z =` section from `changelog.txt` for the release notes; you can edit those notes on the GitHub release page after creation if you want richer formatting.
 
-3. The `release.yml` workflow fires on the `release: published` event, builds `widrow-ai.zip` and `digital-employees.zip`, and attaches them to the release.
+3. The `release.yml` workflow fires on the `release: published` event, builds `widrow-ai.zip` and `widrow-ai.zip`, and attaches them to the release.
 4. Verify the asset is attached:
 
    ```bash
    gh release view vX.Y.Z --json assets --jq '.assets[].name'
-   # Expect: widrow-ai.zip and digital-employees.zip
+   # Expect: widrow-ai.zip and widrow-ai.zip
    ```
 
 5. WordPress sites with the plugin installed will see the update on their next auto-update check (or immediately when an admin clicks **Plugins → Check for updates** or **Dashboard → Updates → Check again**).
@@ -160,7 +160,7 @@ WordPress's `version_compare()` has a quirk where `2.2.10` is treated as **less 
 ### Security
 
 - Never hardcode secrets, API keys, or credentials
-- Use `DEF_Core_Encryption` for storing sensitive values
+- Use `Widrow_AI_Encryption` for storing sensitive values
 - All REST endpoints must have proper `permission_callback` functions
 - Review [WordPress Plugin Security](https://developer.wordpress.org/plugins/security/) guidelines
 

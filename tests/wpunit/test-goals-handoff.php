@@ -3,7 +3,7 @@
  * W75 G2 — the hand-off leg: Customer Chat's send-escalation-email queues
  * handoff_sent only once the hand-off has actually been sent.
  *
- * @package def-core
+ * @package widrow-ai
  */
 
 declare(strict_types=1);
@@ -14,7 +14,7 @@ class Test_Goals_Handoff extends WP_UnitTestCase {
 
 	public function set_up(): void {
 		parent::set_up();
-		update_option( 'def_core_api_key', 'tenant-key' );
+		update_option( 'widrow_ai_api_key', 'tenant-key' );
 		_set_cron_array( array() );
 	}
 
@@ -30,7 +30,7 @@ class Test_Goals_Handoff extends WP_UnitTestCase {
 	private function queued(): array {
 		$out = array();
 		foreach ( (array) _get_cron_array() as $hooks ) {
-			foreach ( $hooks[ DEF_Core_Goals::CRON_HOOK ] ?? array() as $event ) {
+			foreach ( $hooks[ Widrow_AI_Goals::CRON_HOOK ] ?? array() as $event ) {
 				$out[] = $event['args'][0];
 			}
 		}

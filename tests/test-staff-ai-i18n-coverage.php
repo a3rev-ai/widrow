@@ -5,7 +5,7 @@
  * Verifies:
  *  - Every t( 'key', 'default' ) the console's JS uses has an entry in the PHP
  *    i18n map, so no console string ships English-only past a language file.
- *  - Every map entry keeps the wp_json_encode( __( …, 'digital-employees' ) )
+ *  - Every map entry keeps the wp_json_encode( __( …, 'widrow-ai' ) )
  *    shape, which is what puts it in the .pot file in the first place.
  *  - No key is declared twice, where the later entry would silently win.
  *
@@ -19,7 +19,7 @@
  *
  * Runs standalone (no WordPress bootstrap) — it reads the two files as text.
  *
- * @package def-core/tests
+ * @package widrow-ai/tests
  */
 
 declare(strict_types=1);
@@ -131,7 +131,7 @@ if ( $missing ) {
 		echo "    - $key\n";
 	}
 	echo "  Add each to templates/staff-ai-shell.php as:\n";
-	echo "    <key>: <?php echo wp_json_encode( __( '<the JS default>', 'digital-employees' ) ); ?>,\n";
+	echo "    <key>: <?php echo wp_json_encode( __( '<the JS default>', 'widrow-ai' ) ); ?>,\n";
 }
 assert_same( array(), $missing, 'every t() key the console uses has an i18n map entry' );
 
@@ -150,13 +150,13 @@ assert_same( array(), $duplicates, 'no key is declared twice in the i18n map' );
 $wrong_shape = array();
 foreach ( $map_keys as $key => $entries ) {
 	foreach ( $entries as $value ) {
-		if ( ! preg_match( "/^<\\?php (?:\\/\\*.*?\\*\\/ )?echo wp_json_encode\\( __\\( .+, 'digital-employees' \\) \\); \\?>,?$/", $value ) ) {
+		if ( ! preg_match( "/^<\\?php (?:\\/\\*.*?\\*\\/ )?echo wp_json_encode\\( __\\( .+, 'widrow-ai' \\) \\); \\?>,?$/", $value ) ) {
 			$wrong_shape[] = $key;
 		}
 	}
 }
 if ( $wrong_shape ) {
-	echo '  entries not wrapped in wp_json_encode( __( …, \'digital-employees\' ) ): ' . implode( ', ', $wrong_shape ) . "\n";
+	echo '  entries not wrapped in wp_json_encode( __( …, \'widrow-ai\' ) ): ' . implode( ', ', $wrong_shape ) . "\n";
 }
 assert_same( array(), $wrong_shape, 'every map entry is a translated, JSON-encoded string' );
 

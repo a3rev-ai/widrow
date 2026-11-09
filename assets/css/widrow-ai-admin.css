@@ -1,0 +1,1218 @@
+/**
+ * Digital Employee Framework - Core - Admin Styles
+ * Phase 7 D-I: Modern tabbed layout with card-based panels.
+ */
+
+/* ─── Base / Layout ────────────────────────────────────────── */
+
+.widrow-ai-wrap {
+	opacity: 1;       /* overrides inline opacity:0 FOUC guard when this CSS loads */
+	max-width: 900px;
+	font-size: 14px;
+}
+
+.widrow-ai-wrap h1 {
+	margin-bottom: 20px;
+}
+
+/* ─── Tab Navigation ───────────────────────────────────────── */
+
+.widrow-ai-tabs {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0;
+	border-bottom: 1px solid #c3c4c7;
+	margin-bottom: 20px;
+}
+
+.widrow-ai-tab {
+	padding: 10px 16px;
+	border: none;
+	border-bottom: 3px solid transparent;
+	background: none;
+	color: #50575e;
+	font-size: 13px;
+	font-weight: 500;
+	cursor: pointer;
+	line-height: 1.4;
+	transition: color 0.15s, border-color 0.15s;
+	white-space: nowrap;
+}
+
+.widrow-ai-tab:hover {
+	color: #2271b1;
+}
+
+.widrow-ai-tab[aria-selected="true"] {
+	color: #1d2327;
+	border-bottom-color: #2271b1;
+	font-weight: 600;
+}
+
+.widrow-ai-tab:focus-visible {
+	outline: 2px solid #2271b1;
+	outline-offset: -2px;
+	border-radius: 2px;
+}
+
+/* ─── Tab Panels ───────────────────────────────────────────── */
+
+.widrow-ai-panel {
+	display: none;
+}
+
+.widrow-ai-panel:not([hidden]) {
+	display: block;
+}
+
+/* ─── Card ─────────────────────────────────────────────────── */
+
+.widrow-ai-card {
+	background: #fff;
+	border: 1px solid #c3c4c7;
+	border-radius: 4px;
+	padding: 24px;
+	margin-bottom: 16px;
+}
+
+.widrow-ai-card h2 {
+	margin: 0 0 16px;
+	padding: 0 0 12px;
+	border-bottom: 1px solid #f0f0f1;
+	font-size: 15px;
+	font-weight: 600;
+	color: #1d2327;
+}
+
+.widrow-ai-card h3 {
+	margin: 20px 0 10px;
+	font-size: 14px;
+	font-weight: 600;
+	color: #1d2327;
+}
+
+.widrow-ai-card h4 {
+	margin: 16px 0 8px;
+	font-size: 13px;
+	font-weight: 600;
+	color: #23282d;
+}
+
+/* ─── Form Fields ──────────────────────────────────────────── */
+
+.widrow-ai-field {
+	margin-bottom: 20px;
+}
+
+.widrow-ai-field:last-child {
+	margin-bottom: 0;
+}
+
+.widrow-ai-field label {
+	display: block;
+	margin-bottom: 6px;
+	font-weight: 600;
+	font-size: 13px;
+	color: #1d2327;
+}
+
+.widrow-ai-field input[type="text"],
+.widrow-ai-field input[type="url"],
+.widrow-ai-field input[type="password"],
+.widrow-ai-field input[type="email"],
+.widrow-ai-field textarea {
+	width: 100%;
+	max-width: 100%;
+}
+
+.widrow-ai-field .description {
+	margin-top: 6px;
+	color: #646970;
+	font-size: 12px;
+}
+
+/* ─── Connection Test ──────────────────────────────────────── */
+
+.widrow-ai-connection-result {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	font-size: 13px;
+	min-height: 30px;
+}
+
+.widrow-ai-connection-result.ok {
+	color: #00a32a;
+}
+
+.widrow-ai-connection-result.error {
+	color: #d63638;
+}
+
+.widrow-ai-connection-result .dashicons {
+	font-size: 18px;
+	width: 18px;
+	height: 18px;
+	line-height: 18px;
+}
+
+/* ─── Connection Tab ──────────────────────────────────────── */
+
+/* Status dot in the Connection tab button */
+.widrow-ai-conn-dot-tab {
+	display: inline-block;
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	margin-right: 6px;
+	vertical-align: middle;
+}
+
+.widrow-ai-conn-dot-tab.connected {
+	background: #00a32a;
+	box-shadow: 0 0 4px rgba(0, 163, 42, 0.4);
+}
+
+.widrow-ai-conn-dot-tab.disconnected {
+	background: #d63638;
+	box-shadow: 0 0 4px rgba(214, 54, 56, 0.4);
+}
+
+/* Connection panel content */
+.widrow-ai-conn-status-panel {
+	padding: 16px;
+	border: 1px solid #c3c4c7;
+	border-left: 4px solid #c3c4c7;
+	border-radius: 2px;
+	background: #f6f7f7;
+	margin-bottom: 16px;
+}
+
+.widrow-ai-conn-status-panel.connected {
+	border-left-color: #00a32a;
+}
+
+.widrow-ai-conn-status-panel.disconnected {
+	border-left-color: #d63638;
+}
+
+.widrow-ai-conn-status-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	font-weight: 600;
+	font-size: 14px;
+	margin-bottom: 12px;
+}
+
+.widrow-ai-conn-dot {
+	display: inline-block;
+	width: 10px;
+	height: 10px;
+	border-radius: 50%;
+	flex-shrink: 0;
+}
+
+.widrow-ai-conn-status-panel.connected .widrow-ai-conn-dot {
+	background: #00a32a;
+	box-shadow: 0 0 4px rgba(0, 163, 42, 0.4);
+}
+
+.widrow-ai-conn-status-panel.connected .widrow-ai-conn-label {
+	color: #00a32a;
+}
+
+.widrow-ai-conn-status-panel.disconnected .widrow-ai-conn-dot {
+	background: #d63638;
+	box-shadow: 0 0 4px rgba(214, 54, 56, 0.4);
+}
+
+.widrow-ai-conn-status-panel.disconnected .widrow-ai-conn-label {
+	color: #d63638;
+}
+
+.widrow-ai-conn-sync {
+	font-weight: 400;
+	color: #646970;
+	font-size: 12px;
+}
+
+.widrow-ai-conn-actions {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.widrow-ai-conn-hint {
+	margin: 12px 0 0;
+	font-size: 13px;
+	color: #646970;
+	font-style: italic;
+}
+
+.widrow-ai-conn-details {
+	border-collapse: collapse;
+	width: 100%;
+}
+
+.widrow-ai-conn-details th {
+	text-align: left;
+	padding: 8px 12px;
+	color: #1d2327;
+	font-weight: 600;
+	width: 140px;
+	border-bottom: 1px solid #e0e0e0;
+}
+
+.widrow-ai-conn-details td {
+	padding: 8px 12px;
+	border-bottom: 1px solid #e0e0e0;
+}
+
+.widrow-ai-conn-details code {
+	background: #f0f0f1;
+	padding: 2px 6px;
+	border-radius: 3px;
+	font-size: 12px;
+}
+
+/* ─── Notices ──────────────────────────────────────────────── */
+
+.widrow-ai-notice {
+	padding: 12px 16px;
+	border-radius: 4px;
+	margin-bottom: 16px;
+	border-left: 4px solid;
+}
+
+.widrow-ai-notice p {
+	margin: 0;
+}
+
+.widrow-ai-notice-success {
+	background: #edfaef;
+	border-color: #00a32a;
+}
+
+.widrow-ai-notice-info {
+	background: #f0f6fc;
+	border-color: #72aee6;
+}
+
+/* ─── Copy Buttons ─────────────────────────────────────────── */
+
+.widrow-ai-copy-btn {
+	vertical-align: middle;
+}
+
+/* ─── Save Area ────────────────────────────────────────────── */
+
+.widrow-ai-save-area {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-top: 4px;
+	padding: 16px 0;
+}
+
+.widrow-ai-save-area .spinner {
+	float: none;
+	margin: 0;
+}
+
+/* ─── Toast Notifications ──────────────────────────────────── */
+
+.widrow-ai-toast-container {
+	position: fixed;
+	top: 36px;
+	right: 16px;
+	z-index: 100001;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	pointer-events: none;
+}
+
+.widrow-ai-toast {
+	padding: 12px 20px;
+	border-radius: 4px;
+	font-size: 13px;
+	color: #fff;
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+	transform: translateX(120%);
+	transition: transform 0.3s ease;
+	pointer-events: auto;
+	max-width: 360px;
+}
+
+.widrow-ai-toast.show {
+	transform: translateX(0);
+}
+
+.widrow-ai-toast.success {
+	background: #00a32a;
+}
+
+.widrow-ai-toast.error {
+	background: #d63638;
+}
+
+/* ─── Logo Upload (D-II) ──────────────────────────────────── */
+
+.widrow-ai-logo-upload {
+	margin-top: 4px;
+}
+
+.widrow-ai-logo-preview {
+	margin-bottom: 12px;
+	padding: 16px;
+	background: #f6f7f7;
+	border: 1px dashed #c3c4c7;
+	border-radius: 4px;
+	display: inline-block;
+	min-width: 120px;
+	min-height: 60px;
+	text-align: center;
+}
+
+.widrow-ai-logo-preview img {
+	display: block;
+}
+
+.widrow-ai-no-logo {
+	color: #646970;
+	font-size: 13px;
+	line-height: 60px;
+}
+
+.widrow-ai-logo-actions {
+	display: flex;
+	gap: 8px;
+	margin-top: 8px;
+}
+
+/* ─── Checkbox Fields (D-II) ──────────────────────────────── */
+
+.widrow-ai-checkbox-field label {
+	font-weight: normal;
+}
+
+.widrow-ai-checkbox-field input[type="checkbox"] {
+	margin-right: 6px;
+}
+
+/* ─── Radio Group (D-II) ─────────────────────────────────── */
+
+.widrow-ai-radio-group {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	margin-top: 4px;
+}
+
+.widrow-ai-radio-label {
+	display: flex;
+	align-items: flex-start;
+	gap: 8px;
+	padding: 12px 16px;
+	border: 1px solid #c3c4c7;
+	border-radius: 4px;
+	cursor: pointer;
+	transition: border-color 0.15s, background 0.15s;
+	font-weight: normal;
+}
+
+.widrow-ai-radio-label:hover {
+	border-color: #2271b1;
+}
+
+.widrow-ai-radio-label input[type="radio"] {
+	margin-top: 3px;
+}
+
+.widrow-ai-radio-label input[type="radio"]:checked ~ strong {
+	color: #2271b1;
+}
+
+.widrow-ai-radio-label .description {
+	margin-top: 2px;
+	margin-left: 0;
+}
+
+/* ─── Escalation Row (D-II) ──────────────────────────────── */
+
+.widrow-ai-escalation-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.widrow-ai-escalation-row .regular-text {
+	flex: 1;
+}
+
+/* ─── User Roles Table (D-II) ────────────────────────────── */
+
+.widrow-ai-roles-table {
+	width: 100%;
+	margin-top: 10px;
+	border-collapse: collapse;
+}
+
+.widrow-ai-roles-table th {
+	padding: 10px 12px;
+	text-align: left;
+	font-weight: 600;
+	font-size: 13px;
+	color: #1d2327;
+	border-bottom: 2px solid #c3c4c7;
+}
+
+.widrow-ai-roles-table td {
+	padding: 8px 12px;
+	vertical-align: middle;
+}
+
+.widrow-ai-roles-table tbody tr {
+	border-bottom: 1px solid #f0f0f1;
+}
+
+.widrow-ai-roles-table tbody tr:hover {
+	background: #f6f7f7;
+}
+
+/* Every capability this screen stores is still carried by a .widrow-ai-role-cb
+   input; the chips and the pills drive them, so all but DEF Admin are marked
+   `hidden`. WordPress core's forms.css gives EVERY checkbox input a
+   display:inline-block, and that is an AUTHOR rule — it beats the UA
+   stylesheet's [hidden] { display: none }, so in wp-admin those inputs came
+   back as bare checkboxes sitting beside the chips they are driven by. Same
+   collision the phone `tr[hidden]` rule answers further down, reached from
+   core's stylesheet instead of ours: core's rule is not media-scoped, so this
+   one must not be either. `[hidden]` is load-bearing — the DEF Admin tick
+   carries no `hidden` and has to stay on screen. */
+.widrow-ai-roles-table .widrow-ai-role-cb[hidden] {
+	display: none;
+}
+
+@keyframes def-row-flash {
+	0%   { background: #d4edda; }
+	100% { background: transparent; }
+}
+
+.widrow-ai-roles-table tbody tr.widrow-ai-row-flash {
+	animation: def-row-flash 2s ease-out;
+}
+
+.widrow-ai-user-avatar {
+	border-radius: 50%;
+	vertical-align: middle;
+	margin-right: 8px;
+}
+
+.widrow-ai-user-email {
+	display: block;
+	font-size: 12px;
+	color: #646970;
+	margin-left: 32px;
+}
+
+.widrow-ai-user-login {
+	font-weight: normal;
+	color: #646970;
+}
+
+.widrow-ai-locked-label {
+	font-size: 11px;
+	color: #d63638;
+	display: block;
+	margin-top: 2px;
+}
+
+.widrow-ai-remove-user-btn {
+	background: none;
+	border: 1px solid #c3c4c7;
+	border-radius: 4px;
+	color: #b32d2e;
+	cursor: pointer;
+	font-size: 16px;
+	line-height: 1;
+	padding: 4px 8px;
+	vertical-align: middle;
+	transition: all 0.15s ease;
+}
+
+.widrow-ai-remove-user-btn:hover {
+	background: #d63638;
+	border-color: #d63638;
+	color: #fff;
+}
+
+/* Add User search */
+
+.widrow-ai-add-user-section {
+	margin-top: 20px;
+	padding-top: 16px;
+	border-top: 1px solid #f0f0f1;
+}
+
+.widrow-ai-add-user-section label {
+	display: block;
+	font-weight: 600;
+	margin-bottom: 6px;
+}
+
+.widrow-ai-user-search-wrap {
+	position: relative;
+	max-width: 400px;
+}
+
+.widrow-ai-search-results {
+	position: absolute;
+	top: 100%;
+	left: 0;
+	right: 0;
+	background: #fff;
+	border: 1px solid #c3c4c7;
+	border-top: none;
+	border-radius: 0 0 4px 4px;
+	box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+	max-height: 280px;
+	overflow-y: auto;
+	z-index: 100;
+}
+
+.widrow-ai-search-result-item {
+	display: flex;
+	align-items: center;
+	padding: 8px 12px;
+	cursor: pointer;
+	border-bottom: 1px solid #f0f0f1;
+	gap: 8px;
+}
+
+.widrow-ai-search-result-item:last-child {
+	border-bottom: none;
+}
+
+.widrow-ai-search-result-item:hover {
+	background: #f0f6fc;
+}
+
+.widrow-ai-search-result-item.is-existing {
+	opacity: 0.5;
+	cursor: default;
+}
+
+.widrow-ai-search-result-avatar {
+	width: 24px;
+	height: 24px;
+	border-radius: 50%;
+	flex-shrink: 0;
+}
+
+.widrow-ai-search-result-info {
+	flex: 1;
+	min-width: 0;
+}
+
+.widrow-ai-search-result-name {
+	font-weight: 500;
+	font-size: 13px;
+}
+
+.widrow-ai-search-result-email {
+	font-size: 12px;
+	color: #646970;
+}
+
+.widrow-ai-search-result-role {
+	font-size: 12px;
+	color: #646970;
+	flex-shrink: 0;
+}
+
+.widrow-ai-search-result-badge {
+	font-size: 11px;
+	color: #2271b1;
+	flex-shrink: 0;
+}
+
+.widrow-ai-search-no-results {
+	padding: 12px;
+	color: #646970;
+	font-size: 13px;
+	text-align: center;
+}
+
+/* ─── User Access: the filter and its count (S3) ──────────── */
+
+.widrow-ai-access-toolbar {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 8px;
+	margin-top: 14px;
+}
+
+.widrow-ai-access-toolbar label {
+	font-weight: 600;
+	font-size: 13px;
+	color: #1d2327;
+}
+
+.widrow-ai-access-count {
+	color: #646970;
+	font-size: 13px;
+}
+
+/* ─── User Access: access level, role chips (S3) ──────────── */
+
+/* Two options, exactly one selected. A segmented control rather than a pair of
+   checkboxes: the shape says "choose one" before anything is read. */
+.widrow-ai-access-level {
+	display: inline-flex;
+	border: 1px solid #c3c4c7;
+	border-radius: 4px;
+	overflow: hidden;
+}
+
+.widrow-ai-access-opt {
+	background: #fff;
+	border: 0;
+	border-right: 1px solid #c3c4c7;
+	color: #50575e;
+	cursor: pointer;
+	font-size: 12px;
+	font-family: inherit;
+	line-height: 1.6;
+	padding: 4px 10px;
+	white-space: nowrap;
+}
+
+.widrow-ai-access-opt:last-child {
+	border-right: 0;
+}
+
+.widrow-ai-access-opt.is-selected {
+	background: #2271b1;
+	color: #fff;
+	font-weight: 600;
+}
+
+.widrow-ai-access-opt:focus-visible {
+	outline: 2px solid #2271b1;
+	outline-offset: -2px;
+}
+
+/* Chips wrap onto more lines; they never widen the row. */
+.widrow-ai-chips {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+}
+
+.widrow-ai-chip {
+	align-items: center;
+	background: #f0f6fc;
+	border: 1px solid #c5d9ed;
+	border-radius: 12px;
+	color: #1d2327;
+	display: inline-flex;
+	font-size: 12px;
+	gap: 4px;
+	line-height: 1.6;
+	max-width: 100%;
+	padding: 2px 4px 2px 10px;
+}
+
+.widrow-ai-chip-label {
+	overflow-wrap: anywhere;
+}
+
+.widrow-ai-chip-remove {
+	background: none;
+	border: 0;
+	border-radius: 50%;
+	color: #646970;
+	cursor: pointer;
+	font-size: 14px;
+	line-height: 1;
+	padding: 2px 5px;
+}
+
+.widrow-ai-chip-remove:hover {
+	background: #d63638;
+	color: #fff;
+}
+
+.widrow-ai-add-role-wrap {
+	display: inline-block;
+	margin-top: 6px;
+	position: relative;
+}
+
+.widrow-ai-add-role {
+	background: none;
+	border: 1px dashed #8c8f94;
+	border-radius: 12px;
+	color: #2271b1;
+	cursor: pointer;
+	font-family: inherit;
+	font-size: 12px;
+	line-height: 1.6;
+	padding: 2px 10px;
+}
+
+.widrow-ai-add-role:hover {
+	border-color: #2271b1;
+	border-style: solid;
+}
+
+.widrow-ai-roles-all-on {
+	color: #646970;
+	font-size: 12px;
+	font-style: italic;
+}
+
+/* The hand-rolled listbox. Absolute so it never grows the row, and floored at
+   the width of the control it hangs off rather than the width of a name. */
+.widrow-ai-role-menu {
+	background: #fff;
+	border: 1px solid #c3c4c7;
+	border-radius: 4px;
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+	left: 0;
+	max-height: 220px;
+	min-width: 180px;
+	overflow-y: auto;
+	position: absolute;
+	top: 100%;
+	z-index: 20;
+}
+
+.widrow-ai-role-option {
+	background: none;
+	border: 0;
+	color: #1d2327;
+	cursor: pointer;
+	display: block;
+	font-family: inherit;
+	font-size: 13px;
+	padding: 6px 12px;
+	text-align: left;
+	white-space: nowrap;
+	width: 100%;
+}
+
+.widrow-ai-role-option:hover,
+.widrow-ai-role-option.is-active {
+	background: #2271b1;
+	color: #fff;
+}
+
+/* ─── Placeholder Tabs ─────────────────────────────────────── */
+
+.widrow-ai-placeholder {
+	text-align: center;
+	padding: 40px 20px;
+	color: #646970;
+}
+
+.widrow-ai-placeholder .dashicons {
+	font-size: 48px;
+	width: 48px;
+	height: 48px;
+	line-height: 48px;
+	color: #c3c4c7;
+	display: block;
+	margin: 0 auto 12px;
+}
+
+.widrow-ai-placeholder p {
+	margin: 0;
+	font-size: 14px;
+}
+
+/* ─── Toggle Switch ────────────────────────────────────────── */
+
+.widrow-ai-toggle-switch {
+	position: relative;
+	display: inline-block;
+	width: 50px;
+	height: 24px;
+	margin-right: 12px;
+	vertical-align: middle;
+}
+
+.widrow-ai-toggle-switch input {
+	opacity: 0;
+	width: 0;
+	height: 0;
+	position: absolute;
+	z-index: 2;
+}
+
+.widrow-ai-slider {
+	position: absolute;
+	cursor: pointer;
+	top: 0;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	background-color: #ccc;
+	transition: 0.3s;
+	border-radius: 24px;
+	pointer-events: auto;
+	z-index: 1;
+}
+
+.widrow-ai-slider:before {
+	position: absolute;
+	content: "";
+	height: 18px;
+	width: 18px;
+	left: 3px;
+	bottom: 3px;
+	background-color: white;
+	transition: 0.3s;
+	border-radius: 50%;
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.widrow-ai-toggle-switch input:checked + .widrow-ai-slider {
+	background-color: #2271b1;
+}
+
+.widrow-ai-toggle-switch input:focus-visible + .widrow-ai-slider {
+	box-shadow: 0 0 0 2px #2271b1;
+}
+
+.widrow-ai-toggle-switch input:checked + .widrow-ai-slider:before {
+	transform: translateX(26px);
+}
+
+.widrow-ai-toggle-switch.widrow-ai-toggle-disabled {
+	opacity: 0.6;
+	cursor: not-allowed;
+}
+
+.widrow-ai-toggle-switch.widrow-ai-toggle-disabled .widrow-ai-slider {
+	cursor: not-allowed;
+	background-color: #2271b1;
+}
+
+/* ─── Tools Table ──────────────────────────────────────────── */
+
+.widrow-ai-tools-table {
+	width: 100%;
+	margin-top: 10px;
+}
+
+.widrow-ai-tools-table th {
+	padding: 12px 10px 12px 0;
+	font-weight: 600;
+	vertical-align: middle;
+	text-align: left;
+}
+
+.widrow-ai-tools-table td {
+	padding: 12px 10px;
+	vertical-align: middle;
+}
+
+.widrow-ai-tools-table tr + tr {
+	border-top: 1px solid #f0f0f1;
+}
+
+.widrow-ai-tools-table tr.widrow-ai-disabled {
+	opacity: 0.6;
+}
+
+.widrow-ai-route {
+	display: inline-block;
+	margin-left: 8px;
+	padding: 3px 8px;
+	background-color: #f0f0f1;
+	border-radius: 3px;
+	font-size: 12px;
+	color: #50575e;
+	font-family: Consolas, Monaco, monospace;
+}
+
+.widrow-ai-methods {
+	display: inline-block;
+	margin-left: 8px;
+	padding: 3px 8px;
+	background-color: #e5f5fa;
+	border-radius: 3px;
+	font-size: 11px;
+	color: #0073aa;
+	font-weight: 500;
+}
+
+.widrow-ai-module-badge {
+	display: inline-block;
+	margin-left: 8px;
+	padding: 2px 8px;
+	background-color: #f0f6fc;
+	border: 1px solid #c3c4c7;
+	border-radius: 3px;
+	font-size: 11px;
+	color: #50575e;
+}
+
+/* ─── Wide-table Scroll Container ──────────────────────────── */
+/*
+ * A wide admin table scrolls INSIDE its card; the page itself never grows past
+ * the phone. Without the wrapper the document takes the table's width, wp-admin
+ * scrolls sideways, and every position:fixed box on the page - the Setup
+ * Assistant drawer - anchors to that wider document rather than to the screen,
+ * which is how the drawer's close button ended up off the right-hand edge.
+ */
+
+.widrow-ai-table-scroll {
+	overflow-x: auto;
+	-webkit-overflow-scrolling: touch;
+	max-width: 100%;
+}
+
+/* ─── Connection Logs Table ────────────────────────────────── */
+/*
+ * The inline table-layout: fixed this table used to carry starved the Message
+ * column on a phone. Auto layout plus a floor for the table and for Message is
+ * what keeps it readable; .widrow-ai-table-scroll above keeps that width off the
+ * page.
+ */
+
+.widrow-ai-logs-table {
+	min-width: 720px;
+}
+
+.widrow-ai-logs-table .widrow-ai-log-message {
+	min-width: 300px;
+}
+
+/* ─── Responsive ───────────────────────────────────────────── */
+
+@media screen and (max-width: 782px) {
+	.widrow-ai-tabs {
+		flex-direction: column;
+		border-bottom: none;
+		border-left: 1px solid #c3c4c7;
+		margin-bottom: 16px;
+	}
+
+	.widrow-ai-tab {
+		border-bottom: none;
+		border-left: 3px solid transparent;
+		text-align: left;
+		padding: 8px 12px;
+	}
+
+	.widrow-ai-tab[aria-selected="true"] {
+		border-bottom-color: transparent;
+		border-left-color: #2271b1;
+	}
+
+	.widrow-ai-card {
+		padding: 16px;
+	}
+
+	.widrow-ai-tools-table th,
+	.widrow-ai-tools-table td {
+		display: block;
+		width: 100%;
+		padding: 8px 0;
+	}
+
+	.widrow-ai-tools-table th {
+		border-bottom: none;
+		padding-bottom: 4px;
+	}
+
+	.widrow-ai-route,
+	.widrow-ai-methods,
+	.widrow-ai-module-badge {
+		display: block;
+		margin-left: 62px;
+		margin-top: 4px;
+	}
+
+	.widrow-ai-conn-status-row {
+		flex-wrap: wrap;
+	}
+
+	.widrow-ai-conn-details th {
+		width: auto;
+		display: block;
+		padding-bottom: 2px;
+		border-bottom: none;
+	}
+
+	.widrow-ai-conn-details td {
+		display: block;
+		padding-top: 0;
+		padding-bottom: 12px;
+	}
+
+	.widrow-ai-toast-container {
+		top: 46px;
+		right: 8px;
+		left: 8px;
+	}
+
+	.widrow-ai-toast {
+		max-width: none;
+	}
+
+	.widrow-ai-escalation-row {
+		flex-direction: column;
+		align-items: stretch;
+	}
+
+	/* User Access on a phone (S3): the table stops being a table. Each person
+	   is a block, each cell carries the heading the <thead> used to give it, and
+	   the chips wrap inside it. No wrapper, no min-width, no sideways scroll —
+	   there is no row left to be wider than the screen. */
+	.widrow-ai-roles-table,
+	.widrow-ai-roles-table tbody,
+	.widrow-ai-roles-table tr,
+	.widrow-ai-roles-table td {
+		display: block;
+		width: auto;
+	}
+
+	.widrow-ai-roles-table thead {
+		display: none;
+	}
+
+	/* `hidden` is display:none in the UA stylesheet, and an author rule beats a
+	   UA rule — so the display:block above would un-hide every row the filter
+	   hid, on a phone only. This puts it back, at a specificity that wins. */
+	.widrow-ai-roles-table tr[hidden] {
+		display: none;
+	}
+
+	.widrow-ai-roles-table tbody tr {
+		background: #fff;
+		border: 1px solid #dcdcde;
+		border-radius: 6px;
+		margin-bottom: 12px;
+		padding: 10px 12px;
+	}
+
+	.widrow-ai-roles-table td {
+		padding: 6px 0;
+	}
+
+	/* The last DEF Admin has no × to show, and a heading over nothing reads as
+	   something missing. The cell goes rather than standing empty. */
+	.widrow-ai-roles-table td.is-empty {
+		display: none;
+	}
+
+	.widrow-ai-roles-table td::before {
+		content: attr(data-label);
+		display: block;
+		font-size: 11px;
+		font-weight: 600;
+		letter-spacing: 0.02em;
+		color: #646970;
+		text-transform: uppercase;
+		margin-bottom: 4px;
+	}
+
+	/* The name is the block's heading; it needs no label of its own. */
+	.widrow-ai-roles-table td.widrow-ai-cell-user::before {
+		display: none;
+	}
+
+	/* DEF Admin reads as a control with its label beside it, not under it. */
+	.widrow-ai-roles-table td.widrow-ai-cell-admin {
+		align-items: center;
+		display: flex;
+		flex-wrap: wrap;
+		gap: 8px;
+	}
+
+	.widrow-ai-roles-table td.widrow-ai-cell-admin::before {
+		margin-bottom: 0;
+		order: 2;
+	}
+
+	.widrow-ai-access-level {
+		width: 100%;
+	}
+
+	.widrow-ai-access-opt {
+		flex: 1;
+		padding: 8px 10px;
+	}
+
+	/* Room for a thumb, and a menu that cannot run off the right-hand edge. */
+	.widrow-ai-chip-remove,
+	.widrow-ai-add-role {
+		padding: 6px 12px;
+	}
+
+	.widrow-ai-add-role-wrap {
+		display: block;
+	}
+
+	.widrow-ai-role-menu {
+		max-width: 100%;
+		min-width: 0;
+		right: 0;
+	}
+
+	.widrow-ai-role-option {
+		padding: 10px 12px;
+		white-space: normal;
+	}
+
+	.widrow-ai-radio-group {
+		gap: 8px;
+	}
+}
+
+/* ─── Color Field ────────────────────────────────────────────── */
+
+.widrow-ai-color-field {
+	display: inline-flex;
+	align-items: center;
+	gap: 10px;
+}
+
+.widrow-ai-color-field input[type="color"] {
+	width: 48px;
+	height: 36px;
+	padding: 2px;
+	border: 1px solid #8c8f94;
+	border-radius: 4px;
+	cursor: pointer;
+	background: none;
+}
+
+.widrow-ai-color-value {
+	font-family: monospace;
+	font-size: 13px;
+	color: #50575e;
+}
+
+/* ─── Icon Preview ───────────────────────────────────────────── */
+
+.widrow-ai-icon-radios .widrow-ai-radio-label {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.widrow-ai-icon-preview {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 32px;
+	height: 32px;
+	color: #50575e;
+}

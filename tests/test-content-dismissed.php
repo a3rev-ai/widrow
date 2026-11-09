@@ -15,7 +15,7 @@
  *
  * Runs standalone (no WordPress bootstrap).
  *
- * @package def-core/tests
+ * @package widrow-ai/tests
  */
 
 declare(strict_types=1);
@@ -105,19 +105,19 @@ if ( ! function_exists( 'wp_get_current_user' ) ) {
 	}
 }
 
-if ( ! class_exists( 'DEF_Core' ) ) {
-	class DEF_Core {
+if ( ! class_exists( 'Widrow_AI' ) ) {
+	class Widrow_AI {
 		public static function get_def_api_url_internal(): ?string {
-			return $GLOBALS['_def_test_api_url'] ?? null;
+			return $GLOBALS['_widrow_test_api_url'] ?? null;
 		}
 	}
 }
 
-// Stub DEF_Core_Tools — needed by backend_request() when API URL is configured.
-if ( ! class_exists( 'DEF_Core_Tools' ) ) {
-	class DEF_Core_Tools {
+// Stub Widrow_AI_Tools — needed by backend_request() when API URL is configured.
+if ( ! class_exists( 'Widrow_AI_Tools' ) ) {
+	class Widrow_AI_Tools {
 		public static function get_user_def_capabilities( $user ): array {
-			return array( 'def_staff_access' );
+			return array( 'widrow_staff_access' );
 		}
 	}
 }
@@ -167,7 +167,7 @@ if ( ! class_exists( 'WP_REST_Request' ) ) {
 	}
 }
 
-require_once DEF_CORE_PLUGIN_DIR . 'includes/class-def-core-staff-ai.php';
+require_once WIDROW_AI_PLUGIN_DIR . 'includes/class-widrow-ai-staff-ai.php';
 
 // ── Assertion harness ─────────────────────────────────────────────────────────
 
@@ -189,9 +189,9 @@ function assert_same( $expected, $actual, string $label ): void {
 
 // ── 1. Route registration ────────────────────────────────────────────────────
 echo "[1] Route registration\n";
-DEF_Core_Staff_AI::register_rest_routes();
+Widrow_AI_Staff_AI::register_rest_routes();
 
-$ns = DEF_CORE_API_NAME_SPACE;
+$ns = WIDROW_AI_API_NAME_SPACE;
 
 $list_key    = $ns . '/staff-ai/content/list';
 $dismiss_key = $ns . '/staff-ai/content/items/(?P<item_id>\d+)/dismiss';
@@ -228,7 +228,7 @@ foreach ( array( $list_key, $dismiss_key, $restore_key ) as $rk ) {
 echo "[4] rest_list_content_items — missing bucket → 400\n";
 $req = new WP_REST_Request( 'GET', '/staff-ai/content/list' );
 // bucket param not set → get_param returns null → sanitize_key('') = ''
-$result = DEF_Core_Staff_AI::rest_list_content_items( $req );
+$result = Widrow_AI_Staff_AI::rest_list_content_items( $req );
 assert_true( is_wp_error( $result ), 'missing bucket returns WP_Error' );
 assert_same( 'invalid_bucket', $result->get_error_code(), 'error code is invalid_bucket' );
 $data = $result->get_error_data();
@@ -238,7 +238,7 @@ assert_same( 400, $data['status'], 'HTTP status is 400' );
 echo "[5] rest_list_content_items — empty bucket → 400\n";
 $req = new WP_REST_Request( 'GET', '/staff-ai/content/list' );
 $req->set_param( 'bucket', '' );
-$result = DEF_Core_Staff_AI::rest_list_content_items( $req );
+$result = Widrow_AI_Staff_AI::rest_list_content_items( $req );
 assert_true( is_wp_error( $result ), 'empty bucket returns WP_Error' );
 assert_same( 'invalid_bucket', $result->get_error_code(), 'error code is invalid_bucket' );
 
@@ -246,8 +246,8 @@ assert_same( 'invalid_bucket', $result->get_error_code(), 'error code is invalid
 echo "[6] rest_list_content_items — valid bucket passes validation\n";
 $req = new WP_REST_Request( 'GET', '/staff-ai/content/list' );
 $req->set_param( 'bucket', 'dismissed' );
-$GLOBALS['_def_test_api_url'] = null; // backend not configured
-$result = DEF_Core_Staff_AI::rest_list_content_items( $req );
+$GLOBALS['_widrow_test_api_url'] = null; // backend not configured
+$result = Widrow_AI_Staff_AI::rest_list_content_items( $req );
 if ( is_wp_error( $result ) ) {
 	assert_true(
 		$result->get_error_code() !== 'invalid_bucket',
@@ -259,7 +259,7 @@ if ( is_wp_error( $result ) ) {
 echo "[7] rest_dismiss_content_item — item_id 0 → 400\n";
 $req = new WP_REST_Request( 'POST', '/staff-ai/content/items/0/dismiss' );
 $req->set_param( 'item_id', '0' );
-$result = DEF_Core_Staff_AI::rest_dismiss_content_item( $req );
+$result = Widrow_AI_Staff_AI::rest_dismiss_content_item( $req );
 assert_true( is_wp_error( $result ), 'item_id=0 returns WP_Error' );
 assert_same( 'invalid_item_id', $result->get_error_code(), 'error code is invalid_item_id' );
 $data = $result->get_error_data();
@@ -269,7 +269,7 @@ assert_same( 400, $data['status'], 'HTTP status is 400' );
 echo "[8] rest_dismiss_content_item — missing item_id → 400\n";
 $req = new WP_REST_Request( 'POST', '/staff-ai/content/items//dismiss' );
 // item_id not set → get_param returns null → absint(null) = 0
-$result = DEF_Core_Staff_AI::rest_dismiss_content_item( $req );
+$result = Widrow_AI_Staff_AI::rest_dismiss_content_item( $req );
 assert_true( is_wp_error( $result ), 'missing item_id returns WP_Error' );
 assert_same( 'invalid_item_id', $result->get_error_code(), 'error code is invalid_item_id' );
 
@@ -277,8 +277,8 @@ assert_same( 'invalid_item_id', $result->get_error_code(), 'error code is invali
 echo "[9] rest_dismiss_content_item — valid item_id passes validation\n";
 $req = new WP_REST_Request( 'POST', '/staff-ai/content/items/42/dismiss' );
 $req->set_param( 'item_id', '42' );
-$GLOBALS['_def_test_api_url'] = null;
-$result = DEF_Core_Staff_AI::rest_dismiss_content_item( $req );
+$GLOBALS['_widrow_test_api_url'] = null;
+$result = Widrow_AI_Staff_AI::rest_dismiss_content_item( $req );
 if ( is_wp_error( $result ) ) {
 	assert_true(
 		$result->get_error_code() !== 'invalid_item_id',
@@ -290,7 +290,7 @@ if ( is_wp_error( $result ) ) {
 echo "[10] rest_restore_content_item — item_id 0 → 400\n";
 $req = new WP_REST_Request( 'POST', '/staff-ai/content/items/0/restore' );
 $req->set_param( 'item_id', '0' );
-$result = DEF_Core_Staff_AI::rest_restore_content_item( $req );
+$result = Widrow_AI_Staff_AI::rest_restore_content_item( $req );
 assert_true( is_wp_error( $result ), 'item_id=0 returns WP_Error' );
 assert_same( 'invalid_item_id', $result->get_error_code(), 'error code is invalid_item_id' );
 $data = $result->get_error_data();
@@ -299,7 +299,7 @@ assert_same( 400, $data['status'], 'HTTP status is 400' );
 // ── 11. rest_restore_content_item — missing item_id → 400 ───────────────────
 echo "[11] rest_restore_content_item — missing item_id → 400\n";
 $req = new WP_REST_Request( 'POST', '/staff-ai/content/items//restore' );
-$result = DEF_Core_Staff_AI::rest_restore_content_item( $req );
+$result = Widrow_AI_Staff_AI::rest_restore_content_item( $req );
 assert_true( is_wp_error( $result ), 'missing item_id returns WP_Error' );
 assert_same( 'invalid_item_id', $result->get_error_code(), 'error code is invalid_item_id' );
 
@@ -307,8 +307,8 @@ assert_same( 'invalid_item_id', $result->get_error_code(), 'error code is invali
 echo "[12] rest_restore_content_item — valid item_id passes validation\n";
 $req = new WP_REST_Request( 'POST', '/staff-ai/content/items/99/restore' );
 $req->set_param( 'item_id', '99' );
-$GLOBALS['_def_test_api_url'] = null;
-$result = DEF_Core_Staff_AI::rest_restore_content_item( $req );
+$GLOBALS['_widrow_test_api_url'] = null;
+$result = Widrow_AI_Staff_AI::rest_restore_content_item( $req );
 if ( is_wp_error( $result ) ) {
 	assert_true(
 		$result->get_error_code() !== 'invalid_item_id',
@@ -324,8 +324,8 @@ echo "[13] rest_list_content_items — field allowlist strips unknown fields\n";
 // Set up: authenticated user + legacy-plaintext API key (get_secret returns it directly).
 $_wp_test_current_user     = new WP_User( 1 );
 $_wp_test_current_user->ID = 1;
-update_option( 'def_core_api_key', 'test-api-key' );
-$GLOBALS['_def_test_api_url']      = 'https://def-api.test';
+update_option( 'widrow_ai_api_key', 'test-api-key' );
+$GLOBALS['_widrow_test_api_url']      = 'https://def-api.test';
 $GLOBALS['_wp_test_remote_status'] = 200;
 $GLOBALS['_wp_test_remote_body']   = (string) json_encode( array(
 	'items' => array(
@@ -343,7 +343,7 @@ $GLOBALS['_wp_test_remote_body']   = (string) json_encode( array(
 
 $req = new WP_REST_Request( 'GET', '/staff-ai/content/list' );
 $req->set_param( 'bucket', 'dismissed' );
-$result = DEF_Core_Staff_AI::rest_list_content_items( $req );
+$result = Widrow_AI_Staff_AI::rest_list_content_items( $req );
 
 $is_response = $result instanceof WP_REST_Response;
 assert_true( $is_response, 'valid backend response returns WP_REST_Response' );
@@ -365,7 +365,7 @@ if ( $is_response ) {
 
 // Cleanup backend stubs.
 $_wp_test_current_user             = null;
-$GLOBALS['_def_test_api_url']      = null;
+$GLOBALS['_widrow_test_api_url']      = null;
 $GLOBALS['_wp_test_remote_status'] = null;
 $GLOBALS['_wp_test_remote_body']   = null;
 

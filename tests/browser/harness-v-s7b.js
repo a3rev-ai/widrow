@@ -1,7 +1,7 @@
 /*
  * A multi-step reply is shown once (V-S7b / v7.8.4) — behavioural harness.
  * Runs the SHIPPED SSE stream blocks of BOTH widgets (extracted by marker from
- * assets/js/staff-ai.js and assets/js/def-core-customer-chat.js) inside jsdom
+ * assets/js/staff-ai.js and assets/js/widrow-ai-customer-chat.js) inside jsdom
  * and drives them through real event sequences: a superseded round's text
  * leaves the reply bubble for the working line, a later delta on the same step
  * (the cap-hit summary) stays, a step-0 notice survives every cut, a server

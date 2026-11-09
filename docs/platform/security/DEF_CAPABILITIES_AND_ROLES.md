@@ -27,7 +27,7 @@ Therefore:
 
 ## 2. Core DEF Capabilities (v1)
 
-def-core MUST register the following capabilities.
+widrow-ai MUST register the following capabilities.
 
 ### 2.1 `def_dashboard_access`
 Grants access to the **DEF admin platform UI** in wp-admin (Widrow AI menu and pages).
@@ -36,21 +36,21 @@ Use this to allow only those users who need acccess to the Widrow AI wp-admin me
 
 ---
 
-### 2.2 `def_staff_access`
+### 2.2 `widrow_staff_access`
 Grants access to the **Staff AI Channel** and routes the user to the
 **Staff Knowledge Assistant**.
 
 ---
 
-### 2.3 `def_management_access`
+### 2.3 `widrow_management_access`
 
 Grants access to **management-only internal knowledge** and routes the user to the
 **Management Knowledge Assistant** in the Staff AI Channel.
 
 Rules:
-- `def_management_access` implicitly includes all staff-level access
+- `widrow_management_access` implicitly includes all staff-level access
 - Users with this capability MUST be treated as having staff access for all routing and retrieval purposes
-- `def_staff_access` does not need to be assigned separately when `def_management_access` is present
+- `widrow_staff_access` does not need to be assigned separately when `widrow_management_access` is present
 
 ---
 
@@ -58,7 +58,7 @@ Rules:
 
 ### 3.1 Plugin Activation Rules
 
-When the def-core plugin is installed and activated:
+When the widrow-ai plugin is installed and activated:
 
 - The activating user (who must be a WordPress Administrator to install plugins)
   MUST automatically be granted `def_dashboard_access`.
@@ -91,8 +91,8 @@ The **Security & Access → Access Control** screen MUST provide clear visibilit
 The interface MUST display:
 
 - A list of users with **Dashboard Access** (`def_dashboard_access`)
-- A list of users with **Staff AI Access** (`def_staff_access`)
-- A list of users with **Management AI Access** (`def_management_access`)
+- A list of users with **Staff AI Access** (`widrow_staff_access`)
+- A list of users with **Management AI Access** (`widrow_management_access`)
 
 These lists may overlap:
 - A user may have dashboard access without Staff AI access
@@ -154,8 +154,8 @@ This screen MUST support:
 - searching/selecting WP users
 - granting/removing:
   - Dashboard Access (`def_dashboard_access`)
-  - Staff AI Access (`def_staff_access`)
-  - Management AI Access (`def_management_access`)
+  - Staff AI Access (`widrow_staff_access`)
+  - Management AI Access (`widrow_management_access`)
 - reviewing who currently has access
 - warnings about Management access (“grant only to trusted users”)
 

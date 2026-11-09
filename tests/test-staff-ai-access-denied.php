@@ -2,7 +2,7 @@
 /**
  * Staff AI access-denied refusals — copy, code, and shape (5.7.7).
  *
- * One message, one source: DEF_Core_Staff_AI::access_denied_message() is the
+ * One message, one source: Widrow_AI_Staff_AI::access_denied_message() is the
  * canonical copy, and access_denied_error() the canonical REST refusal with
  * the DISTINCT code `def_staff_access_required` — so a caller can tell "the
  * gate refused you" from every other 401/403 by code, not status arithmetic
@@ -20,7 +20,7 @@
  *
  * Runs standalone (no WordPress bootstrap).
  *
- * @package def-core/tests
+ * @package widrow-ai/tests
  */
 
 declare(strict_types=1);
@@ -105,9 +105,9 @@ if ( ! class_exists( 'WP_Error' ) ) {
 	}
 }
 
-require_once DEF_CORE_PLUGIN_DIR . 'includes/class-def-core-api-registry.php';
-require_once DEF_CORE_PLUGIN_DIR . 'includes/class-def-core-routes.php';
-require_once DEF_CORE_PLUGIN_DIR . 'includes/class-def-core-staff-ai.php';
+require_once WIDROW_AI_PLUGIN_DIR . 'includes/class-widrow-ai-api-registry.php';
+require_once WIDROW_AI_PLUGIN_DIR . 'includes/class-widrow-ai-routes.php';
+require_once WIDROW_AI_PLUGIN_DIR . 'includes/class-widrow-ai-staff-ai.php';
 
 // ── Test helpers ─────────────────────────────────────────────────────────────
 
@@ -135,14 +135,14 @@ function as_user( ?int $id, array $caps ): void {
 echo "\n[1] access_denied_message() tells the user who can fix it and where\n";
 
 as_user( 6, array() );
-$msg = DEF_Core_Staff_AI::access_denied_message();
+$msg = Widrow_AI_Staff_AI::access_denied_message();
 assert_test( strpos( $msg, 'Ask your site administrator' ) !== false, 'the user is told who can fix it' );
 assert_test( strpos( $msg, 'User Roles' ) !== false, 'the copy names the path to relay to their administrator' );
 
 // ── [2] The canonical error carries the named code ──────────────────────────
 echo "\n[2] access_denied_error() is a named, stable refusal\n";
 
-$err = DEF_Core_Staff_AI::access_denied_error();
+$err = Widrow_AI_Staff_AI::access_denied_error();
 assert_test( $err instanceof WP_Error, 'refusal is a WP_Error' );
 assert_test( 'def_staff_access_required' === $err->get_error_code(), 'code is def_staff_access_required, NOT rest_forbidden' );
 assert_test( 403 === ( $err->get_error_data()['status'] ?? 0 ), 'status data is 403' );
@@ -151,25 +151,25 @@ assert_test( 403 === ( $err->get_error_data()['status'] ?? 0 ), 'status data is 
 echo "\n[3] rest_permission_check() refuses the same population, with the named code\n";
 
 as_user( null, array() );
-$anon = DEF_Core_Staff_AI::rest_permission_check();
+$anon = Widrow_AI_Staff_AI::rest_permission_check();
 assert_test( $anon instanceof WP_Error && 'rest_not_logged_in' === $anon->get_error_code(), 'anonymous: rest_not_logged_in 401 unchanged' );
 assert_test( 401 === ( $anon->get_error_data()['status'] ?? 0 ), 'anonymous status stays 401' );
 
 as_user( 7, array() );
-$uncapped = DEF_Core_Staff_AI::rest_permission_check();
+$uncapped = Widrow_AI_Staff_AI::rest_permission_check();
 assert_test( $uncapped instanceof WP_Error && 'def_staff_access_required' === $uncapped->get_error_code(), 'logged-in uncapped: named 403 refusal' );
 
-as_user( 8, array( 'def_staff_access' ) );
-assert_test( true === DEF_Core_Staff_AI::rest_permission_check(), 'def_staff_access passes' );
+as_user( 8, array( 'widrow_staff_access' ) );
+assert_test( true === Widrow_AI_Staff_AI::rest_permission_check(), 'widrow_staff_access passes' );
 
-as_user( 9, array( 'def_management_access' ) );
-assert_test( true === DEF_Core_Staff_AI::rest_permission_check(), 'def_management_access passes' );
+as_user( 9, array( 'widrow_management_access' ) );
+assert_test( true === Widrow_AI_Staff_AI::rest_permission_check(), 'widrow_management_access passes' );
 
 // ── [4] The BFF passthrough callbacks: false for anon, named error uncapped ─
 echo "\n[4] BFF passthrough callbacks keep the 401 shape and name the 403\n";
 
-DEF_Core_Routes::register_rest_routes();
-$ns     = DEF_CORE_API_NAME_SPACE;
+Widrow_AI_Routes::register_rest_routes();
+$ns     = WIDROW_AI_API_NAME_SPACE;
 $stream = $_wp_test_rest_routes[ $ns . '/staff-ai/chat/stream' ]['permission_callback'] ?? null;
 $status = $_wp_test_rest_routes[ $ns . '/staff-ai/status' ]['permission_callback'] ?? null;
 assert_test( is_callable( $stream ), 'chat/stream passthrough captured' );
@@ -179,7 +179,7 @@ assert_test( is_callable( $status ), 'status passthrough captured' );
 // DEF's customer voice status — anonymous visitors included, like /chat/stream.
 $voice = $_wp_test_rest_routes[ $ns . '/chat/voice' ] ?? null;
 assert_test( is_array( $voice ) && 'GET' === ( $voice['methods'] ?? null ) && '__return_true' === ( $voice['permission_callback'] ?? null ), 'chat/voice: a public GET' );
-assert_test( is_array( $voice ) && array( 'DEF_Core_Tools', 'rest_proxy_chat_voice' ) === ( $voice['callback'] ?? null ), 'chat/voice: proxied by rest_proxy_chat_voice' );
+assert_test( is_array( $voice ) && array( 'Widrow_AI_Tools', 'rest_proxy_chat_voice' ) === ( $voice['callback'] ?? null ), 'chat/voice: proxied by rest_proxy_chat_voice' );
 
 foreach ( array( 'chat/stream' => $stream, 'status' => $status ) as $name => $cb ) {
 	as_user( null, array() );
@@ -192,11 +192,11 @@ foreach ( array( 'chat/stream' => $stream, 'status' => $status ) as $name => $cb
 	// fataling on a method call against a bool.
 	assert_test( $refusal instanceof WP_Error && strpos( $refusal->get_error_message(), 'User Roles' ) !== false, "$name: the refusal copy names where access is granted" );
 
-	as_user( 12, array( 'def_staff_access' ) );
-	assert_test( true === $cb(), "$name: def_staff_access still passes" );
+	as_user( 12, array( 'widrow_staff_access' ) );
+	assert_test( true === $cb(), "$name: widrow_staff_access still passes" );
 
-	as_user( 13, array( 'def_management_access' ) );
-	assert_test( true === $cb(), "$name: def_management_access still passes" );
+	as_user( 13, array( 'widrow_management_access' ) );
+	assert_test( true === $cb(), "$name: widrow_management_access still passes" );
 }
 
 // ── Summary ─────────────────────────────────────────────────────────────────

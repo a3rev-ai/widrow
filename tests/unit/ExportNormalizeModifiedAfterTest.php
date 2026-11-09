@@ -1,6 +1,6 @@
 <?php
 /**
- * Unit tests for DEF_Core_Export::normalize_modified_after_for_date_query().
+ * Unit tests for Widrow_AI_Export::normalize_modified_after_for_date_query().
  *
  * This is the workaround for WordPress's WP_Date_Query::build_mysql_datetime(),
  * which TZ-converts a string-with-offset into wp_timezone() before formatting.
@@ -11,23 +11,23 @@
  * The helper strips the explicit offset and emits canonical `Y-m-d H:i:s` in
  * UTC so WP's setTimezone() pass becomes a no-op on the literal string.
  *
- * @package def-core/tests/unit
- * @covers DEF_Core_Export::normalize_modified_after_for_date_query
+ * @package widrow-ai/tests/unit
+ * @covers Widrow_AI_Export::normalize_modified_after_for_date_query
  */
 
 declare(strict_types=1);
 
 use Yoast\PHPUnitPolyfills\TestCases\TestCase;
 
-require_once DEF_CORE_PLUGIN_DIR . 'includes/class-def-core-export.php';
+require_once WIDROW_AI_PLUGIN_DIR . 'includes/class-widrow-ai-export.php';
 
 /**
- * @covers DEF_Core_Export
+ * @covers Widrow_AI_Export
  */
 final class ExportNormalizeModifiedAfterTest extends TestCase {
 
 	private function call( string $raw ): string {
-		return DEF_Core_Export::normalize_modified_after_for_date_query( $raw );
+		return Widrow_AI_Export::normalize_modified_after_for_date_query( $raw );
 	}
 
 	// ── Empty / falsy ────────────────────────────────────────────────────

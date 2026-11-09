@@ -16,12 +16,12 @@
  *     break out of an attribute (the quote-blind escapeHtml + title="…"
  *     interpolation pair).
  *  4. The proxy producers keep curl detail SERVER-side: full text to
- *     DEF_Core_Logger, generic message to every client.
+ *     Widrow_AI_Logger, generic message to every client.
  *
  * Source scans — the suite's instrument for browser-side code; each repair
  * is proven by a verified-applied mutation before the PR.
  *
- * @package def-core/tests
+ * @package widrow-ai/tests
  */
 
 declare(strict_types=1);
@@ -42,9 +42,9 @@ function assert_test( $cond, string $label ): void {
 
 $root        = dirname( __DIR__ );
 $staff_js    = file_get_contents( $root . '/assets/js/staff-ai.js' );
-$customer_js = file_get_contents( $root . '/assets/js/def-core-customer-chat.js' );
-$tools_php   = file_get_contents( $root . '/includes/class-def-core-tools.php' );
-$core_php    = file_get_contents( $root . '/includes/class-def-core.php' );
+$customer_js = file_get_contents( $root . '/assets/js/widrow-ai-customer-chat.js' );
+$tools_php   = file_get_contents( $root . '/includes/class-widrow-ai-tools.php' );
+$core_php    = file_get_contents( $root . '/includes/class-widrow-ai.php' );
 
 // ── 1. Customer pump completion — unconditional, honest, localized ──────────
 
@@ -158,7 +158,7 @@ assert_test(
 	'producer: both proxy sites return the static generic message'
 );
 assert_test(
-	2 === preg_match_all( '/DEF_Core_Logger::error\( \'proxy\', \'Backend connection failed: \' \. curl_error\( \$ch \)/', $tools_php, $m3 ),
+	2 === preg_match_all( '/Widrow_AI_Logger::error\( \'proxy\', \'Backend connection failed: \' \. curl_error\( \$ch \)/', $tools_php, $m3 ),
 	'producer: both proxy sites log the full curl detail server-side'
 );
 

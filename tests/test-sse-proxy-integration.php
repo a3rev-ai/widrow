@@ -17,7 +17,7 @@
  * All four are killed here. Same lesson as the metering gate the same day: testing the
  * decision is not testing the feature.
  *
- * @package def-core/tests
+ * @package widrow-ai/tests
  */
 
 declare(strict_types=1);
@@ -25,8 +25,8 @@ declare(strict_types=1);
 if ( ! defined( 'ABSPATH' ) ) {
 	define( 'ABSPATH', dirname( __DIR__ ) . '/' );
 }
-if ( ! defined( 'DEF_CORE_PLUGIN_DIR' ) ) {
-	define( 'DEF_CORE_PLUGIN_DIR', dirname( __DIR__ ) . '/' );
+if ( ! defined( 'WIDROW_AI_PLUGIN_DIR' ) ) {
+	define( 'WIDROW_AI_PLUGIN_DIR', dirname( __DIR__ ) . '/' );
 }
 
 require_once __DIR__ . '/wp-stubs.php';
@@ -60,15 +60,15 @@ if ( ! function_exists( '_n' ) ) {
 		return 1 === $n ? $s : $p;
 	}
 }
-if ( ! class_exists( 'DEF_Core' ) ) {
-	class DEF_Core {
+if ( ! class_exists( 'Widrow_AI' ) ) {
+	class Widrow_AI {
 		public static function get_def_api_url_internal(): string {
 			return 'http://127.0.0.1:1';
 		}
 	}
 }
 
-require_once DEF_CORE_PLUGIN_DIR . 'includes/class-def-core-tools.php';
+require_once WIDROW_AI_PLUGIN_DIR . 'includes/class-widrow-ai-tools.php';
 
 $pass = 0;
 $fail = 0;

@@ -2,8 +2,8 @@
 /**
  * The update row keeps up with the release (8.2.2).
  *
- * def-core's LIVE updater is YahnisElsts' plugin-update-checker, built in
- * def-core.php. Its scheduler checks every 12 hours and only once an hour on the
+ * widrow-ai's LIVE updater is YahnisElsts' plugin-update-checker, built in
+ * widrow-ai.php. Its scheduler checks every 12 hours and only once an hour on the
  * Plugins screen, and its own upgrader_process_complete handler returns unless
  * the upgrade named the BULK 'plugins' list — so a single "Update now" and every
  * background auto-update left the row offering the version just installed.
@@ -15,14 +15,14 @@
  *  - A bulk update is left to PUC's own handler, and another plugin's update
  *    (or a payload with no plugin at all) touches nothing.
  *
- * Runs the SHIPPED lines, sliced out of def-core.php by the markers the block
+ * Runs the SHIPPED lines, sliced out of widrow-ai.php by the markers the block
  * carries, rather than a copy that can drift — the same rule
- * tests/browser/extract.js follows for the console's JS. def-core.php cannot be
+ * tests/browser/extract.js follows for the console's JS. widrow-ai.php cannot be
  * required here: it boots the whole plugin.
  *
  * Runs standalone with WP stubs (no WordPress bootstrap).
  *
- * @package def-core/tests
+ * @package widrow-ai/tests
  */
 
 declare(strict_types=1);
@@ -56,8 +56,8 @@ require_once __DIR__ . '/wp-stubs.php';
 if ( ! defined( 'MINUTE_IN_SECONDS' ) ) {
 	define( 'MINUTE_IN_SECONDS', 60 );
 }
-if ( ! defined( 'DEF_CORE_PLUGIN_NAME' ) ) {
-	define( 'DEF_CORE_PLUGIN_NAME', 'digital-employees/def-core.php' );
+if ( ! defined( 'WIDROW_AI_PLUGIN_NAME' ) ) {
+	define( 'WIDROW_AI_PLUGIN_NAME', 'widrow-ai/widrow-ai.php' );
 }
 
 // Capture the two callbacks instead of registering them.
@@ -86,15 +86,15 @@ class PUC_Spy {
 	}
 }
 
-$def_core_update_checker = new PUC_Spy();
+$widrow_ai_update_checker = new PUC_Spy();
 
 // ── Slice the shipped block and run it ──────────────────────────────────
 
-$src   = (string) file_get_contents( dirname( __DIR__ ) . '/def-core.php' );
+$src   = (string) file_get_contents( dirname( __DIR__ ) . '/widrow-ai.php' );
 $start = strpos( $src, '// ── The update row keeps up with the release' );
 $end   = strpos( $src, '// Main plugin class.' );
 if ( false === $start || false === $end || $end <= $start ) {
-	echo "  FAIL: def-core.php: the update-recheck block's markers were not found\n";
+	echo "  FAIL: widrow-ai.php: the update-recheck block's markers were not found\n";
 	echo "\n0 passed, 1 failed\n";
 	exit( 1 );
 }
@@ -131,48 +131,48 @@ $on_upgrade        = $hooks['upgrader_process_complete'];
 
 $GLOBALS['can_activate_plugins'] = false;
 $on_plugins_screen();
-assert_same( 0, $def_core_update_checker->checks, 'someone who cannot manage plugins drives no check' );
-assert_same( false, get_transient( 'def_core_puc_recheck' ), 'and does not even take the throttle slot' );
+assert_same( 0, $widrow_ai_update_checker->checks, 'someone who cannot manage plugins drives no check' );
+assert_same( false, get_transient( 'widrow_ai_puc_recheck' ), 'and does not even take the throttle slot' );
 $GLOBALS['can_activate_plugins'] = true;
 
 // ── The Plugins screen: at most one check every five minutes ────────────
 
 $on_plugins_screen();
-assert_same( 1, $def_core_update_checker->checks, 'a first load of the Plugins screen checks for a new release' );
+assert_same( 1, $widrow_ai_update_checker->checks, 'a first load of the Plugins screen checks for a new release' );
 
 $GLOBALS['now'] += 4 * 60;
 $on_plugins_screen();
-assert_same( 1, $def_core_update_checker->checks, 'a second load four minutes later does not check again' );
+assert_same( 1, $widrow_ai_update_checker->checks, 'a second load four minutes later does not check again' );
 
 $GLOBALS['now'] += 61;
 $on_plugins_screen();
-assert_same( 2, $def_core_update_checker->checks, 'a load after the five minutes are up checks again' );
+assert_same( 2, $widrow_ai_update_checker->checks, 'a load after the five minutes are up checks again' );
 
 // ── The single / auto update path PUC skips ─────────────────────────────
 
-$def_core_update_checker = new PUC_Spy();
+$widrow_ai_update_checker = new PUC_Spy();
 $hooks                   = array();
 eval( substr( $src, $start, $end - $start ) );
 $on_upgrade = $hooks['upgrader_process_complete'];
 
-$on_upgrade( null, array( 'action' => 'update', 'type' => 'plugin', 'plugin' => DEF_CORE_PLUGIN_NAME ) );
-assert_same( 1, $def_core_update_checker->resets, 'updating this plugin on its own forgets the stored update' );
-assert_same( 1, $def_core_update_checker->checks, 'and asks GitHub again, so the row stops offering what was just installed' );
+$on_upgrade( null, array( 'action' => 'update', 'type' => 'plugin', 'plugin' => WIDROW_AI_PLUGIN_NAME ) );
+assert_same( 1, $widrow_ai_update_checker->resets, 'updating this plugin on its own forgets the stored update' );
+assert_same( 1, $widrow_ai_update_checker->checks, 'and asks GitHub again, so the row stops offering what was just installed' );
 
 $on_upgrade( null, array( 'action' => 'update', 'type' => 'plugin', 'plugin' => 'akismet/akismet.php' ) );
-assert_same( 1, $def_core_update_checker->resets, 'another plugin updating on its own resets nothing' );
-assert_same( 1, $def_core_update_checker->checks, 'and triggers no check' );
+assert_same( 1, $widrow_ai_update_checker->resets, 'another plugin updating on its own resets nothing' );
+assert_same( 1, $widrow_ai_update_checker->checks, 'and triggers no check' );
 
 $on_upgrade( null, array(
 	'action'  => 'update',
 	'type'    => 'plugin',
 	'bulk'    => true,
-	'plugins' => array( DEF_CORE_PLUGIN_NAME ),
+	'plugins' => array( WIDROW_AI_PLUGIN_NAME ),
 ) );
-assert_same( 1, $def_core_update_checker->resets, 'a bulk update is left to PUC\'s own handler' );
+assert_same( 1, $widrow_ai_update_checker->resets, 'a bulk update is left to PUC\'s own handler' );
 
 $on_upgrade( null, array( 'action' => 'install', 'type' => 'plugin' ) );
-assert_same( 1, $def_core_update_checker->resets, 'an install names no plugin and resets nothing' );
+assert_same( 1, $widrow_ai_update_checker->resets, 'an install names no plugin and resets nothing' );
 
 // ── The release asset is REQUIRED, not preferred ────────────────────────
 // A source pin, not a behaviour test: the call that matters is PUC's own, and
@@ -184,7 +184,7 @@ assert_same( 1, $def_core_update_checker->resets, 'an install names no plugin an
 assert_same(
 	true,
 	(bool) preg_match(
-		'#enableReleaseAssets\(\s*\'/\^widrow-ai\\\\\.zip\$/\',\s*\$def_core_vcs_api::REQUIRE_RELEASE_ASSETS\s*\)#',
+		'#enableReleaseAssets\(\s*\'/\^widrow-ai\\\\\.zip\$/\',\s*\$widrow_ai_vcs_api::REQUIRE_RELEASE_ASSETS\s*\)#',
 		$src
 	),
 	'the updater REQUIRES the release asset, so a release with no zip is not an update'
@@ -193,7 +193,7 @@ assert_same(
 assert_same(
 	true,
 	(bool) preg_match(
-		'/array_intersect_key\(\s*\$strategies,\s*array\(\s*\$def_core_vcs_api::STRATEGY_LATEST_RELEASE\s*=>\s*true\s*\)\s*\)/',
+		'/array_intersect_key\(\s*\$strategies,\s*array\(\s*\$widrow_ai_vcs_api::STRATEGY_LATEST_RELEASE\s*=>\s*true\s*\)\s*\)/',
 		$src
 	),
 	'and it looks ONLY at the latest release — no tag or branch archive behind it'

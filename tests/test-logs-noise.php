@@ -1,6 +1,6 @@
 <?php
 /**
- * Connection-log noise-reduction tests (DEF_Core_Export::log_sync_query).
+ * Connection-log noise-reduction tests (Widrow_AI_Export::log_sync_query).
  *
  * Verifies:
  * - A zero-change export emits exactly ONE summary INFO row (not the trio)
@@ -11,7 +11,7 @@
  * Runs standalone with WP stubs (no WordPress bootstrap). WP_DEBUG is left
  * undefined here so the SQL-strip path is exercised deterministically.
  *
- * @package def-core/tests
+ * @package widrow-ai/tests
  */
 
 declare(strict_types=1);
@@ -60,11 +60,11 @@ if ( ! class_exists( 'WP_Query' ) ) {
 	}
 }
 
-require_once DEF_CORE_PLUGIN_DIR . 'includes/class-def-core-logger.php';
-require_once DEF_CORE_PLUGIN_DIR . 'includes/class-def-core-export.php';
+require_once WIDROW_AI_PLUGIN_DIR . 'includes/class-widrow-ai-logger.php';
+require_once WIDROW_AI_PLUGIN_DIR . 'includes/class-widrow-ai-export.php';
 
 // Log at debug level so the DEBUG row actually writes and can be inspected.
-update_option( 'def_core_log_level', 'debug' );
+update_option( 'widrow_ai_log_level', 'debug' );
 
 $pass = 0;
 $fail = 0;
@@ -97,7 +97,7 @@ $wpdb->rows = array();
 $query = new WP_Query();
 $query->found_posts = 0;
 
-$result = DEF_Core_Export::log_sync_query( 'page', 50, $query, 'req-zero' );
+$result = Widrow_AI_Export::log_sync_query( 'page', 50, $query, 'req-zero' );
 
 assert_equals( false, $result, 'returns false when nothing changed' );
 assert_equals( 1, count( $wpdb->rows ), 'exactly one row logged (not the request/query/response trio)' );
@@ -116,7 +116,7 @@ $query->post_count    = 5;
 $query->max_num_pages = 1;
 $query->request       = 'SELECT * FROM wp_posts WHERE post_status = "publish"';
 
-$result = DEF_Core_Export::log_sync_query( 'page', 50, $query, 'req-changes' );
+$result = Widrow_AI_Export::log_sync_query( 'page', 50, $query, 'req-changes' );
 
 assert_equals( true, $result, 'returns true when rows found' );
 assert_equals( 1, count( $wpdb->rows ), 'one debug row logged' );

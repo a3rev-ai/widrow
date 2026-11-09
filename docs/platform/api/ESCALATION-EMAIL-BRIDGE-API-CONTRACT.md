@@ -5,7 +5,7 @@ Suggested Path:
 # Escalation Email Bridge — API Contract (Authoritative)
 
 ## Purpose
-Defines the def-core REST API endpoints used by the DEF Python app to:
+Defines the widrow-ai REST API endpoints used by the DEF Python app to:
 1) Retrieve channel-scoped escalation settings
 2) Send escalation emails via WordPress (`wp_mail()`)
 
@@ -17,7 +17,7 @@ This avoids re-implementing SMTP providers in Python and allows site-local deliv
 All endpoints MUST require authentication.
 
 Preferred:
-- reuse existing def-core API auth scheme (shared secret/JWT/header)
+- reuse existing widrow-ai API auth scheme (shared secret/JWT/header)
 
 Minimum acceptable:
 - shared secret header validated server-side
@@ -111,16 +111,16 @@ If invalid or missing:
 - subject required
 - body required
 - `to` optional:
-  - if omitted, def-core MUST populate from stored settings for the channel
+  - if omitted, widrow-ai MUST populate from stored settings for the channel
 - `cc/bcc` optional:
-  - if omitted, def-core MAY populate from stored settings
+  - if omitted, widrow-ai MAY populate from stored settings
 - `sender_email` optional:
-  - if omitted, def-core MUST populate from stored settings
+  - if omitted, widrow-ai MUST populate from stored settings
 - `reply_to` optional:
-  - if present, def-core MUST set Reply-To header
+  - if present, widrow-ai MUST set Reply-To header
   - Customer channel MUST pass reply_to=user email (Python responsibility)
 - `send_copy_to_user` optional:
-  - if true and `user_copy_email` provided, def-core sends a second email copy to user
+  - if true and `user_copy_email` provided, widrow-ai sends a second email copy to user
   - “Copy:” prefix must be applied to subject in the user copy
 
 ### Response (Success 200)
@@ -139,7 +139,7 @@ If invalid or missing:
 
 ## Logging Notes
 
-- def-core should avoid logging raw email body or transcript content
+- widrow-ai should avoid logging raw email body or transcript content
 - Python is responsible for escalation event logging per LOGGING_RULES
 
 ---

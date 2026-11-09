@@ -1,6 +1,6 @@
 <?php
 /**
- * Customer assistant-name fetch tests (DEF_Core_Tools::get_customer_assistant_name).
+ * Customer assistant-name fetch tests (Widrow_AI_Tools::get_customer_assistant_name).
  *
  * Verifies the cache + fail-safe logic that backs the Customer Chat header/greeting
  * employee name (Employee & Tools slice 1a/1b):
@@ -14,7 +14,7 @@
  * Runs standalone (no WordPress bootstrap). Uses ReflectionMethod is not needed —
  * get_customer_assistant_name() is public.
  *
- * @package def-core/tests
+ * @package widrow-ai/tests
  */
 
 declare(strict_types=1);
@@ -22,8 +22,8 @@ declare(strict_types=1);
 if ( ! defined( 'ABSPATH' ) ) {
 	define( 'ABSPATH', dirname( __DIR__ ) . '/' );
 }
-if ( ! defined( 'DEF_CORE_PLUGIN_DIR' ) ) {
-	define( 'DEF_CORE_PLUGIN_DIR', dirname( __DIR__ ) . '/' );
+if ( ! defined( 'WIDROW_AI_PLUGIN_DIR' ) ) {
+	define( 'WIDROW_AI_PLUGIN_DIR', dirname( __DIR__ ) . '/' );
 }
 
 require_once __DIR__ . '/wp-stubs.php';
@@ -37,16 +37,16 @@ if ( ! function_exists( 'is_user_logged_in' ) ) {
 if ( ! defined( 'MINUTE_IN_SECONDS' ) ) {
 	define( 'MINUTE_IN_SECONDS', 60 );
 }
-// Stub DEF_Core so get_def_api_url_internal() resolves if ever reached.
-if ( ! class_exists( 'DEF_Core' ) ) {
-	class DEF_Core {
+// Stub Widrow_AI so get_def_api_url_internal() resolves if ever reached.
+if ( ! class_exists( 'Widrow_AI' ) ) {
+	class Widrow_AI {
 		public static function get_def_api_url_internal(): string {
 			return 'http://127.0.0.1:9'; // discard port — never actually called in these tests
 		}
 	}
 }
 
-require_once DEF_CORE_PLUGIN_DIR . 'includes/class-def-core-tools.php';
+require_once WIDROW_AI_PLUGIN_DIR . 'includes/class-widrow-ai-tools.php';
 
 $pass = 0;
 $fail = 0;
@@ -71,20 +71,20 @@ echo "=== Customer Assistant Name Tests ===\n";
 // ── 1. Positive cache hit — returns the cached name, no DEF call ──────────
 echo "\n[1] Positive transient cache is returned\n";
 reset_transients();
-set_transient( 'def_core_customer_assistant_name', 'Bruce', 900 );
-assert_same( 'Bruce', \DEF_Core_Tools::get_customer_assistant_name(), 'cached name returned' );
+set_transient( 'widrow_ai_customer_assistant_name', 'Bruce', 900 );
+assert_same( 'Bruce', \Widrow_AI_Tools::get_customer_assistant_name(), 'cached name returned' );
 
 // ── 2. Negative-cache sentinel ('' transient) → '' (use branding fallback) ─
 echo "\n[2] Empty-string negative cache returns '' (fallback)\n";
 reset_transients();
-set_transient( 'def_core_customer_assistant_name', '', 60 );
-assert_same( '', \DEF_Core_Tools::get_customer_assistant_name(), 'negative cache returns empty' );
+set_transient( 'widrow_ai_customer_assistant_name', '', 60 );
+assert_same( '', \Widrow_AI_Tools::get_customer_assistant_name(), 'negative cache returns empty' );
 
 // ── 3. Not connected (no API key) → '' without any network call ──────────
 echo "\n[3] No API key → '' (no network)\n";
 reset_transients();
-\DEF_Core_Encryption::set_secret( 'def_core_api_key', '' );
-assert_same( '', \DEF_Core_Tools::get_customer_assistant_name(), 'no api key returns empty' );
+\Widrow_AI_Encryption::set_secret( 'widrow_ai_api_key', '' );
+assert_same( '', \Widrow_AI_Tools::get_customer_assistant_name(), 'no api key returns empty' );
 
 echo "\n=== $pass passed, $fail failed ===\n";
 exit( $fail > 0 ? 1 : 0 );

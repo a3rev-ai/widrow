@@ -7,7 +7,7 @@
  * (e.g., proprietary systems, internal APIs) that don't belong in core.
  *
  * For common public plugin integrations (bbPress, WooCommerce extensions, etc.),
- * consider contributing a built-in tool to def-core instead — see
+ * consider contributing a built-in tool to widrow-ai instead — see
  * includes/tools/ for examples and MODULE_DEVELOPMENT.md for guidance.
  *
  * Follow the naming conventions: def-<integration>
@@ -28,16 +28,16 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * Example: Using the Base Class (Recommended)
  *
- * Tools extending DEF_Core_Tool_Base will automatically
+ * Tools extending Widrow_AI_Tool_Base will automatically
  * register themselves when instantiated. No need to manually call register().
  */
-class DEF_Example_Tool extends DEF_Core_Tool_Base {
+class DEF_Example_Tool extends Widrow_AI_Tool_Base {
 
 	/**
 	 * Initialize the tool.
 	 */
 	protected function init(): void {
-		// Namespace is automatically set to DEF_CORE_API_NAME_SPACE.
+		// Namespace is automatically set to WIDROW_AI_API_NAME_SPACE.
 		$this->name    = __( 'Example Module Tool', 'def-example' );
 		$this->route   = '/tools/example/hello';
 		$this->methods = array( 'GET' );
@@ -116,7 +116,7 @@ function def_example_custom_tool(): \WP_REST_Response {
  * Register module tools.
  *
  * Method 1: Using the base class (automatic registration).
- * Tools extending DEF_Core_Tool_Base will automatically
+ * Tools extending Widrow_AI_Tool_Base will automatically
  * register themselves when instantiated. No need to manually call register().
  */
 add_action(
@@ -133,13 +133,13 @@ add_action(
  * Method 2: Using the registry directly (manual registration).
  * Use this if you need more control or aren't using the base class.
  *
- * Note: The namespace is automatically set to DEF_CORE_API_NAME_SPACE.
+ * Note: The namespace is automatically set to WIDROW_AI_API_NAME_SPACE.
  * You don't need to specify it in register_tool().
  */
 add_action(
-	'def_core_register_tools',
+	'widrow_ai_register_tools',
 	function () {
-		$registry = DEF_Core_API_Registry::instance();
+		$registry = Widrow_AI_API_Registry::instance();
 		$registry->register_tool(
 			'/tools/example/custom',                              // Route (namespace is automatic)
 			__( 'Example Custom Tool', 'def-example' ), // Name

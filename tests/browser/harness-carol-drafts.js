@@ -16,7 +16,7 @@
  * Three parts:
  *
  *  1-13. THE BEHAVIOUR, in jsdom, over the SHIPPED block — sliced out of
- *        assets/js/def-core-draft-cards.js by its markers (extract.creator), so
+ *        assets/js/widrow-ai-draft-cards.js by its markers (extract.creator), so
  *        these run the shipped lines and not a copy. The strings the fixture
  *        starts from and the templates handed to the block are read out of the
  *        PHP page, so the harness cannot pass against copy the page never
@@ -30,7 +30,7 @@
  *        dependency on the block, and the five sentences in the two bundles
  *        that used to say "the Content Agent".
  *
- * 20-23. THE PAGE, read out of includes/class-def-core-content-drafts-page.php:
+ * 20-23. THE PAGE, read out of includes/class-widrow-ai-content-drafts-page.php:
  *        the default rendered under the ids the block repaints, the same
  *        strings localized for it, all four reaching a translator, and nothing
  *        user-visible still naming the Content Agent.
@@ -69,10 +69,10 @@ const extract = require('./extract');
 
 const BLOCK = extract.creator();
 const read = f => fs.readFileSync(path.join(extract.REPO, f), 'utf8');
-const PAGE = read('includes/class-def-core-content-drafts-page.php');
-const DRAFTS_JS = read('assets/js/def-core-draft-cards.js');
-const CLUSTERS_JS = read('assets/js/def-core-cluster-targets.js');
-const BFF = read('includes/class-def-core-staff-ai.php');
+const PAGE = read('includes/class-widrow-ai-content-drafts-page.php');
+const DRAFTS_JS = read('assets/js/widrow-ai-draft-cards.js');
+const CLUSTERS_JS = read('assets/js/widrow-ai-cluster-targets.js');
+const BFF = read('includes/class-widrow-ai-staff-ai.php');
 
 let pass = 0, fail = 0, n = 0;
 const results = [];
@@ -103,7 +103,7 @@ const filled = (tpl, name) => String(tpl).replace(/%(?:\d+\$)?s/g, () => name);
 // PHP renders whichever name it last saw and localizes that same name (8.2.8),
 // so a boot takes one: the default on a site DEF has never answered for, her
 // own name on every visit after that.
-const fixture = name => '<div class="wrap def-core-wrap">' +
+const fixture = name => '<div class="wrap widrow-ai-wrap">' +
 	'<h1><span id="def-creator-title">' + filled(TITLE_TPL, name) + '</span>' +
 	'<button type="button" id="def-setup-assistant-trigger"></button></h1>' +
 	Object.keys(COPY_TPL).map(k =>
@@ -138,7 +138,7 @@ check('all four strings come out of the page, not out of this file',
 
 check('the default name is the one the BFF falls back to',
 	/const CREATOR_DEFAULT_NAME = 'Carol';/.test(BFF) &&
-	/DEF_Core_Staff_AI::CREATOR_DEFAULT_NAME/.test(PAGE),
+	/Widrow_AI_Staff_AI::CREATOR_DEFAULT_NAME/.test(PAGE),
 	'page and BFF must share one default');
 
 // ── 4-7. The first list response names her ──────────────────────────────────
@@ -257,7 +257,7 @@ check('the same strings are localized onto DefDraftCards for the repaint',
 	/'creator'   => array\(\s*'name'  => \$creator_name,\s*'title' => \$creator_title,\s*'copy'  => \$creator_copy,/.test(PAGE));
 
 check('all four sentences reach a translator, whole',
-	(PAGE.match(/__\( '[^']*%(?:1\$)?s[^']*', 'digital-employees' \)/g) || []).length === 4);
+	(PAGE.match(/__\( '[^']*%(?:1\$)?s[^']*', 'widrow-ai' \)/g) || []).length === 4);
 
 // ── 24-25. An unchanged name touches nothing (8.2.8) ────────────────────────
 //

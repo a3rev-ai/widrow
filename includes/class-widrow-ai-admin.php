@@ -1,0 +1,1605 @@
+<?php
+/**
+ * Class Widrow_AI_Admin
+ *
+ * Admin settings page for the Digital Employee Framework - Core plugin.
+ * Phase 7 D-I: Tabbed layout with 6 tabs, AJAX save, connection status test.
+ *
+ * @package widrow-ai
+ * @since 2.0.0
+ */
+
+declare(strict_types=1);
+
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
+final class Widrow_AI_Admin {
+
+	/**
+	 * Per-tab field allowlists with sanitizers.
+	 * Keys accepted per tab — unknown keys are rejected. (V1.1)
+	 *
+	 * @var array<string, array<string, array>>
+	 */
+	private static $tab_allowlists = array(
+		'branding'         => array(
+			'widrow_ai_logo_id'                 => array(
+				'type'     => 'int',
+				'sanitize' => 'sanitize_logo_id',
+			),
+			'widrow_ai_display_name'            => array(
+				'type'     => 'string',
+				'sanitize' => 'sanitize_display_name',
+			),
+			'widrow_ai_logo_show_staff_ai'      => array(
+				'type'     => 'bool',
+				'sanitize' => 'sanitize_bool_setting',
+			),
+			'widrow_ai_logo_show_customer_chat' => array(
+				'type'     => 'bool',
+				'sanitize' => 'sanitize_bool_setting',
+			),
+			'widrow_ai_logo_max_height'         => array(
+				'type'     => 'int',
+				'sanitize' => 'sanitize_logo_max_height',
+			),
+			'widrow_ai_app_icon_id'             => array(
+				'type'     => 'int',
+				'sanitize' => 'sanitize_logo_id',
+			),
+			'widrow_ai_chat_hero_image_id'      => array(
+				'type'     => 'int',
+				'sanitize' => 'sanitize_logo_id',
+			),
+			'widrow_ai_chat_hero_image_mobile_id' => array(
+				'type'     => 'int',
+				'sanitize' => 'sanitize_logo_id',
+			),
+		),
+		'connection'       => array(
+			'widrow_ai_log_level' => array(
+				'type'     => 'string',
+				'sanitize' => 'sanitize_log_level',
+			),
+		),
+		'chat-settings'    => array(
+			'widrow_ai_chat_display_mode' => array(
+				'type'     => 'string',
+				'sanitize' => 'sanitize_chat_display_mode',
+			),
+			'widrow_ai_chat_drawer_width' => array(
+				'type'     => 'int',
+				'sanitize' => 'sanitize_drawer_width',
+			),
+			'widrow_ai_chat_spotlight_width' => array(
+				'type'     => 'int',
+				'sanitize' => 'sanitize_spotlight_width',
+			),
+			'widrow_ai_chat_spotlight_height' => array(
+				'type'     => 'int',
+				'sanitize' => 'sanitize_spotlight_height',
+			),
+			'widrow_ai_chat_button_position' => array(
+				'type'     => 'string',
+				'sanitize' => 'sanitize_button_position',
+			),
+			'widrow_ai_chat_button_color' => array(
+				'type'     => 'string',
+				'sanitize' => 'sanitize_hex_color',
+			),
+			'widrow_ai_chat_button_hover_color' => array(
+				'type'     => 'string',
+				'sanitize' => 'sanitize_hex_color',
+			),
+			'widrow_ai_chat_button_icon' => array(
+				'type'     => 'string',
+				'sanitize' => 'sanitize_button_icon',
+			),
+			'widrow_ai_chat_button_label' => array(
+				'type'     => 'string',
+				'sanitize' => 'sanitize_button_label',
+			),
+			'widrow_ai_chat_greeting_bubble_enabled' => array(
+				'type'     => 'bool',
+				'sanitize' => 'sanitize_bool_setting',
+			),
+			'widrow_ai_chat_greeting_bubble_text' => array(
+				'type'     => 'string',
+				'sanitize' => 'sanitize_greeting_bubble_text',
+			),
+			// Opening message (8.6.0): the first message in the chat, per site. Same
+			// shape as the bubble text — plain text, line breaks kept, no length cap.
+			'widrow_ai_chat_opening_message' => array(
+				'type'     => 'string',
+				'sanitize' => 'sanitize_greeting_bubble_text',
+			),
+			'widrow_ai_chat_button_icon_id' => array(
+				'type'     => 'int',
+				'sanitize' => 'sanitize_logo_id',
+			),
+			'widrow_ai_chat_loading_mark_id' => array(
+				'type'     => 'int',
+				'sanitize' => 'sanitize_logo_id',
+			),
+			'widrow_ai_chat_show_floating' => array(
+				'type'     => 'bool',
+				'sanitize' => 'sanitize_bool_setting',
+			),
+			'widrow_ai_chat_ai_notice' => array(
+				'type'     => 'bool',
+				'sanitize' => 'sanitize_bool_setting',
+			),
+			'widrow_ai_chat_privacy_url' => array(
+				'type'     => 'string',
+				'sanitize' => 'sanitize_privacy_url',
+			),
+			'widrow_ai_chat_privacy_link_label' => array(
+				'type'     => 'string',
+				'sanitize' => 'sanitize_privacy_link_label',
+			),
+			'widrow_ai_chat_welcome_chip_1' => array(
+				'type'     => 'string',
+				'sanitize' => 'sanitize_welcome_chip',
+			),
+			'widrow_ai_chat_welcome_chip_1_intro' => array(
+				'type'     => 'string',
+				'sanitize' => 'sanitize_welcome_chip_intro',
+			),
+			'widrow_ai_chat_welcome_chip_2' => array(
+				'type'     => 'string',
+				'sanitize' => 'sanitize_welcome_chip',
+			),
+			'widrow_ai_chat_welcome_chip_2_intro' => array(
+				'type'     => 'string',
+				'sanitize' => 'sanitize_welcome_chip_intro',
+			),
+			'widrow_ai_chat_welcome_chip_3' => array(
+				'type'     => 'string',
+				'sanitize' => 'sanitize_welcome_chip',
+			),
+			'widrow_ai_chat_welcome_chip_3_intro' => array(
+				'type'     => 'string',
+				'sanitize' => 'sanitize_welcome_chip_intro',
+			),
+			'widrow_ai_chat_compliance_text' => array(
+				'type'     => 'string',
+				'sanitize' => 'sanitize_compliance_text',
+			),
+		),
+	);
+
+	/**
+	 * Initialize the admin functionality.
+	 */
+	public static function init(): void {
+		add_filter( 'map_meta_cap', array( __CLASS__, 'map_def_capabilities' ), 10, 4 );
+		add_action( 'admin_head', array( __CLASS__, 'print_fouc_guard' ) );
+		add_action( 'admin_menu', array( __CLASS__, 'add_settings_page' ) );
+		add_action( 'admin_init', array( __CLASS__, 'register_settings' ) );
+		add_action( 'admin_notices', array( __CLASS__, 'maybe_show_encryption_notice' ) );
+		add_action( 'wp_ajax_widrow_ai_save_settings', array( __CLASS__, 'ajax_save_settings' ) );
+		add_action( 'wp_ajax_widrow_ai_test_connection', array( __CLASS__, 'ajax_test_connection' ) );
+		add_action( 'wp_ajax_widrow_ai_save_user_roles', array( __CLASS__, 'ajax_save_user_roles' ) );
+		add_action( 'wp_ajax_widrow_ai_search_users', array( __CLASS__, 'ajax_search_users' ) );
+		add_action( 'wp_ajax_widrow_ai_remove_user_roles', array( __CLASS__, 'ajax_remove_user_roles' ) );
+		add_action( 'wp_ajax_widrow_ai_test_escalation_email', array( __CLASS__, 'ajax_test_escalation_email' ) );
+		add_action( 'wp_ajax_widrow_ai_save_manual_connection', array( __CLASS__, 'ajax_save_manual_connection' ) );
+		add_action( 'admin_notices', array( __CLASS__, 'maybe_show_oauth_notice' ) );
+	}
+
+	/**
+	 * Add the settings page under Settings menu.
+	 */
+	public static function add_settings_page(): void {
+		add_menu_page(
+			__( 'Widrow AI', 'widrow-ai' ),
+			__( 'Widrow AI', 'widrow-ai' ),
+			'widrow_admin_access',
+			'widrow-ai',
+			array( __CLASS__, 'render_settings_page' ),
+			'dashicons-groups',
+			81
+		);
+
+		// Rename the auto-created first submenu from "Widrow AI" to "Settings".
+		add_submenu_page(
+			'widrow-ai',
+			__( 'Settings', 'widrow-ai' ),
+			__( 'Settings', 'widrow-ai' ),
+			'widrow_admin_access',
+			'widrow-ai'
+		);
+
+		// Add "Open Staff AI" link — opens in new tab via JS (see admin_footer hook).
+		add_submenu_page(
+			'widrow-ai',
+			__( 'Staff AI', 'widrow-ai' ),
+			__( 'Open Staff AI', 'widrow-ai' ),
+			'widrow_staff_access',
+			'widrow-ai-staff-ai',
+			'__return_null'
+		);
+
+		// Redirect the Staff AI submenu slug to the actual /staff-ai frontend URL.
+		add_action( 'admin_footer', array( __CLASS__, 'staff_ai_submenu_redirect' ) );
+	}
+
+	/**
+	 * Any DEF role can see the Staff AI menu link.
+	 *
+	 * When WordPress checks widrow_staff_access, users with widrow_management_access
+	 * or widrow_admin_access also pass. This ensures the Staff AI menu link is
+	 * visible to anyone with any DEF capability.
+	 *
+	 * @param string[] $caps    Required primitive capabilities.
+	 * @param string   $cap     The capability being checked.
+	 * @param int      $user_id The user ID.
+	 * @param mixed[]  $args    Additional arguments.
+	 * @return string[] Mapped capabilities.
+	 */
+	public static function map_def_capabilities( array $caps, string $cap, int $user_id, array $args ): array {
+		if ( 'widrow_staff_access' !== $cap ) {
+			return $caps;
+		}
+
+		$user = get_userdata( $user_id );
+		if ( ! $user ) {
+			return $caps;
+		}
+
+		// Management and admin users also see the Staff AI menu link.
+		if ( $user->has_cap( 'widrow_management_access' ) || $user->has_cap( 'widrow_admin_access' ) ) {
+			return array( 'exist' );
+		}
+
+		return $caps;
+	}
+
+	/**
+	 * Output inline JS to make the "Open Staff AI" submenu link open /staff-ai in a new tab.
+	 */
+	public static function staff_ai_submenu_redirect(): void {
+		$staff_ai_url = home_url( '/staff-ai/' );
+		?>
+		<script>
+		(function() {
+			var link = document.querySelector('a[href="admin.php?page=widrow-ai-staff-ai"]');
+			if (link) {
+				link.href = <?php echo wp_json_encode( $staff_ai_url ); ?>;
+				link.target = '_blank';
+				link.rel = 'noopener';
+			}
+		})();
+		</script>
+		<?php
+	}
+
+	/**
+	 * Register settings with WordPress.
+	 * Kept for option whitelisting and sanitize callbacks.
+	 */
+	public static function register_settings(): void {
+		register_setting( 'widrow_ai_settings', 'widrow_ai_tools_status', array(
+			'type'              => 'array',
+			'sanitize_callback' => array( __CLASS__, 'sanitize_tools_status' ),
+			'default'           => array(),
+			'show_in_rest'      => false,
+		) );
+	}
+
+	// ─── Salt Rotation Recovery Notice ──────────────────────────────
+
+	/**
+	 * Show admin notice if encryption keys have changed (salt rotation).
+	 */
+	public static function maybe_show_encryption_notice(): void {
+		if ( ! get_transient( Widrow_AI_Encryption::TRANSIENT_ENCRYPTION_ERROR ) ) {
+			return;
+		}
+		if ( ! current_user_can( 'widrow_admin_access' ) ) {
+			return;
+		}
+		?>
+		<div class="notice notice-error">
+			<p>
+				<strong><?php esc_html_e( 'Widrow AI — Connection Credentials Error', 'widrow-ai' ); ?></strong><br />
+				<?php esc_html_e( 'Your WordPress security keys changed, so the saved DEFHO connection credentials can no longer be read — your Digital Employees are offline. Open Widrow AI → Connection and click "Reconnect to DEFHO" to restore them (a quick sign-in re-provisions the credentials).', 'widrow-ai' ); ?>
+			</p>
+		</div>
+		<?php
+	}
+
+	/**
+	 * Show admin notice after OAuth redirect (success or error).
+	 */
+	public static function maybe_show_oauth_notice(): void {
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		if ( ! isset( $_GET['def_oauth'] ) ) {
+			return;
+		}
+		if ( ! current_user_can( 'widrow_admin_access' ) ) {
+			return;
+		}
+
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$status = sanitize_text_field( wp_unslash( $_GET['def_oauth'] ) );
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$message = isset( $_GET['def_msg'] ) ? sanitize_text_field( wp_unslash( $_GET['def_msg'] ) ) : '';
+
+		if ( 'success' === $status ) {
+			?>
+			<div class="notice notice-success is-dismissible">
+				<p><strong><?php esc_html_e( 'Connected to DEFHO successfully!', 'widrow-ai' ); ?></strong></p>
+			</div>
+			<?php
+		} elseif ( 'error' === $status ) {
+			?>
+			<div class="notice notice-error is-dismissible">
+				<p>
+					<strong><?php esc_html_e( 'DEFHO Connection Error:', 'widrow-ai' ); ?></strong>
+					<?php echo esc_html( $message ?: __( 'An unknown error occurred.', 'widrow-ai' ) ); ?>
+				</p>
+			</div>
+			<?php
+		}
+	}
+
+	// ─── Page Rendering ──────────────────────────────────────────────
+
+	/**
+	 * Print FOUC guard in <head> — hides settings page until external CSS loads.
+	 *
+	 * Inline <style> in <head> fires before enqueued stylesheets.
+	 * widrow-ai-admin.css sets opacity:1 which wins by cascade order (later = wins).
+	 * Same pattern as WooCommerce admin pages.
+	 */
+	public static function print_fouc_guard(): void {
+		$screen = get_current_screen();
+		if ( ! $screen || 'toplevel_page_widrow-ai' !== $screen->id ) {
+			return;
+		}
+		echo '<style>.widrow-ai-wrap{opacity:0;transition:opacity .25s ease-in-out;}</style>' . "\n";
+	}
+
+	/**
+	 * Render the settings page.
+	 */
+	public static function render_settings_page(): void {
+		if ( ! current_user_can( 'widrow_admin_access' ) ) {
+			return;
+		}
+
+		// Enqueue admin assets.
+		wp_enqueue_style( 'widrow-ai-admin' );
+		wp_enqueue_script( 'widrow-ai-admin' );
+
+		// Menu capability already gates access; this is a safety check.
+		// No additional permission block needed — user must have widrow_admin_access to see this page.
+
+		// D-II: Enqueue media uploader for branding tab.
+		wp_enqueue_media();
+
+		// Custom roles (R4): refresh the catalog BEFORE localizing so the JS row-builder and the
+		// PHP-rendered columns use the SAME catalog — a one-load-stale JS copy would shift an
+		// added row's checkboxes under the wrong headers (a privilege-grant mislabel).
+		$roles_catalog = \Widrow_AI_Tools::get_roles_catalog( true );
+
+		// Localize script data for JS.
+		$cached_connection = get_transient( 'widrow_ai_connection_test' );
+		wp_localize_script( 'widrow-ai-admin', 'widrowAiAdmin', array(
+			'ajaxUrl'          => admin_url( 'admin-ajax.php' ),
+			'saveNonce'        => wp_create_nonce( 'widrow_ai_save_settings' ),
+			'testNonce'        => wp_create_nonce( 'widrow_ai_test_connection' ),
+			'rolesNonce'       => wp_create_nonce( 'widrow_ai_save_user_roles' ),
+			'searchUsersNonce' => wp_create_nonce( 'widrow_ai_search_users' ),
+			'testEmailNonce'   => wp_create_nonce( 'widrow_ai_test_escalation_email' ),
+			'connNonce'        => wp_create_nonce( 'widrow_ai_save_manual_connection' ),
+			'oauthStartNonce'  => wp_create_nonce( 'widrow_ai_oauth_start' ),
+			'oauthDisconnectNonce' => wp_create_nonce( 'widrow_ai_oauth_disconnect' ),
+			'defhoUrl'         => Widrow_AI_OAuth::get_defho_url(),
+			'cachedConnection' => $cached_connection ? $cached_connection : null,
+			// Custom roles (R4): the just-refreshed catalog — same array the PHP columns render.
+			'rolesCatalog'     => $roles_catalog,
+			// S3: the User Access strings the script writes into the page. The
+			// checkbox grid put all of these in the markup, where esc_html_e()
+			// reached them; the chips and the two-way control are built in JS, so
+			// they would ship as English on a translated site without this.
+			'userAccessI18n'   => array(
+				'staff'        => __( 'Staff', 'widrow-ai' ),
+				'management'   => __( 'Management', 'widrow-ai' ),
+				'accessLevel'  => __( 'Access level', 'widrow-ai' ),
+				/* translators: %s: the name of the person. */
+				'accessFor'    => __( 'Access level for %s', 'widrow-ai' ),
+				'addRole'      => __( '+ Add role', 'widrow-ai' ),
+				'allRolesOn'   => __( 'Every role is on', 'widrow-ai' ),
+				/* translators: %s: the name of the role. */
+				'removeRole'   => __( 'Remove role %s', 'widrow-ai' ),
+				'onePerson'    => __( '1 person', 'widrow-ai' ),
+				/* translators: %d: how many people match the filter. */
+				'manyPeople'   => __( '%d people', 'widrow-ai' ),
+				'colUser'      => __( 'User', 'widrow-ai' ),
+				'colWpRole'    => __( 'WordPress role', 'widrow-ai' ),
+				'colRoles'     => __( 'Roles', 'widrow-ai' ),
+				'colDefAdmin'  => __( 'DEF Admin', 'widrow-ai' ),
+				'colActions'   => __( 'Actions', 'widrow-ai' ),
+				'removeAccess' => __( 'Remove all DEF access', 'widrow-ai' ),
+			),
+		) );
+
+		// Connection status data (for status indicator).
+		$conn_api_url  = get_option( 'widrow_ai_staff_ai_api_url', '' );
+		$conn_revision = (int) get_option( 'widrow_ai_conn_config_revision', 0 );
+		$conn_last_sync = get_option( 'widrow_ai_conn_last_sync_at', '' );
+
+		// Tool registry data.
+		// D-II: Branding data.
+		$branding = array(
+			'logo_id'              => (int) get_option( 'widrow_ai_logo_id', 0 ),
+			'display_name'         => get_option( 'widrow_ai_display_name', get_bloginfo( 'name' ) ),
+			'logo_show_staff_ai'   => '0' !== get_option( 'widrow_ai_logo_show_staff_ai', '1' ),
+			'logo_show_customer_chat' => '0' !== get_option( 'widrow_ai_logo_show_customer_chat', '1' ),
+			'logo_max_height'      => (int) get_option( 'widrow_ai_logo_max_height', 40 ),
+			'app_icon_id'          => (int) get_option( 'widrow_ai_app_icon_id', 0 ),
+			'app_icon_url'         => '',
+			'hero_image_id'        => (int) get_option( 'widrow_ai_chat_hero_image_id', 0 ),
+			'hero_image_url'       => '',
+			'hero_image_mobile_id'  => (int) get_option( 'widrow_ai_chat_hero_image_mobile_id', 0 ),
+			'hero_image_mobile_url' => '',
+		);
+
+		// App icon preview URL.
+		if ( $branding['app_icon_id'] ) {
+			$branding['app_icon_url'] = wp_get_attachment_image_url( $branding['app_icon_id'], 'medium' );
+		}
+
+		// Welcome banner preview URLs — desktop ('large' size, up to 960px
+		// wide in Spotlight) and mobile (medium-or-large size, up to ~480px
+		// wide on phones). Both optional.
+		if ( $branding['hero_image_id'] ) {
+			$banner_url = wp_get_attachment_image_url( $branding['hero_image_id'], 'large' );
+			if ( ! $banner_url ) {
+				$banner_url = wp_get_attachment_image_url( $branding['hero_image_id'], 'full' );
+			}
+			$branding['hero_image_url'] = $banner_url ? $banner_url : '';
+		}
+		if ( $branding['hero_image_mobile_id'] ) {
+			$mobile_url = wp_get_attachment_image_url( $branding['hero_image_mobile_id'], 'large' );
+			if ( ! $mobile_url ) {
+				$mobile_url = wp_get_attachment_image_url( $branding['hero_image_mobile_id'], 'full' );
+			}
+			$branding['hero_image_mobile_url'] = $mobile_url ? $mobile_url : '';
+		}
+
+		// D-II: Logo preview URL.
+		$logo_url = '';
+		if ( $branding['logo_id'] ) {
+			$logo_url = wp_get_attachment_image_url( $branding['logo_id'], 'medium' );
+		}
+
+		// D-II: Escalation emails (the 'to' address per channel).
+		$escalation = array();
+		foreach ( array( 'customer', 'setup_assistant' ) as $channel ) {
+			$stored = get_option( 'widrow_ai_escalation_' . $channel, array() );
+			$escalation[ $channel ] = ! empty( $stored['to'] ) ? implode( ', ', (array) $stored['to'] ) : '';
+		}
+
+		// Customer Chat hand-off form options (5.6.0).
+		$escalation_form = array(
+			'title'        => (string) get_option( 'widrow_ai_chat_escalation_title', '' ),
+			'desc'         => (string) get_option( 'widrow_ai_chat_escalation_desc', '' ),
+			'business_fields' => (string) get_option( 'widrow_ai_chat_escalation_business_fields', 'hidden' ),
+			'pref_enabled' => '1' === get_option( 'widrow_ai_chat_escalation_pref_enabled', '0' ),
+			'pref_options' => (string) get_option( 'widrow_ai_chat_escalation_pref_options', '' ),
+			'ack_enabled'  => '1' === get_option( 'widrow_ai_chat_escalation_ack_enabled', '0' ),
+			'ack_subject'  => (string) get_option( 'widrow_ai_chat_escalation_ack_subject', '' ),
+			'ack_body'     => (string) get_option( 'widrow_ai_chat_escalation_ack_body', '' ),
+		);
+
+		// D-II: User roles data — only users with at least one DEF capability.
+		// Custom roles (R4): $roles_catalog was refreshed above (before the JS localize — the two
+		// MUST share one catalog); include users whose ONLY grant is a custom-role cap.
+		$role_caps        = \Widrow_AI_Tools::get_role_caps();
+		$widrow_capabilities = array_merge(
+			array( 'widrow_staff_access', 'widrow_management_access', 'widrow_admin_access' ),
+			$role_caps
+		);
+		$def_user_ids     = array();
+		foreach ( $widrow_capabilities as $cap ) {
+			$ids = get_users( array(
+				'capability' => $cap,
+				'fields'     => 'ids',
+			) );
+			$def_user_ids = array_merge( $def_user_ids, $ids );
+		}
+		$def_user_ids = array_unique( array_map( 'intval', $def_user_ids ) );
+
+		$def_users = array();
+		if ( ! empty( $def_user_ids ) ) {
+			$query = new \WP_User_Query( array(
+				'include' => $def_user_ids,
+				'orderby' => 'display_name',
+				'order'   => 'ASC',
+			) );
+			$def_users = $query->get_results();
+		}
+
+		$def_admin_ids   = get_users( array(
+			'capability' => 'widrow_admin_access',
+			'fields'     => 'ids',
+		) );
+		$def_admin_count = count( $def_admin_ids );
+
+		// D-II: Chat settings.
+		$chat_settings = array(
+			'display_mode'     => get_option( 'widrow_ai_chat_display_mode', 'modal' ),
+			'drawer_width'     => (int) get_option( 'widrow_ai_chat_drawer_width', 400 ),
+			'spotlight_width'  => (int) get_option( 'widrow_ai_chat_spotlight_width', 960 ),
+			'spotlight_height' => (int) get_option( 'widrow_ai_chat_spotlight_height', 600 ),
+		);
+
+		// AI Disclosure Notice settings (rendered at the bottom of the chat panel).
+		// `ai_notice` is the master toggle — when off, the footer is hidden
+		// entirely regardless of the disclosure text and link fields below.
+		$chat_settings['ai_notice']          = '0' !== get_option( 'widrow_ai_chat_ai_notice', '0' );
+		$chat_settings['privacy_url']       = get_option( 'widrow_ai_chat_privacy_url', '' );
+		// `?:` coalesce so a saved-empty-string falls back to the same default the frontend
+		// uses (see class-widrow-ai.php). `get_option()`'s default arg only fires when the
+		// row is missing, not when the row holds ''.
+		$chat_settings['privacy_link_label'] = get_option( 'widrow_ai_chat_privacy_link_label', '' ) ?: __( 'Terms & Conditions', 'widrow-ai' );
+
+		// Welcome state + disclosure notice text.
+		$chat_settings['welcome_chip_1']         = get_option( 'widrow_ai_chat_welcome_chip_1', '' );
+		$chat_settings['welcome_chip_1_intro']   = get_option( 'widrow_ai_chat_welcome_chip_1_intro', '' );
+		$chat_settings['welcome_chip_2']         = get_option( 'widrow_ai_chat_welcome_chip_2', '' );
+		$chat_settings['welcome_chip_2_intro']   = get_option( 'widrow_ai_chat_welcome_chip_2_intro', '' );
+		$chat_settings['welcome_chip_3']         = get_option( 'widrow_ai_chat_welcome_chip_3', '' );
+		$chat_settings['welcome_chip_3_intro']   = get_option( 'widrow_ai_chat_welcome_chip_3_intro', '' );
+		$chat_settings['compliance_text']  = get_option( 'widrow_ai_chat_compliance_text', '' ) ?: __( 'AI responses may be inaccurate. By using this assistant, you agree to our', 'widrow-ai' );
+
+		// Button appearance settings.
+		$button_settings = array(
+			'position'      => get_option( 'widrow_ai_chat_button_position', 'right' ),
+			'color'         => get_option( 'widrow_ai_chat_button_color', '#111827' ),
+			'hover_color'   => get_option( 'widrow_ai_chat_button_hover_color', '' ),
+			'icon'          => get_option( 'widrow_ai_chat_button_icon', 'chat' ),
+			'label'         => get_option( 'widrow_ai_chat_button_label', 'Chat' ),
+			'icon_id'       => (int) get_option( 'widrow_ai_chat_button_icon_id', 0 ),
+			'loading_mark_id' => (int) get_option( 'widrow_ai_chat_loading_mark_id', 0 ),
+			'show_floating' => '0' !== get_option( 'widrow_ai_chat_show_floating', '1' ),
+			'greeting_bubble_enabled' => '0' !== get_option( 'widrow_ai_chat_greeting_bubble_enabled', '1' ),
+			'greeting_bubble_text'    => get_option( 'widrow_ai_chat_greeting_bubble_text', "Hi! I'm your AI assistant\nI'm here to help!" ),
+			'opening_message'         => get_option( 'widrow_ai_chat_opening_message', '' ),
+		);
+
+		// Icon preview URL for admin.
+		$button_icon_url = '';
+		if ( $button_settings['icon_id'] ) {
+			$button_icon_url = wp_get_attachment_image_url( $button_settings['icon_id'], 'thumbnail' );
+		}
+
+		// Loading-mark preview URL for admin. Original file URL, not a resized
+		// thumbnail — a resized animated GIF would preview as a static frame.
+		$loading_mark_url = '';
+		if ( $button_settings['loading_mark_id'] ) {
+			$loading_mark_url = wp_get_attachment_url( $button_settings['loading_mark_id'] );
+		}
+
+		// Setup Assistant drawer assets.
+		self::enqueue_setup_assistant_drawer();
+
+		// Prime the salt-rotation credential-error transient — it is set only as a side
+		// effect of a secret decrypt, and this page otherwise reads only plaintext options,
+		// so on a quiet site the honest "reconnect" state would miss on the first visit.
+		// Valid keys are a no-op; undecryptable keys (salt rotation) set the transient here.
+		Widrow_AI_Encryption::get_secret( 'widrow_ai_api_key' );
+
+		// Load template.
+		include WIDROW_AI_PLUGIN_DIR . 'templates/admin-settings.php';
+		include WIDROW_AI_PLUGIN_DIR . 'templates/setup-assistant-drawer.php';
+	}
+
+	/**
+	 * Enqueue the Setup Assistant drawer assets + JS config. Shared by the
+	 * settings page and the Content Drafts page; the drawer template and its
+	 * trigger button gate on widrow_admin_access at their render sites.
+	 */
+	public static function enqueue_setup_assistant_drawer(): void {
+		wp_enqueue_style( 'widrow-ai-setup-assistant' );
+		wp_enqueue_script( 'widrow-ai-setup-assistant' );
+		$current_user = wp_get_current_user();
+		wp_localize_script( 'widrow-ai-setup-assistant', 'defSetupAssistant', array(
+			'restUrl'        => esc_url_raw( rest_url( 'def-core/v1/' ) ),
+			'nonce'          => wp_create_nonce( 'wp_rest' ),
+			'chatStreamUrl'  => esc_url_raw( rest_url( WIDROW_AI_API_NAME_SPACE . '/setup-assistant/chat/stream' ) ),
+			'activeThreadUrl' => esc_url_raw( rest_url( WIDROW_AI_API_NAME_SPACE . '/setup-assistant/active-thread' ) ),
+			'clearUrl'       => esc_url_raw( rest_url( WIDROW_AI_API_NAME_SPACE . '/setup-assistant/clear' ) ),
+			'escalationUrl'  => esc_url_raw( rest_url( WIDROW_AI_API_NAME_SPACE . '/setup-assistant/send-escalation-email' ) ),
+			'userFirstName'  => $current_user->first_name ?: $current_user->display_name,
+			/* translators: %s: the admin's first name. */
+			'welcomeNamed'   => __( "Hi %s! I'm Sam, your Setup Assistant.", 'widrow-ai' ),
+			'welcomeAnon'    => __( "Hi there! I'm Sam, your Setup Assistant.", 'widrow-ai' ),
+			// The desktop Collapse control's two labels (S4). The button is
+			// icon-only and the template renders the phone's "Close Setup
+			// Assistant"; above 783px the drawer script swaps in whichever of
+			// these matches the state. Here rather than in the JS so both reach
+			// a translator.
+			'collapseLabel'  => __( 'Collapse Setup Assistant', 'widrow-ai' ),
+			'expandLabel'    => __( 'Expand Setup Assistant', 'widrow-ai' ),
+			// G0: the button an escalation offer puts under Sam's reply.
+			'talkToPerson'   => __( 'Talk to a person', 'widrow-ai' ),
+		) );
+	}
+
+	// ─── AJAX: Save Settings ─────────────────────────────────────────
+
+	/**
+	 * AJAX handler for saving settings per-tab.
+	 * Validates against per-tab allowlists — unknown keys rejected. (V1.1)
+	 */
+	public static function ajax_save_settings(): void {
+		// Verify nonce.
+		if ( ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['nonce'] ) ), 'widrow_ai_save_settings' ) ) {
+			wp_send_json_error( array( 'message' => __( 'Security check failed.', 'widrow-ai' ) ), 403 );
+		}
+
+		// Verify capability.
+		if ( ! current_user_can( 'widrow_admin_access' ) ) {
+			wp_send_json_error( array( 'message' => __( 'Permission denied. DEF Admin access required.', 'widrow-ai' ) ), 403 );
+		}
+
+		$tab = isset( $_POST['tab'] ) ? sanitize_text_field( wp_unslash( $_POST['tab'] ) ) : '';
+		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+		$data = isset( $_POST['settings'] ) ? wp_unslash( $_POST['settings'] ) : array();
+
+		if ( ! is_array( $data ) ) {
+			wp_send_json_error( array( 'message' => __( 'Invalid settings data.', 'widrow-ai' ) ) );
+		}
+
+		// Special handling for escalation tab (structured options).
+		if ( 'escalation' === $tab ) {
+			self::save_escalation_tab( $data );
+			return;
+		}
+
+		// Get allowlist for this tab.
+		if ( ! isset( self::$tab_allowlists[ $tab ] ) ) {
+			wp_send_json_error( array( 'message' => __( 'Unknown tab.', 'widrow-ai' ) ) );
+		}
+
+		$allowlist = self::$tab_allowlists[ $tab ];
+		$errors    = array();
+		$saved     = array();
+
+		// Reject unknown keys.
+		foreach ( $data as $key => $value ) {
+			$key = sanitize_text_field( $key );
+			if ( ! isset( $allowlist[ $key ] ) ) {
+				$errors[] = sprintf( __( 'Unknown setting: %s', 'widrow-ai' ), $key );
+				continue;
+			}
+
+			$field_def = $allowlist[ $key ];
+			$sanitize  = $field_def['sanitize'];
+			$autoload  = isset( $field_def['autoload'] ) ? $field_def['autoload'] : true;
+
+			// Call the sanitize method.
+			$sanitized = call_user_func( array( __CLASS__, $sanitize ), $value );
+
+			// Check for WP settings errors added by sanitize callbacks.
+			$wp_errors = get_settings_errors();
+			if ( ! empty( $wp_errors ) ) {
+				foreach ( $wp_errors as $err ) {
+					if ( 'error' === $err['type'] ) {
+						$errors[] = $err['message'];
+					}
+				}
+				// Clear settings errors so they don't persist.
+				global $wp_settings_errors;
+				$wp_settings_errors = array();
+				continue;
+			}
+
+			update_option( $key, $sanitized, $autoload );
+			$saved[] = $key;
+		}
+
+		if ( ! empty( $errors ) ) {
+			wp_send_json_error( array(
+				'message' => implode( ' ', $errors ),
+				'errors'  => $errors,
+				'saved'   => $saved,
+			) );
+		}
+
+		wp_send_json_success( array(
+			'message' => __( 'Settings saved.', 'widrow-ai' ),
+			'saved'   => $saved,
+		) );
+	}
+
+	// ─── AJAX: Connection Test ───────────────────────────────────────
+
+	/**
+	 * AJAX handler for testing the DEF API connection.
+	 * Stores sanitized result in transient (V1.1: no keys, no raw headers/bodies).
+	 */
+	public static function ajax_test_connection(): void {
+		if ( ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['nonce'] ) ), 'widrow_ai_test_connection' ) ) {
+			wp_send_json_error( array( 'message' => __( 'Security check failed.', 'widrow-ai' ) ), 403 );
+		}
+
+		if ( ! current_user_can( 'widrow_admin_access' ) ) {
+			wp_send_json_error( array( 'message' => __( 'Permission denied. DEF Admin access required.', 'widrow-ai' ) ), 403 );
+		}
+
+		$api_url = Widrow_AI::get_def_api_url();
+		$api_key = Widrow_AI_Encryption::get_secret( 'widrow_ai_api_key' );
+
+		if ( empty( $api_url ) ) {
+			$result = array(
+				'status'    => 'error',
+				'message'   => __( 'API URL is not configured.', 'widrow-ai' ),
+				'http_code' => 0,
+				'timestamp' => gmdate( 'c' ),
+			);
+			set_transient( 'widrow_ai_connection_test', $result, 300 );
+			wp_send_json_error( $result );
+		}
+
+		$headers = array( 'Accept' => 'application/json' );
+		if ( ! empty( $api_key ) ) {
+			$headers['Authorization'] = 'Bearer ' . $api_key;
+		}
+
+		$start    = microtime( true );
+		$response = wp_remote_get( rtrim( $api_url, '/' ) . '/health', array(
+			'headers' => $headers,
+			'timeout' => 10,
+		) );
+		$elapsed  = round( ( microtime( true ) - $start ) * 1000 );
+
+		if ( is_wp_error( $response ) ) {
+			$error_msg = sanitize_text_field( substr( $response->get_error_message(), 0, 200 ) );
+			$result    = array(
+				'status'        => 'error',
+				'message'       => $error_msg,
+				'http_code'     => 0,
+				'response_time' => $elapsed,
+				'timestamp'     => gmdate( 'c' ),
+			);
+			set_transient( 'widrow_ai_connection_test', $result, 300 );
+			wp_send_json_error( $result );
+		}
+
+		$http_code = wp_remote_retrieve_response_code( $response );
+		if ( $http_code >= 200 && $http_code < 300 ) {
+			$result = array(
+				'status'        => 'ok',
+				'message'       => __( 'Connected', 'widrow-ai' ),
+				'http_code'     => $http_code,
+				'response_time' => $elapsed,
+				'timestamp'     => gmdate( 'c' ),
+			);
+		} else {
+			$result = array(
+				'status'        => 'error',
+				'message'       => sprintf( __( 'HTTP %d response', 'widrow-ai' ), $http_code ),
+				'http_code'     => $http_code,
+				'response_time' => $elapsed,
+				'timestamp'     => gmdate( 'c' ),
+			);
+		}
+
+		// Store sanitized result in transient (V1.1: never store keys or raw bodies).
+		set_transient( 'widrow_ai_connection_test', $result, 300 );
+
+		if ( 'ok' === $result['status'] ) {
+			wp_send_json_success( $result );
+		} else {
+			wp_send_json_error( $result );
+		}
+	}
+
+	// ─── AJAX: Manual Connection Save ───────────────────────────────
+
+	/**
+	 * AJAX handler for manual connection configuration.
+	 * Fallback for when DEFHO push is unavailable (localhost, firewalled, etc).
+	 */
+	public static function ajax_save_manual_connection(): void {
+		if ( ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['nonce'] ) ), 'widrow_ai_save_manual_connection' ) ) {
+			wp_send_json_error( array( 'message' => __( 'Security check failed.', 'widrow-ai' ) ), 403 );
+		}
+
+		if ( ! current_user_can( 'widrow_admin_access' ) ) {
+			wp_send_json_error( array( 'message' => __( 'Permission denied.', 'widrow-ai' ) ), 403 );
+		}
+
+		$api_key = isset( $_POST['api_key'] ) ? sanitize_text_field( wp_unslash( $_POST['api_key'] ) ) : '';
+
+		if ( empty( $api_key ) ) {
+			wp_send_json_error( array( 'message' => __( 'API Key is required.', 'widrow-ai' ) ) );
+		}
+
+		// Use environment-aware API URL (default: https://api.defho.ai).
+		$api_url = Widrow_AI::get_def_api_url();
+		if ( empty( $api_url ) ) {
+			$api_url = 'https://api.defho.ai';
+		}
+
+		// Save connection config (same options as push mechanism).
+		update_option( 'widrow_ai_staff_ai_api_url', $api_url );
+		Widrow_AI_Encryption::set_secret( 'widrow_ai_api_key', $api_key );
+
+		// Set revision to 1 so $is_connected logic works.
+		$current_revision = (int) get_option( 'widrow_ai_conn_config_revision', 0 );
+		if ( $current_revision < 1 ) {
+			update_option( 'widrow_ai_conn_config_revision', 1 );
+		}
+		update_option( 'widrow_ai_conn_last_sync_at', current_time( 'Y-m-d H:i:s' ) );
+
+		// Clear cached connection test.
+		delete_transient( 'widrow_ai_connection_test' );
+
+		wp_send_json_success( array(
+			'message' => __( 'Connection saved. Use Test Connection to verify.', 'widrow-ai' ),
+		) );
+	}
+
+	// ─── Sanitize Callbacks ──────────────────────────────────────────
+
+	/**
+	 * Sanitize tools status array.
+	 *
+	 * @param mixed $value The value to sanitize.
+	 * @return array<string, int> Sanitized tool status map.
+	 */
+	public static function sanitize_tools_status( $value ): array {
+		if ( ! is_array( $value ) ) {
+			return array();
+		}
+		$sanitized = array();
+		foreach ( $value as $key => $status ) {
+			$key = sanitize_text_field( (string) $key );
+			if ( ! empty( $key ) ) {
+				$sanitized[ $key ] = (int) $status;
+			}
+		}
+		return $sanitized;
+	}
+
+	// ─── D-II Sanitize Callbacks ────────────────────────────────────
+
+	/**
+	 * Sanitize logo attachment ID.
+	 *
+	 * @param mixed $value The value to sanitize.
+	 * @return int Valid attachment ID or 0.
+	 */
+	public static function sanitize_logo_id( $value ): int {
+		$id = (int) $value;
+		if ( $id > 0 && ! wp_attachment_is_image( $id ) ) {
+			add_settings_error( 'widrow_ai_logo_id', 'invalid_image',
+				__( 'Selected file is not a valid image.', 'widrow-ai' )
+			);
+			return 0;
+		}
+		return $id;
+	}
+
+	/**
+	 * Sanitize display name.
+	 *
+	 * No truncation, and since 5.7.11 no length bound anywhere — the REST
+	 * validator's refusal and the form's maxlength both went with the ten-bounds
+	 * deletion. A display name is the site owner's own text.
+	 *
+	 * The substr() here also cut on BYTES, so a multibyte name could be
+	 * severed mid-character (removed 2026-08-08).
+	 *
+	 * @param mixed $value The value to sanitize.
+	 * @return string Sanitized name.
+	 */
+	public static function sanitize_display_name( $value ): string {
+		return sanitize_text_field( (string) $value );
+	}
+
+	/**
+	 * Sanitize boolean setting (stored as '1' or '0').
+	 *
+	 * @param mixed $value The value to sanitize.
+	 * @return string '1' or '0'.
+	 */
+	public static function sanitize_bool_setting( $value ): string {
+		return ( $value && '0' !== $value ) ? '1' : '0';
+	}
+
+	/**
+	 * Sanitize logo max height (24–120 px).
+	 *
+	 * @param mixed $value The value to sanitize.
+	 * @return int Clamped height value.
+	 */
+	public static function sanitize_logo_max_height( $value ): int {
+		$value = (int) $value;
+		return max( 24, min( 120, $value ) );
+	}
+
+	/**
+	 * Sanitize the hand-off form's Business name and website setting.
+	 *
+	 * @param mixed $value The value to sanitize.
+	 * @return string 'required', 'optional', or 'hidden'.
+	 */
+	public static function sanitize_escalation_business_fields( $value ): string {
+		$value = sanitize_text_field( (string) $value );
+		return in_array( $value, array( 'required', 'optional', 'hidden' ), true ) ? $value : 'hidden';
+	}
+
+	/**
+	 * Sanitize chat display mode.
+	 *
+	 * @param mixed $value The value to sanitize.
+	 * @return string 'modal', 'drawer', or 'spotlight'.
+	 */
+	public static function sanitize_chat_display_mode( $value ): string {
+		$value = sanitize_text_field( (string) $value );
+		return in_array( $value, array( 'modal', 'drawer', 'spotlight' ), true ) ? $value : 'modal';
+	}
+
+	/**
+	 * Sanitize drawer width (300–600 px).
+	 *
+	 * @param mixed $value The value to sanitize.
+	 * @return int Clamped width value.
+	 */
+	public static function sanitize_drawer_width( $value ): int {
+		$value = (int) $value;
+		return max( 300, min( 600, $value ) );
+	}
+
+	/**
+	 * Sanitize spotlight width (600–1200 px).
+	 *
+	 * @param mixed $value The value to sanitize.
+	 * @return int Clamped width value.
+	 */
+	public static function sanitize_spotlight_width( $value ): int {
+		$value = (int) $value;
+		return max( 600, min( 1200, $value ) );
+	}
+
+	/**
+	 * Sanitize spotlight height (500–800 px).
+	 *
+	 * @param mixed $value The value to sanitize.
+	 * @return int Clamped height value.
+	 */
+	public static function sanitize_spotlight_height( $value ): int {
+		$value = (int) $value;
+		return max( 500, min( 800, $value ) );
+	}
+
+	/**
+	 * Sanitize a welcome-state chip label.
+	 *
+	 * Does NOT truncate, and since 5.7.11 no length bound anywhere — the REST
+	 * refusal and the form maxlength both went with the ten-bounds deletion.
+	 * This sanitiser's job is to strip unsafe markup, not to bound length.
+	 * Pill overflow is handled where presentation problems belong: the widget
+	 * CSS wraps a long chip label into a multi-line pill (overflow-wrap).
+	 *
+	 * @param mixed $value The value to sanitize.
+	 * @return string Sanitised chip label.
+	 */
+	public static function sanitize_welcome_chip( $value ): string {
+		return sanitize_text_field( (string) $value );
+	}
+
+	/**
+	 * Sanitize a welcome-chip intro (multiline allowed, no length bound
+	 * anywhere since 5.7.11).
+	 *
+	 * Per-chip introduction text rendered as an assistant message when the
+	 * chip is clicked. Strips raw HTML; markdown is rendered client-side
+	 * through DOMPurify so we don't need to allow tags here. Trim to keep
+	 * empty/whitespace-only saves from triggering the intro path.
+	 *
+	 * @param mixed $value The value to sanitize.
+	 * @return string Sanitised intro text.
+	 */
+	public static function sanitize_welcome_chip_intro( $value ): string {
+		// No truncation, and no length bound anywhere (5.7.11).
+		return trim( sanitize_textarea_field( (string) $value ) );
+	}
+
+	/**
+	 * Sanitize compliance footer text (multiline allowed, NO length cap).
+	 *
+	 * The 500-char cap was removed entirely on 2026-08-08 (Steve), from both
+	 * this sanitiser and the REST validator. This is the site owner's own legal
+	 * or AI-disclosure notice: 500 characters is about one paragraph, and real
+	 * privacy statements routinely run longer. We do not get to cap how long a
+	 * site owner's legal text is — if it makes the widget tall, that is their
+	 * call on their own site.
+	 *
+	 * @param mixed $value The value to sanitize.
+	 * @return string Sanitised compliance text.
+	 */
+	public static function sanitize_compliance_text( $value ): string {
+		// trim() collapses whitespace-only input to '' so the JS guard
+		// `if (config.complianceText)` correctly hides the footer instead
+		// of rendering an empty/whitespace lead with a dangling label.
+		return trim( sanitize_textarea_field( (string) $value ) );
+	}
+
+	/**
+	 * Sanitize privacy / legal link label (no length cap here — the REST
+	 * validator refuses over 50 chars visibly).
+	 * Empty string is the documented "fall back to translated default"
+	 * value — sanitiser preserves empty.
+	 *
+	 * @param mixed $value The value to sanitize.
+	 * @return string Sanitised link label.
+	 */
+	public static function sanitize_privacy_link_label( $value ): string {
+		// No truncation, and no length bound anywhere (5.7.11).
+		return sanitize_text_field( (string) $value );
+	}
+
+	/**
+	 * Sanitize button position ('right' or 'left').
+	 *
+	 * @param mixed $value The value to sanitize.
+	 * @return string 'right' or 'left'.
+	 */
+	public static function sanitize_button_position( $value ): string {
+		$value = sanitize_text_field( (string) $value );
+		return in_array( $value, array( 'right', 'left' ), true ) ? $value : 'right';
+	}
+
+	/**
+	 * Sanitize hex color string.
+	 *
+	 * @param mixed $value The value to sanitize.
+	 * @return string Valid 6-digit hex color or default.
+	 */
+	public static function sanitize_hex_color( $value ): string {
+		$value = sanitize_text_field( (string) $value );
+		if ( preg_match( '/^#[0-9a-fA-F]{6}$/', $value ) ) {
+			return $value;
+		}
+		return '#111827';
+	}
+
+	/**
+	 * Sanitize button icon type.
+	 *
+	 * @param mixed $value The value to sanitize.
+	 * @return string 'chat', 'headset', or 'custom'.
+	 */
+	public static function sanitize_button_icon( $value ): string {
+		$value = sanitize_text_field( (string) $value );
+		return in_array( $value, array( 'chat', 'headset', 'sparkle', 'custom' ), true ) ? $value : 'chat';
+	}
+
+	public static function sanitize_button_label( $value ): string {
+		// Free-text label (e.g. "Chat", "Ask Joe", "AI Assist"). Strip HTML +
+		// control chars via sanitize_text_field, trim, and normalise empty to
+		// the default "Chat" so every renderer (loader, shortcode) sees a
+		// usable value without its own fallback dance.
+		//
+		// No truncation, and since 5.7.11 no length bound anywhere. The old
+		// 30-char cut called itself "defense-in-depth alongside the validator"
+		// — but the validator REFUSED and this CUT, a trapdoor under a locked
+		// door (cut removed 2026-08-08; the validator's bound followed in the
+		// ten-bounds deletion).
+		$value = trim( sanitize_text_field( (string) $value ) );
+		return '' === $value ? 'Chat' : $value;
+	}
+
+	/**
+	 * Sanitize the greeting-bubble text (and, since 8.6.0, the opening message,
+	 * which the chat renders as text with <br> per line). Uses sanitize_textarea_field so
+	 * admin-entered line breaks are preserved (the loader renders the text
+	 * with CSS `white-space: pre-line`). Empty is preserved (admin's way to
+	 * hide the bubble without toggling the on/off switch).
+	 *
+	 * No truncation, and since 5.7.11 no length bound anywhere — the REST
+	 * refusal and the form maxlength both went with the ten-bounds deletion
+	 * (the 200-char cut itself went 2026-08-08).
+	 *
+	 * @since 3.12.0
+	 */
+	public static function sanitize_greeting_bubble_text( $value ): string {
+		return trim( sanitize_textarea_field( (string) $value ) );
+	}
+
+	/**
+	 * Sanitize privacy / legal page URL.
+	 *
+	 * The stored value is rendered as the `href` of an admin-controlled
+	 * link in the chat widget and the AI disclosure notice. esc_url_raw()
+	 * with the WP defaults still permits schemes like ftp / mailto /
+	 * gopher that aren't sensible for a "Privacy Policy" link, and a
+	 * mistyped value (e.g. `example.com/privacy` with no scheme) silently
+	 * persists as a relative-to-host path.
+	 *
+	 * Hardening:
+	 *   - Cap length at 2048 (typical browser URL limit) — anything longer
+	 *     is malformed or hostile.
+	 *   - Allow same-origin paths starting with `/` (e.g. `/privacy/`).
+	 *   - For absolute URLs, restrict the scheme allowlist to http/https.
+	 *     esc_url_raw returns '' when the scheme isn't permitted, which
+	 *     blocks javascript:, data:, file:, etc. as a stored-XSS gadget.
+	 *   - Require both scheme + host so a stray `https:` or `http://`
+	 *     fragment doesn't slip through.
+	 * Invalid input is dropped to '' (sanitisers don't surface errors —
+	 * the admin UI shows the empty field as feedback).
+	 *
+	 * @param mixed $value The value to sanitize.
+	 * @return string Safe http/https URL, same-origin path, or empty string.
+	 */
+	public static function sanitize_privacy_url( $value ): string {
+		$value = trim( (string) $value );
+
+		if ( '' === $value ) {
+			return '';
+		}
+
+		if ( mb_strlen( $value ) > 2048 ) {
+			return '';
+		}
+
+		// Same-origin path (e.g. "/privacy-policy/") — preserve as-is after
+		// esc_url_raw scrubs control chars; no scheme/host check applies.
+		// Reject protocol-relative URLs ("//evil.com/phish") which also start
+		// with `/` but are cross-origin, defeating the same-origin promise.
+		if ( '/' === $value[0] && ( ! isset( $value[1] ) || '/' !== $value[1] ) ) {
+			return esc_url_raw( $value );
+		}
+
+		$sanitised = esc_url_raw( $value, array( 'http', 'https' ) );
+		if ( '' === $sanitised ) {
+			return '';
+		}
+
+		$parsed = wp_parse_url( $sanitised );
+		if ( empty( $parsed['scheme'] ) || empty( $parsed['host'] ) ) {
+			return '';
+		}
+
+		return $sanitised;
+	}
+
+	/**
+	 * Sanitize log level setting.
+	 *
+	 * @param mixed $value The value to sanitize.
+	 * @return string Valid log level or 'info'.
+	 */
+	public static function sanitize_log_level( $value ): string {
+		$value = sanitize_text_field( (string) $value );
+		$valid = array( 'debug', 'info', 'warning', 'error' );
+		return in_array( $value, $valid, true ) ? $value : 'info';
+	}
+
+	// ─── D-II: Escalation Tab Save ──────────────────────────────────
+
+	/**
+	 * Save escalation tab data.
+	 * Escalation uses structured options, not flat key-value.
+	 *
+	 * @param array $data Submitted data.
+	 */
+	private static function save_escalation_tab( array $data ): void {
+		$channels_map = array(
+			'escalation_customer'        => 'customer',
+			'escalation_setup_assistant' => 'setup_assistant',
+		);
+
+		// Customer Chat hand-off form options (5.6.0) — plain options that ride
+		// the escalation tab. Keys act as the allowlist; unknown keys are ignored.
+		$form_options = array(
+			'widrow_ai_chat_escalation_title'        => 'sanitize_text_field',
+			'widrow_ai_chat_escalation_desc'         => 'sanitize_text_field',
+			'widrow_ai_chat_escalation_business_fields' => array( __CLASS__, 'sanitize_escalation_business_fields' ),
+			'widrow_ai_chat_escalation_pref_enabled' => 'bool',
+			'widrow_ai_chat_escalation_pref_options' => 'sanitize_textarea_field',
+			'widrow_ai_chat_escalation_ack_enabled'  => 'bool',
+			'widrow_ai_chat_escalation_ack_subject'  => 'sanitize_text_field',
+			'widrow_ai_chat_escalation_ack_body'     => 'sanitize_textarea_field',
+		);
+
+		$saved = array();
+		foreach ( $data as $key => $email ) {
+			$key = sanitize_text_field( (string) $key );
+
+			if ( isset( $form_options[ $key ] ) ) {
+				$sanitizer = $form_options[ $key ];
+				if ( 'bool' === $sanitizer ) {
+					$value = ( '1' === (string) $email || 'true' === (string) $email ) ? '1' : '0';
+				} else {
+					$value = call_user_func( $sanitizer, (string) $email );
+				}
+				update_option( $key, $value );
+				$saved[] = $key;
+				continue;
+			}
+
+			if ( ! isset( $channels_map[ $key ] ) ) {
+				continue;
+			}
+			$channel = $channels_map[ $key ];
+			$email   = sanitize_email( (string) $email );
+
+			// Get existing settings to preserve other fields (cc, bcc, etc.).
+			$current = get_option( 'widrow_ai_escalation_' . $channel, array() );
+			if ( ! is_array( $current ) ) {
+				$current = array();
+			}
+			$current['to'] = ! empty( $email ) ? array( $email ) : array();
+			Widrow_AI_Escalation::save_channel_settings( $channel, $current );
+			$saved[] = $key;
+		}
+
+		wp_send_json_success( array(
+			'message' => __( 'Settings saved.', 'widrow-ai' ),
+			'saved'   => $saved,
+		) );
+	}
+
+	// ─── D-II: AJAX User Roles ──────────────────────────────────────
+
+	/**
+	 * AJAX handler for saving user DEF capabilities.
+	 * Requires widrow_admin_access capability.
+	 */
+	public static function ajax_save_user_roles(): void {
+		if ( ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['nonce'] ) ), 'widrow_ai_save_user_roles' ) ) {
+			wp_send_json_error( array( 'message' => __( 'Security check failed.', 'widrow-ai' ) ), 403 );
+		}
+
+		if ( ! current_user_can( 'widrow_admin_access' ) ) {
+			wp_send_json_error( array( 'message' => __( 'Permission denied. DEF Admin access required.', 'widrow-ai' ) ), 403 );
+		}
+
+		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+		$roles_data = isset( $_POST['roles'] ) ? wp_unslash( $_POST['roles'] ) : array();
+		if ( ! is_array( $roles_data ) ) {
+			wp_send_json_error( array( 'message' => __( 'Invalid data.', 'widrow-ai' ) ) );
+		}
+
+		// Custom roles (R4): the writable cap set = the fixed trio + the CACHED catalog's
+		// widrow_role_* caps — server-side from the option, never from client input.
+		$capabilities   = array_merge(
+			array( 'widrow_staff_access', 'widrow_management_access', 'widrow_admin_access' ),
+			\Widrow_AI_Tools::get_role_caps()
+		);
+		$submitted_ids  = array_map( 'intval', array_keys( $roles_data ) );
+
+		// Lockout prevention: ensure at least one user keeps widrow_admin_access.
+		$admin_count = 0;
+
+		// Count submitted users who would keep widrow_admin_access.
+		foreach ( $roles_data as $uid => $caps ) {
+			if ( ! empty( $caps['widrow_admin_access'] ) ) {
+				$admin_count++;
+			}
+		}
+
+		// Count existing widrow_admin_access users NOT in the submitted data.
+		$existing_admins = get_users( array(
+			'capability' => 'widrow_admin_access',
+			'fields'     => 'ids',
+			'exclude'    => $submitted_ids,
+		) );
+		$admin_count += count( $existing_admins );
+
+		if ( $admin_count < 1 ) {
+			wp_send_json_error( array(
+				'message' => __( 'Cannot save — at least one user must have DEF Admin access.', 'widrow-ai' ),
+			) );
+			return;
+		}
+
+		// Apply capability changes.
+		foreach ( $roles_data as $user_id => $caps ) {
+			$user_id = (int) $user_id;
+			$user    = get_userdata( $user_id );
+			if ( ! $user ) {
+				continue;
+			}
+
+			// Staff and Management are mutually exclusive.
+			// If both are submitted, keep Management only (higher access level).
+			$has_staff = isset( $caps['widrow_staff_access'] ) && '1' === $caps['widrow_staff_access'];
+			$has_mgmt  = isset( $caps['widrow_management_access'] ) && '1' === $caps['widrow_management_access'];
+			if ( $has_staff && $has_mgmt ) {
+				$caps['widrow_staff_access'] = '0';
+			}
+
+			foreach ( $capabilities as $cap ) {
+				// Written unconditionally. add_cap/remove_cap are idempotent, so
+				// the has_cap() guards these lines used to carry bought nothing
+				// and cost correctness: map_def_capabilities() makes
+				// has_cap('widrow_staff_access') answer TRUE for every Management
+				// and DEF-Admin user, so the guard skipped the very writes that
+				// mattered. A Management→Staff downgrade removed Management but
+				// never stored Staff, locking the user out of Staff-AI entirely;
+				// ticking Staff on a DEF-Admin stored nothing while the grid
+				// rendered the tick as present.
+				if ( ! empty( $caps[ $cap ] ) ) {
+					$user->add_cap( $cap );
+				} else {
+					$user->remove_cap( $cap );
+				}
+			}
+		}
+
+		// Staff/Management ticks changed — tell DEF who the Staff-AI users are
+		// now (D-U10). Queued, never sent inline: the save must not wait on an
+		// outbound call, nor fail because one did.
+		Widrow_AI_Staff_Roster::schedule_push();
+
+		wp_send_json_success( array(
+			'message' => __( 'User roles updated.', 'widrow-ai' ),
+		) );
+	}
+
+	// ─── D-II: AJAX Search Users ────────────────────────────────────
+
+	/**
+	 * AJAX handler for searching WordPress users by email or display name.
+	 * Returns users not already in the DEF user roles table.
+	 */
+	public static function ajax_search_users(): void {
+		if ( ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['nonce'] ) ), 'widrow_ai_search_users' ) ) {
+			wp_send_json_error( array( 'message' => __( 'Security check failed.', 'widrow-ai' ) ), 403 );
+		}
+
+		if ( ! current_user_can( 'widrow_admin_access' ) ) {
+			wp_send_json_error( array( 'message' => __( 'Permission denied.', 'widrow-ai' ) ), 403 );
+		}
+
+		$term = isset( $_POST['term'] ) ? sanitize_text_field( wp_unslash( $_POST['term'] ) ) : '';
+		if ( strlen( $term ) < 2 ) {
+			wp_send_json_success( array( 'users' => array() ) );
+			return;
+		}
+
+		// Search by email, display name, or user login.
+		$core_query = new \WP_User_Query( array(
+			'search'         => '*' . $term . '*',
+			'search_columns' => array( 'user_email', 'display_name', 'user_login' ),
+			'number'         => 10,
+			'orderby'        => 'display_name',
+			'order'          => 'ASC',
+		) );
+
+		// Also search by first_name / last_name (user meta).
+		$meta_query = new \WP_User_Query( array(
+			'meta_query' => array(
+				'relation' => 'OR',
+				array(
+					'key'     => 'first_name',
+					'value'   => $term,
+					'compare' => 'LIKE',
+				),
+				array(
+					'key'     => 'last_name',
+					'value'   => $term,
+					'compare' => 'LIKE',
+				),
+			),
+			'number'  => 10,
+			'orderby' => 'display_name',
+			'order'   => 'ASC',
+		) );
+
+		// Merge and deduplicate.
+		$seen    = array();
+		$results = array();
+		$all_users = array_merge( $core_query->get_results(), $meta_query->get_results() );
+		foreach ( $all_users as $user ) {
+			if ( isset( $seen[ $user->ID ] ) ) {
+				continue;
+			}
+			$seen[ $user->ID ] = true;
+
+			$first = get_user_meta( $user->ID, 'first_name', true );
+			$last  = get_user_meta( $user->ID, 'last_name', true );
+			$full  = trim( $first . ' ' . $last );
+
+			$results[] = array(
+				'id'           => $user->ID,
+				'display_name' => $full ? $full : $user->display_name,
+				'user_login'   => $user->user_login,
+				'email'        => $user->user_email,
+				'role'         => implode( ', ', array_map( 'ucfirst', $user->roles ) ),
+				'avatar'       => get_avatar_url( $user->ID, array( 'size' => 24 ) ),
+				'has_staff'    => $user->has_cap( 'widrow_staff_access' ),
+				'has_mgmt'     => $user->has_cap( 'widrow_management_access' ),
+				'has_admin'    => $user->has_cap( 'widrow_admin_access' ),
+			);
+			if ( count( $results ) >= 10 ) {
+				break;
+			}
+		}
+
+		wp_send_json_success( array( 'users' => $results ) );
+	}
+
+	// ─── D-II: AJAX Remove User Roles ───────────────────────────────
+
+	/**
+	 * AJAX handler for removing all DEF capabilities from a user.
+	 */
+	public static function ajax_remove_user_roles(): void {
+		if ( ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['nonce'] ) ), 'widrow_ai_save_user_roles' ) ) {
+			wp_send_json_error( array( 'message' => __( 'Security check failed.', 'widrow-ai' ) ), 403 );
+		}
+
+		if ( ! current_user_can( 'widrow_admin_access' ) ) {
+			wp_send_json_error( array( 'message' => __( 'Permission denied.', 'widrow-ai' ) ), 403 );
+		}
+
+		$user_id = isset( $_POST['user_id'] ) ? (int) $_POST['user_id'] : 0;
+		if ( ! $user_id ) {
+			wp_send_json_error( array( 'message' => __( 'Invalid user.', 'widrow-ai' ) ) );
+			return;
+		}
+
+		$user = get_userdata( $user_id );
+		if ( ! $user ) {
+			wp_send_json_error( array( 'message' => __( 'User not found.', 'widrow-ai' ) ) );
+			return;
+		}
+
+		// Lockout prevention: cannot remove the last DEF Admin.
+		if ( $user->has_cap( 'widrow_admin_access' ) ) {
+			$admin_ids = get_users( array(
+				'capability' => 'widrow_admin_access',
+				'fields'     => 'ids',
+			) );
+			if ( count( $admin_ids ) <= 1 && in_array( $user_id, array_map( 'intval', $admin_ids ), true ) ) {
+				wp_send_json_error( array(
+					'message' => __( 'Cannot remove the last DEF Admin. At least one user must have DEF Admin access.', 'widrow-ai' ),
+				) );
+				return;
+			}
+		}
+
+		$capabilities = array_merge(
+			array( 'widrow_staff_access', 'widrow_management_access', 'widrow_admin_access' ),
+			\Widrow_AI_Tools::get_role_caps()
+		);
+		foreach ( $capabilities as $cap ) {
+			if ( $user->has_cap( $cap ) ) {
+				$user->remove_cap( $cap );
+			}
+		}
+
+		// A revoked user must leave DEF's roster too (D-U10).
+		Widrow_AI_Staff_Roster::schedule_push();
+
+		wp_send_json_success( array(
+			'message' => sprintf(
+				/* translators: %s: user display name */
+				__( '%s removed from DEF access.', 'widrow-ai' ),
+				$user->display_name
+			),
+		) );
+	}
+
+	// ─── D-II: AJAX Test Escalation Email ───────────────────────────
+
+	/**
+	 * AJAX handler for sending a test escalation email.
+	 */
+	public static function ajax_test_escalation_email(): void {
+		if ( ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['nonce'] ) ), 'widrow_ai_test_escalation_email' ) ) {
+			wp_send_json_error( array( 'message' => __( 'Security check failed.', 'widrow-ai' ) ), 403 );
+		}
+
+		if ( ! current_user_can( 'widrow_admin_access' ) ) {
+			wp_send_json_error( array( 'message' => __( 'Permission denied. DEF Admin access required.', 'widrow-ai' ) ), 403 );
+		}
+
+		$channel         = isset( $_POST['channel'] ) ? sanitize_text_field( wp_unslash( $_POST['channel'] ) ) : '';
+		$valid_channels  = array( 'customer', 'staff_ai', 'setup_assistant' );
+		if ( ! in_array( $channel, $valid_channels, true ) ) {
+			wp_send_json_error( array( 'message' => __( 'Invalid channel.', 'widrow-ai' ) ) );
+		}
+
+		// Rate limit: 30-second cooldown per channel per user.
+		$user_id       = get_current_user_id();
+		$transient_key = 'widrow_test_email_' . $user_id . '_' . $channel;
+		if ( get_transient( $transient_key ) ) {
+			wp_send_json_error( array( 'message' => __( 'Please wait 30 seconds before sending another test email.', 'widrow-ai' ) ) );
+			return;
+		}
+
+		// Get the configured email for this channel, re-validate on retrieval.
+		$stored    = get_option( 'widrow_ai_escalation_' . $channel, array() );
+		$raw_emails = ! empty( $stored['to'] ) ? (array) $stored['to'] : array( get_option( 'admin_email' ) );
+		$to_emails  = array();
+		foreach ( $raw_emails as $email ) {
+			$clean = sanitize_email( $email );
+			if ( is_email( $clean ) ) {
+				$to_emails[] = $clean;
+			}
+		}
+		$to = implode( ', ', $to_emails );
+
+		if ( empty( $to ) ) {
+			wp_send_json_error( array( 'message' => __( 'No valid email address configured for this channel.', 'widrow-ai' ) ) );
+		}
+
+		$channel_label = ucwords( str_replace( '_', ' ', $channel ) );
+		$subject       = sprintf( '[DEF Test] Contact request test — %s', $channel_label );
+		$body          = __( 'This is a test contact request from Widrow AI. If you received this, contact requests are working correctly.', 'widrow-ai' );
+
+		set_transient( $transient_key, 1, 30 );
+		$sent = wp_mail( $to, $subject, $body );
+
+		if ( $sent ) {
+			wp_send_json_success( array(
+				'message' => sprintf(
+					/* translators: %s: email address */
+					__( 'Test email sent to %s', 'widrow-ai' ),
+					$to
+				),
+			) );
+		} else {
+			wp_send_json_error( array(
+				'message' => __( 'Failed to send test email. Check your WordPress email configuration.', 'widrow-ai' ),
+			) );
+		}
+	}
+
+	// ─── D-II: Logo Helper ──────────────────────────────────────────
+
+	/**
+	 * Get logo HTML with fallback chain.
+	 * Chain: widrow_ai_logo_id → custom_logo theme mod → display name text.
+	 *
+	 * @param int $max_height Maximum height in pixels. 0 = use saved setting.
+	 * @return string Logo HTML.
+	 */
+	public static function get_logo_html( int $max_height = 0 ): string {
+		if ( $max_height <= 0 ) {
+			$max_height = (int) get_option( 'widrow_ai_logo_max_height', 40 );
+		}
+
+		// 1. DEF Core logo.
+		$logo_id = (int) get_option( 'widrow_ai_logo_id', 0 );
+		if ( $logo_id ) {
+			$html = wp_get_attachment_image( $logo_id, 'full', false, array(
+				'class' => 'header-logo-img',
+				'style' => 'max-height: ' . $max_height . 'px; width: auto;',
+			) );
+			if ( $html ) {
+				return $html;
+			}
+		}
+
+		// 2. WordPress custom logo (theme mod).
+		$custom_logo_id = get_theme_mod( 'custom_logo' );
+		if ( $custom_logo_id ) {
+			$html = wp_get_attachment_image( (int) $custom_logo_id, 'full', false, array(
+				'class' => 'header-logo-img',
+				'style' => 'max-height: ' . $max_height . 'px; width: auto;',
+			) );
+			if ( $html ) {
+				return $html;
+			}
+		}
+
+		// 3. Fallback: display name text.
+		$display_name = get_option( 'widrow_ai_display_name', get_bloginfo( 'name' ) );
+		return '<span class="header-logo-text">' . esc_html( $display_name ) . '</span>';
+	}
+}

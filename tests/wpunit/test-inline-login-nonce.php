@@ -4,7 +4,7 @@
  * The page's own nonce was minted for the visitor, and WordPress refuses it once they
  * hold a login cookie.
  *
- * @package def-core
+ * @package widrow-ai
  */
 
 declare(strict_types=1);
@@ -37,7 +37,7 @@ class Test_Inline_Login_Nonce extends WP_Ajax_UnitTestCase {
 
 		ob_start();
 		try {
-			do_action( 'wp_ajax_nopriv_def_core_inline_login' );
+			do_action( 'wp_ajax_nopriv_widrow_ai_inline_login' );
 		} catch ( WPAjaxDieContinueException $e ) {
 			unset( $e );
 		}

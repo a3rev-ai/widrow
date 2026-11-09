@@ -7,15 +7,15 @@
  *   callback (permission_check_machine — NOT the /setup dual-mode check)
  * - Auth mode: no HMAC headers rejected; valid machine HMAC (user "system",
  *   no WordPress account) accepted
- * - Cap→slug mapping: def_staff_access→staff, def_management_access→management,
- *   def_role_<slug>→<slug>; admin-only users appear with empty roles
- * - Users with zero DEF caps (or only a non-catalog def_role_* cap) excluded
+ * - Cap→slug mapping: widrow_staff_access→staff, widrow_management_access→management,
+ *   widrow_role_<slug>→<slug>; admin-only users appear with empty roles
+ * - Users with zero DEF caps (or only a non-catalog widrow_role_* cap) excluded
  * - Response trimmed to {user_id, display_name, roles} — no email
  * - Empty tenant → users: []
  *
  * Runs standalone (no WordPress bootstrap).
  *
- * @package def-core/tests
+ * @package widrow-ai/tests
  */
 
 declare(strict_types=1);
@@ -23,8 +23,8 @@ declare(strict_types=1);
 if ( ! defined( 'ABSPATH' ) ) {
 	define( 'ABSPATH', dirname( __DIR__ ) . '/' );
 }
-if ( ! defined( 'DEF_CORE_PLUGIN_DIR' ) ) {
-	define( 'DEF_CORE_PLUGIN_DIR', dirname( __DIR__ ) . '/' );
+if ( ! defined( 'WIDROW_AI_PLUGIN_DIR' ) ) {
+	define( 'WIDROW_AI_PLUGIN_DIR', dirname( __DIR__ ) . '/' );
 }
 
 require_once __DIR__ . '/wp-stubs.php';
@@ -179,9 +179,9 @@ if ( ! function_exists( 'get_users' ) ) {
 	}
 }
 
-require_once DEF_CORE_PLUGIN_DIR . 'includes/class-def-core-hmac-auth.php';
-require_once DEF_CORE_PLUGIN_DIR . 'includes/class-def-core-tools.php';
-require_once DEF_CORE_PLUGIN_DIR . 'includes/class-def-core-admin-api.php';
+require_once WIDROW_AI_PLUGIN_DIR . 'includes/class-widrow-ai-hmac-auth.php';
+require_once WIDROW_AI_PLUGIN_DIR . 'includes/class-widrow-ai-tools.php';
+require_once WIDROW_AI_PLUGIN_DIR . 'includes/class-widrow-ai-admin-api.php';
 
 // ── Tiny assertion helper (house style) ─────────────────────────────────
 
@@ -205,14 +205,14 @@ function check( bool $cond, string $label ): void {
 
 global $_wp_test_options, $_wp_test_rest_routes, $_wp_test_users;
 
-$api = new DEF_Core_Admin_API();
+$api = new Widrow_AI_Admin_API();
 
 // 1-3: registration — machine permission callback (not the dual-mode check) + handler wiring
 $api->register_rest_routes();
 $route = $_wp_test_rest_routes['def-core/v1/users/def-roles::GET'] ?? null;
 check( null !== $route, 'GET /users/def-roles registered' );
 check(
-	array( \A3Rev\DefCore\DEF_Core_HMAC_Auth::class, 'permission_check_machine' ) === ( $route['permission_callback'] ?? null ),
+	array( \A3Rev\WidrowAi\Widrow_AI_HMAC_Auth::class, 'permission_check_machine' ) === ( $route['permission_callback'] ?? null ),
 	'Permission callback is the plain machine-HMAC check'
 );
 check(
@@ -228,12 +228,12 @@ unset(
 	$_SERVER['HTTP_X_DEF_BODY_HASH']
 );
 $request = new WP_REST_Request( 'GET', '/def-core/v1/users/def-roles' );
-$result  = \A3Rev\DefCore\DEF_Core_HMAC_Auth::permission_check_machine( $request );
+$result  = \A3Rev\WidrowAi\Widrow_AI_HMAC_Auth::permission_check_machine( $request );
 check( is_wp_error( $result ) && 'HMAC_MISSING_HEADERS' === $result->get_error_code(),
 	'No HMAC headers rejected (browser/nonce mode cannot reach this route)' );
 
 // 4: auth — valid machine HMAC with user "system" (no WordPress account) accepted
-\DEF_Core_Encryption::set_secret( 'def_core_api_key', 'test_machine_key' );
+\Widrow_AI_Encryption::set_secret( 'widrow_ai_api_key', 'test_machine_key' );
 $timestamp = (string) time();
 $body_hash = hash( 'sha256', '' );
 $payload   = "GET:/def-core/v1/users/def-roles:{$timestamp}:system:{$body_hash}";
@@ -243,11 +243,11 @@ $_SERVER['HTTP_X_DEF_TIMESTAMP'] = $timestamp;
 $_SERVER['HTTP_X_DEF_USER']      = 'system';
 $_SERVER['HTTP_X_DEF_BODY_HASH'] = $body_hash;
 
-check( true === \A3Rev\DefCore\DEF_Core_HMAC_Auth::permission_check_machine( $request ),
+check( true === \A3Rev\WidrowAi\Widrow_AI_HMAC_Auth::permission_check_machine( $request ),
 	'Valid machine HMAC (user "system") accepted' );
 
 // 5: empty tenant → users: []
-$_wp_test_options['def_core_roles_catalog'] = array( array( 'slug' => 'finance', 'name' => 'Finance' ) );
+$_wp_test_options['widrow_ai_roles_catalog'] = array( array( 'slug' => 'finance', 'name' => 'Finance' ) );
 $_wp_test_users = array();
 $data = $api->rest_get_users_def_roles( $request )->get_data();
 check( true === $data['success'] && array() === $data['data']['users'], 'Empty tenant returns users: []' );
@@ -260,11 +260,11 @@ $mk = function ( int $id, string $name, array $caps ): WP_User {
 	return $user;
 };
 $_wp_test_users = array(
-	1 => $mk( 1, 'Staff Only', array( 'def_staff_access' => true ) ),
-	2 => $mk( 2, 'Management Only', array( 'def_management_access' => true ) ),
-	3 => $mk( 3, 'Finance Staffer', array( 'def_staff_access' => true, 'def_role_finance' => true ) ),
-	4 => $mk( 4, 'Admin Only', array( 'def_admin_access' => true ) ),
-	5 => $mk( 5, 'Ghost Role', array( 'def_role_ghost' => true ) ), // cap not in catalog
+	1 => $mk( 1, 'Staff Only', array( 'widrow_staff_access' => true ) ),
+	2 => $mk( 2, 'Management Only', array( 'widrow_management_access' => true ) ),
+	3 => $mk( 3, 'Finance Staffer', array( 'widrow_staff_access' => true, 'widrow_role_finance' => true ) ),
+	4 => $mk( 4, 'Admin Only', array( 'widrow_admin_access' => true ) ),
+	5 => $mk( 5, 'Ghost Role', array( 'widrow_role_ghost' => true ) ), // cap not in catalog
 	6 => $mk( 6, 'No Caps', array() ),
 );
 
@@ -273,14 +273,14 @@ $users = $data['data']['users'];
 $by_id = array_column( $users, null, 'user_id' );
 
 // 6-9: cap→slug mapping
-check( array( 'staff' ) === ( $by_id[1]['roles'] ?? null ), 'def_staff_access maps to staff' );
-check( array( 'management' ) === ( $by_id[2]['roles'] ?? null ), 'def_management_access maps to management' );
+check( array( 'staff' ) === ( $by_id[1]['roles'] ?? null ), 'widrow_staff_access maps to staff' );
+check( array( 'management' ) === ( $by_id[2]['roles'] ?? null ), 'widrow_management_access maps to management' );
 check( array( 'staff', 'finance' ) === ( $by_id[3]['roles'] ?? null ),
-	'Catalog-backed def_role_finance maps to finance (alongside staff)' );
+	'Catalog-backed widrow_role_finance maps to finance (alongside staff)' );
 check( array() === ( $by_id[4]['roles'] ?? null ), 'def_admin-only user included with empty roles (admin is not a role)' );
 
 // 10-11: exclusions
-check( ! isset( $by_id[5] ), 'User with only a non-catalog def_role_* cap excluded' );
+check( ! isset( $by_id[5] ), 'User with only a non-catalog widrow_role_* cap excluded' );
 check( ! isset( $by_id[6] ), 'User with zero DEF caps excluded' );
 
 // 12-13: response shape trimmed

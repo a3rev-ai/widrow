@@ -24,10 +24,10 @@ const path = require('path');
 
 const REPO = path.resolve(__dirname, '..', '..');
 const JS_PATH = path.join(REPO, 'assets/js/staff-ai.js');
-const CC_PATH = path.join(REPO, 'assets/js/def-core-customer-chat.js');
-const CC_LOADER_PATH = path.join(REPO, 'assets/js/def-core-customer-chat-loader.js');
-const VOICE_PATH = path.join(REPO, 'assets/js/def-core-voice.js');
-const ADMIN_PATH = path.join(REPO, 'assets/js/def-core-admin.js');
+const CC_PATH = path.join(REPO, 'assets/js/widrow-ai-customer-chat.js');
+const CC_LOADER_PATH = path.join(REPO, 'assets/js/widrow-ai-customer-chat-loader.js');
+const VOICE_PATH = path.join(REPO, 'assets/js/widrow-ai-voice.js');
+const ADMIN_PATH = path.join(REPO, 'assets/js/widrow-ai-admin.js');
 
 function slice(label, startMatch, endMatch, needs, envVar, file) {
 	if (envVar && process.env[envVar]) {
@@ -497,7 +497,7 @@ function setupAssistantCollapse() {
 // The Creator's name off a content list response, and the title + tab copy it
 // repaints. Out of the DRAFT CARDS bundle, which owns both for the page: the
 // Clusters bundle calls into the same block through window.DefCreator.
-const DRAFT_CARDS_PATH = path.join(REPO, 'assets/js/def-core-draft-cards.js');
+const DRAFT_CARDS_PATH = path.join(REPO, 'assets/js/widrow-ai-draft-cards.js');
 
 function creator() {
 	return slice('creator name',
@@ -527,11 +527,11 @@ function phpToHtml(chunk, label) {
 	const htmlEsc = v => v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 	const attrEsc = v => htmlEsc(v).replace(/"/g, '&quot;');
 	const unquote = v => v.replace(/\\(['\\])/g, '$1');
-	const ECHO = /<\?php\s+echo\s+esc_(html|attr)__\(\s*'((?:\\.|[^'\\])*)'\s*,\s*'digital-employees'\s*\);\s*\?>/g;
+	const ECHO = /<\?php\s+echo\s+esc_(html|attr)__\(\s*'((?:\\.|[^'\\])*)'\s*,\s*'widrow-ai'\s*\);\s*\?>/g;
 	// One interpolated string in the creator: printf( esc_html__( '…%s' ),
 	// esc_html( $expr ) ). The value is the reader's own session, so the fixture
 	// names a stand-in; the SHIPPED sentence around it is what matters here.
-	const PRINTF = /<\?php\s*(?:\/\*[\s\S]*?\*\/\s*)?printf\(\s*esc_html__\(\s*'((?:\\.|[^'\\])*)'\s*,\s*'digital-employees'\s*\)\s*,\s*esc_html\([^)]*\)\s*\);\s*\?>/g;
+	const PRINTF = /<\?php\s*(?:\/\*[\s\S]*?\*\/\s*)?printf\(\s*esc_html__\(\s*'((?:\\.|[^'\\])*)'\s*,\s*'widrow-ai'\s*\)\s*,\s*esc_html\([^)]*\)\s*\);\s*\?>/g;
 	// A block that carries only a comment renders nothing. The body is spelled
 	// "anything that is not the terminator" rather than lazily: a lazy run can
 	// still be pushed PAST its own `*/` to satisfy the `?>` that follows, which

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# def-core Smoke Test Harness
+# widrow-ai Smoke Test Harness
 #
 # 7 smoke checks against a running wp-env instance (no WooCommerce).
 # Usage:
@@ -41,7 +41,7 @@ host_curl() {
 TEST_PORT="${WP_ENV_TESTS_PORT:-8889}"
 TEST_URL="http://localhost:${TEST_PORT}"
 
-echo "=== def-core Smoke Tests ==="
+echo "=== widrow-ai Smoke Tests ==="
 echo "Test site: ${TEST_URL}"
 echo ""
 
@@ -54,13 +54,13 @@ else
   fail "WP boots — could not get siteurl"
 fi
 
-# --- Check 2: def-core activates ---
-echo "[2/7] def-core activates"
-ACTIVATE_OUTPUT=$(wp_cli plugin activate def-core 2>&1 || echo "ACTIVATE_FAILED")
+# --- Check 2: widrow-ai activates ---
+echo "[2/7] widrow-ai activates"
+ACTIVATE_OUTPUT=$(wp_cli plugin activate widrow-ai 2>&1 || echo "ACTIVATE_FAILED")
 if echo "$ACTIVATE_OUTPUT" | grep -qi "activated\|already active"; then
-  pass "def-core activates"
+  pass "widrow-ai activates"
 else
-  fail "def-core activation failed: $ACTIVATE_OUTPUT"
+  fail "widrow-ai activation failed: $ACTIVATE_OUTPUT"
 fi
 
 # --- Check 3: REST routes exist ---

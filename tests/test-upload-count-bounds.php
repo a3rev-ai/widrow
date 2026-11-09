@@ -20,7 +20,7 @@
  * Runs standalone (no WordPress bootstrap) — JS and template pins are source
  * scans, the instrument available to this suite for browser-side code.
  *
- * @package def-core/tests
+ * @package widrow-ai/tests
  */
 
 declare(strict_types=1);
@@ -42,7 +42,7 @@ function assert_test( $cond, string $label ): void {
 $root         = dirname( __DIR__ );
 $shell_src    = file_get_contents( $root . '/templates/staff-ai-shell.php' );
 $staff_js     = file_get_contents( $root . '/assets/js/staff-ai.js' );
-$customer_js  = file_get_contents( $root . '/assets/js/def-core-customer-chat.js' );
+$customer_js  = file_get_contents( $root . '/assets/js/widrow-ai-customer-chat.js' );
 
 // ── Staff widget: the maxFiles chain is gone ─────────────────────────────────
 

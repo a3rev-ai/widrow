@@ -26,7 +26,7 @@
  * someone writes it — the one moment they can still answer the doctrine's
  * question.
  *
- * @package def-core/tests
+ * @package widrow-ai/tests
  */
 
 declare(strict_types=1);
@@ -46,9 +46,9 @@ function assert_test( $cond, string $label ): void {
 }
 
 $root        = dirname( __DIR__ );
-$customer_js = file_get_contents( $root . '/assets/js/def-core-customer-chat.js' );
+$customer_js = file_get_contents( $root . '/assets/js/widrow-ai-customer-chat.js' );
 $staff_js    = file_get_contents( $root . '/assets/js/staff-ai.js' );
-$core_php    = file_get_contents( $root . '/includes/class-def-core.php' );
+$core_php    = file_get_contents( $root . '/includes/class-widrow-ai.php' );
 
 /**
  * Strip `//` comment lines so the negative pin measures CODE, not prose.

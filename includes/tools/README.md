@@ -4,17 +4,17 @@ This directory contains tool implementations and base classes for the Widrow AI 
 
 ## Structure
 
-- `class-def-core-tool-base.php` - Abstract base class for tool implementations
+- `class-widrow-ai-tool-base.php` - Abstract base class for tool implementations
 
 ## For Module Developers
 
 ### Using the Base Class
 
-Extend `DEF_Core_Tool_Base` to create your own tool:
+Extend `Widrow_AI_Tool_Base` to create your own tool:
 
 ```php
 <?php
-class My_Module_Tool extends DEF_Core_Tool_Base {
+class My_Module_Tool extends Widrow_AI_Tool_Base {
     
     protected function init(): void {
         $this->namespace = 'a3-ai/v1';
@@ -40,7 +40,7 @@ class My_Module_Tool extends DEF_Core_Tool_Base {
 }
 
 // Register the tool
-add_action( 'def_core_register_tools', function() {
+add_action( 'widrow_ai_register_tools', function() {
     $tool = new My_Module_Tool( 'my-module' );
     $tool->register();
 } );
@@ -52,8 +52,8 @@ You can also register tools directly using the registry:
 
 ```php
 <?php
-add_action( 'def_core_register_tools', function() {
-    $registry = DEF_Core_API_Registry::instance();
+add_action( 'widrow_ai_register_tools', function() {
+    $registry = Widrow_AI_API_Registry::instance();
     
     $registry->register_tool(
         'a3-ai/v1',                    // Namespace

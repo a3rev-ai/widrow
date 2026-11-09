@@ -1,8 +1,8 @@
 <?php
 /**
- * PHPUnit tests for DEF_Core_GitHub_Updater.
+ * PHPUnit tests for Widrow_AI_GitHub_Updater.
  *
- * @package def-core/tests/unit
+ * @package widrow-ai/tests/unit
  */
 
 declare(strict_types=1);
@@ -10,7 +10,7 @@ declare(strict_types=1);
 use Yoast\PHPUnitPolyfills\TestCases\TestCase;
 
 /**
- * @covers DEF_Core_GitHub_Updater
+ * @covers Widrow_AI_GitHub_Updater
  */
 final class GitHubUpdaterTest extends TestCase {
 
@@ -28,10 +28,10 @@ final class GitHubUpdaterTest extends TestCase {
 		$_wp_test_active_plugins   = array();
 
 		$this->config = array(
-			'file'    => '/tmp/wp-plugins/digital-employees/def-core.php',
-			'repo'    => 'a3rev-ai/def-core',
-			'slug'    => 'digital-employees',
-			'asset'   => 'digital-employees.zip',
+			'file'    => '/tmp/wp-plugins/widrow-ai/widrow-ai.php',
+			'repo'    => 'a3rev-ai/widrow',
+			'slug'    => 'widrow-ai',
+			'asset'   => 'widrow-ai.zip',
 			'version' => '1.8.0',
 		);
 	}
@@ -39,18 +39,18 @@ final class GitHubUpdaterTest extends TestCase {
 	// ── Cache key generation ────────────────────────────────────────────
 
 	public function test_cache_key_format(): void {
-		$updater = new DEF_Core_GitHub_Updater( $this->config );
+		$updater = new Widrow_AI_GitHub_Updater( $this->config );
 
 		// The cache key is private, but we can verify it through transient usage.
 		// Pre-seed the transient to test caching behavior.
-		$expected_key = 'def_gh_update_' . sanitize_key( 'digital-employees' );
-		$this->assertSame( 'def_gh_update_digital-employees', $expected_key );
+		$expected_key = 'widrow_gh_update_' . sanitize_key( 'widrow-ai' );
+		$this->assertSame( 'widrow_gh_update_widrow-ai', $expected_key );
 	}
 
 	// ── check_update: empty transient->checked ──────────────────────────
 
 	public function test_check_update_with_empty_checked_returns_unchanged(): void {
-		$updater   = new DEF_Core_GitHub_Updater( $this->config );
+		$updater   = new Widrow_AI_GitHub_Updater( $this->config );
 		$transient = new stdClass();
 		// No ->checked property.
 
@@ -64,12 +64,12 @@ final class GitHubUpdaterTest extends TestCase {
 	public function test_check_update_no_update_when_current_gte_remote(): void {
 		$this->seed_github_release( '1.8.0' );
 
-		$updater   = new DEF_Core_GitHub_Updater( $this->config );
+		$updater   = new Widrow_AI_GitHub_Updater( $this->config );
 		$transient = $this->make_transient();
 
 		$result = $updater->check_update( $transient );
 
-		$basename = 'digital-employees/def-core.php';
+		$basename = 'widrow-ai/widrow-ai.php';
 		$this->assertObjectNotHasProperty( 'response', $result );
 		$this->assertObjectHasProperty( 'no_update', $result );
 		$this->assertArrayHasKey( $basename, $result->no_update );
@@ -81,28 +81,28 @@ final class GitHubUpdaterTest extends TestCase {
 	public function test_check_update_with_update_available(): void {
 		$this->seed_github_release( '2.0.0' );
 
-		$updater   = new DEF_Core_GitHub_Updater( $this->config );
+		$updater   = new Widrow_AI_GitHub_Updater( $this->config );
 		$transient = $this->make_transient();
 
 		$result = $updater->check_update( $transient );
 
-		$basename = 'digital-employees/def-core.php';
+		$basename = 'widrow-ai/widrow-ai.php';
 		$this->assertObjectHasProperty( 'response', $result );
 		$this->assertArrayHasKey( $basename, $result->response );
 		$this->assertSame( '2.0.0', $result->response[ $basename ]->new_version );
-		$this->assertStringContainsString( 'digital-employees.zip', $result->response[ $basename ]->package );
+		$this->assertStringContainsString( 'widrow-ai.zip', $result->response[ $basename ]->package );
 	}
 
 	// ── check_update: GitHub API error ──────────────────────────────────
 
 	public function test_check_update_with_api_error_returns_unchanged(): void {
 		// Don't seed any remote response — wp_remote_get will return WP_Error.
-		$updater   = new DEF_Core_GitHub_Updater( $this->config );
+		$updater   = new Widrow_AI_GitHub_Updater( $this->config );
 		$transient = $this->make_transient();
 
 		$result = $updater->check_update( $transient );
 
-		$basename = 'digital-employees/def-core.php';
+		$basename = 'widrow-ai/widrow-ai.php';
 		// Should not have response or no_update for our plugin.
 		$has_response  = isset( $result->response[ $basename ] );
 		$has_no_update = isset( $result->no_update[ $basename ] );
@@ -113,20 +113,20 @@ final class GitHubUpdaterTest extends TestCase {
 	// ── check_update: cached remote info ────────────────────────────────
 
 	public function test_check_update_survives_a_cached_failure(): void {
-		set_transient( 'def_gh_update_digital-employees', '' );
+		set_transient( 'widrow_gh_update_widrow-ai', '' );
 
-		$updater = new DEF_Core_GitHub_Updater( $this->config );
+		$updater = new Widrow_AI_GitHub_Updater( $this->config );
 		$result  = $updater->check_update( $this->make_transient() );
 
-		$this->assertFalse( isset( $result->response['digital-employees/def-core.php'] ) );
+		$this->assertFalse( isset( $result->response['widrow-ai/widrow-ai.php'] ) );
 	}
 
 	public function test_check_update_uses_cached_info(): void {
 		// Pre-seed the transient cache directly.
-		$cache_key = 'def_gh_update_digital-employees';
+		$cache_key = 'widrow_gh_update_widrow-ai';
 		set_transient( $cache_key, array(
 			'version'      => '3.0.0',
-			'download_url' => 'https://example.com/digital-employees.zip',
+			'download_url' => 'https://example.com/widrow-ai.zip',
 			'name'         => 'Digital Employees',
 			'description'  => 'Test',
 			'changelog'    => '<pre>Test</pre>',
@@ -135,12 +135,12 @@ final class GitHubUpdaterTest extends TestCase {
 			'tested'       => '6.8',
 		) );
 
-		$updater   = new DEF_Core_GitHub_Updater( $this->config );
+		$updater   = new Widrow_AI_GitHub_Updater( $this->config );
 		$transient = $this->make_transient();
 
 		$result = $updater->check_update( $transient );
 
-		$basename = 'digital-employees/def-core.php';
+		$basename = 'widrow-ai/widrow-ai.php';
 		$this->assertArrayHasKey( $basename, $result->response );
 		$this->assertSame( '3.0.0', $result->response[ $basename ]->new_version );
 	}
@@ -148,7 +148,7 @@ final class GitHubUpdaterTest extends TestCase {
 	// ── post_install: only fires for matching basename ───────────────────
 
 	public function test_post_install_ignores_other_plugins(): void {
-		$updater = new DEF_Core_GitHub_Updater( $this->config );
+		$updater = new Widrow_AI_GitHub_Updater( $this->config );
 
 		$response = $updater->post_install(
 			true,
@@ -168,7 +168,7 @@ final class GitHubUpdaterTest extends TestCase {
 	private function make_transient(): stdClass {
 		$t = new stdClass();
 		$t->checked = array(
-			'digital-employees/def-core.php' => '1.8.0',
+			'widrow-ai/widrow-ai.php' => '1.8.0',
 		);
 		return $t;
 	}
@@ -180,8 +180,8 @@ final class GitHubUpdaterTest extends TestCase {
 		global $_wp_test_remote_responses;
 
 		$tag = 'v' . $version;
-		$api_url = 'https://api.github.com/repos/a3rev-ai/def-core/releases/latest';
-		$readme_url = 'https://raw.githubusercontent.com/a3rev-ai/def-core/' . $tag . '/readme.txt';
+		$api_url = 'https://api.github.com/repos/a3rev-ai/widrow/releases/latest';
+		$readme_url = 'https://raw.githubusercontent.com/a3rev-ai/widrow/' . $tag . '/readme.txt';
 
 		$_wp_test_remote_responses[ $api_url ] = array(
 			'response' => array( 'code' => 200 ),
@@ -192,8 +192,8 @@ final class GitHubUpdaterTest extends TestCase {
 				'published_at' => '2026-04-01T00:00:00Z',
 				'assets'       => array(
 					array(
-						'name'                 => 'digital-employees.zip',
-						'browser_download_url' => 'https://github.com/a3rev-ai/def-core/releases/download/' . $tag . '/digital-employees.zip',
+						'name'                 => 'widrow-ai.zip',
+						'browser_download_url' => 'https://github.com/a3rev-ai/widrow/releases/download/' . $tag . '/widrow-ai.zip',
 					),
 				),
 			) ),

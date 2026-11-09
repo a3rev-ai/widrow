@@ -98,7 +98,7 @@ UI state MUST NOT influence retrieval results.
 This document assumes routing has already occurred.
 
 Routing is defined elsewhere:
-- User capabilities (`def_staff_access`, `def_management_access`)
+- User capabilities (`widrow_staff_access`, `widrow_management_access`)
 - Channel routing logic
 - Employee selection
 

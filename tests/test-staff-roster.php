@@ -7,14 +7,14 @@
  *   STRINGS, display_name optional, DEF-Admin alone is not a seat
  * - No email ever appears anywhere in the payload (data minimization)
  * - The builder reads STORED capabilities, not has_cap() — which the
- *   map_meta_cap filter makes answer true for def_staff_access on every
+ *   map_meta_cap filter makes answer true for widrow_staff_access on every
  *   Management/Admin user
  * - The push fires on User Access save, on the × remove, and on upgrade
  * - A failing push never breaks the save, and logs the response code
  *
  * Runs standalone (no WordPress bootstrap).
  *
- * @package def-core/tests
+ * @package widrow-ai/tests
  */
 
 declare(strict_types=1);
@@ -22,8 +22,8 @@ declare(strict_types=1);
 if ( ! defined( 'ABSPATH' ) ) {
 	define( 'ABSPATH', dirname( __DIR__ ) . '/' );
 }
-if ( ! defined( 'DEF_CORE_PLUGIN_DIR' ) ) {
-	define( 'DEF_CORE_PLUGIN_DIR', dirname( __DIR__ ) . '/' );
+if ( ! defined( 'WIDROW_AI_PLUGIN_DIR' ) ) {
+	define( 'WIDROW_AI_PLUGIN_DIR', dirname( __DIR__ ) . '/' );
 }
 
 require_once __DIR__ . '/wp-stubs.php';
@@ -64,15 +64,15 @@ class WP_User_Stub {
 	}
 
 	/**
-	 * Deliberately LIES the way production does: DEF_Core_Admin::map_def_capabilities()
-	 * is filtered onto map_meta_cap and answers true for def_staff_access on any
+	 * Deliberately LIES the way production does: Widrow_AI_Admin::map_def_capabilities()
+	 * is filtered onto map_meta_cap and answers true for widrow_staff_access on any
 	 * Management or DEF-Admin user. A builder that reads has_cap() would put a
 	 * DEF-Admin-only user on the roster as "staff"; these tests would catch it.
 	 */
 	public function has_cap( string $cap ): bool {
-		if ( 'def_staff_access' === $cap
-			&& ( in_array( 'def_management_access', $this->caps, true )
-				|| in_array( 'def_admin_access', $this->caps, true ) ) ) {
+		if ( 'widrow_staff_access' === $cap
+			&& ( in_array( 'widrow_management_access', $this->caps, true )
+				|| in_array( 'widrow_admin_access', $this->caps, true ) ) ) {
 			return true;
 		}
 		return in_array( $cap, $this->caps, true );
@@ -196,11 +196,11 @@ if ( ! function_exists( 'wp_remote_retrieve_response_code' ) ) {
 	}
 }
 
-// The real DEF_Core_Encryption is loaded by wp-stubs.php; the key is set the
+// The real Widrow_AI_Encryption is loaded by wp-stubs.php; the key is set the
 // way production sets it, through the option it reads.
-update_option( 'def_core_api_key', 'test-api-key' );
+update_option( 'widrow_ai_api_key', 'test-api-key' );
 
-class DEF_Core_Logger {
+class Widrow_AI_Logger {
 	const SOURCE_SYNC = 'sync';
 	public static function warning( string $source, string $message, array $context = array() ): void {
 		global $_test_logs;
@@ -212,18 +212,18 @@ class DEF_Core_Logger {
 	}
 }
 
-// class-def-core.php ends in DEF_Core::instance(), which boots the entire
+// class-widrow-ai.php ends in Widrow_AI::instance(), which boots the entire
 // plugin — so it cannot be loaded here. The upgrade backfill is asserted
 // against its source instead (section 6), the way this suite already checks
 // code it cannot execute standalone (see test-stream-failure-paths.php).
-class DEF_Core {
+class Widrow_AI {
 	public static function get_def_api_url_internal(): string {
 		return 'https://def-api.test';
 	}
 }
 
-if ( ! class_exists( 'DEF_Core_Tools' ) ) {
-	class DEF_Core_Tools {
+if ( ! class_exists( 'Widrow_AI_Tools' ) ) {
+	class Widrow_AI_Tools {
 		public static function get_role_caps(): array {
 			return array();
 		}
@@ -281,8 +281,8 @@ if ( ! function_exists( '__' ) ) {
 	}
 }
 
-require_once DEF_CORE_PLUGIN_DIR . 'includes/class-def-core-staff-roster.php';
-require_once DEF_CORE_PLUGIN_DIR . 'includes/class-def-core-admin.php';
+require_once WIDROW_AI_PLUGIN_DIR . 'includes/class-widrow-ai-staff-roster.php';
+require_once WIDROW_AI_PLUGIN_DIR . 'includes/class-widrow-ai-admin.php';
 
 // ── Test helpers ────────────────────────────────────────────────────────
 
@@ -345,14 +345,14 @@ echo "=== Staff Roster Tests (D-U10) ===\n";
 // ── 1. The payload builder ──────────────────────────────────────────────
 echo "\n[1] Roster payload builder\n";
 
-seed_user( 11, 'Staff Sally', 'sally@example.com', array( 'def_staff_access' ) );
-seed_user( 22, 'Manager Mo', 'mo@example.com', array( 'def_management_access' ) );
-seed_user( 33, 'Both Bob', 'bob@example.com', array( 'def_staff_access', 'def_management_access' ) );
-seed_user( 44, 'Admin Ada', 'ada@example.com', array( 'def_admin_access' ) );
-seed_user( 55, '', 'nameless@example.com', array( 'def_staff_access' ) );
+seed_user( 11, 'Staff Sally', 'sally@example.com', array( 'widrow_staff_access' ) );
+seed_user( 22, 'Manager Mo', 'mo@example.com', array( 'widrow_management_access' ) );
+seed_user( 33, 'Both Bob', 'bob@example.com', array( 'widrow_staff_access', 'widrow_management_access' ) );
+seed_user( 44, 'Admin Ada', 'ada@example.com', array( 'widrow_admin_access' ) );
+seed_user( 55, '', 'nameless@example.com', array( 'widrow_staff_access' ) );
 seed_user( 66, 'Outsider Olive', 'olive@example.com', array() );
 
-$roster = DEF_Core_Staff_Roster::build_roster();
+$roster = Widrow_AI_Staff_Roster::build_roster();
 
 assert_equals( 4, count( $roster ), 'only Staff/Management ticks make the roster' );
 assert_equals( 'staff', row_for( $roster, '11' )['access_level'] ?? '', 'a Staff tick maps to staff' );
@@ -361,11 +361,11 @@ assert_equals( 'management', row_for( $roster, '33' )['access_level'] ?? '', 'Ma
 assert_true( null === row_for( $roster, '44' ), 'DEF-Admin alone is an access grant, not a Staff-AI seat' );
 assert_true( null === row_for( $roster, '66' ), 'a user with no DEF tick is absent' );
 
-// The map_meta_cap trap: has_cap('def_staff_access') is true for Ada, yet she
+// The map_meta_cap trap: has_cap('widrow_staff_access') is true for Ada, yet she
 // must not appear. This is the assertion that pins the stored-caps read.
 assert_true(
-	( new WP_User_Stub( 44, $GLOBALS['_test_users'][44] ) )->has_cap( 'def_staff_access' ),
-	'precondition: has_cap() lies about def_staff_access for a DEF-Admin user'
+	( new WP_User_Stub( 44, $GLOBALS['_test_users'][44] ) )->has_cap( 'widrow_staff_access' ),
+	'precondition: has_cap() lies about widrow_staff_access for a DEF-Admin user'
 );
 assert_true( null === row_for( $roster, '44' ), 'the builder reads STORED caps, so the lie does not reach DEF' );
 
@@ -399,9 +399,9 @@ assert_true( false === strpos( (string) $encoded, '@example.com' ), 'no email ad
 echo "\n[3] Debounce\n";
 
 $_test_cron = array();
-DEF_Core_Staff_Roster::schedule_push();
+Widrow_AI_Staff_Roster::schedule_push();
 assert_equals( 1, count( $_test_cron ), 'a save queues one push' );
-DEF_Core_Staff_Roster::schedule_push();
+Widrow_AI_Staff_Roster::schedule_push();
 assert_equals( 1, count( $_test_cron ), 'a second save folds into the pending push (no storm)' );
 
 // ── 4. The push ─────────────────────────────────────────────────────────
@@ -409,7 +409,7 @@ echo "\n[4] Push transport\n";
 
 $_test_http = array();
 $_test_logs = array();
-DEF_Core_Staff_Roster::send_roster();
+Widrow_AI_Staff_Roster::send_roster();
 
 assert_equals( 1, count( $_test_http ), 'send_roster makes one call' );
 assert_equals( 'https://def-api.test/api/staff-ai/roster', $_test_http[0]['url'], 'posts to the DEF roster endpoint' );
@@ -424,17 +424,17 @@ assert_true( ! isset( $sent['tenant_id'] ), 'no tenant id in the body — the ke
 
 // Not connected → nothing goes out.
 $_test_http = array();
-update_option( 'def_core_api_key', '' );
-DEF_Core_Staff_Roster::send_roster();
+update_option( 'widrow_ai_api_key', '' );
+Widrow_AI_Staff_Roster::send_roster();
 assert_equals( 0, count( $_test_http ), 'no API key configured = no call' );
-update_option( 'def_core_api_key', 'test-api-key' );
+update_option( 'widrow_ai_api_key', 'test-api-key' );
 
 // ── 5. Failure handling ─────────────────────────────────────────────────
 echo "\n[5] Failure is logged, never thrown\n";
 
 $_test_logs                 = array();
 $GLOBALS['_test_http_error'] = true;
-DEF_Core_Staff_Roster::send_roster();
+Widrow_AI_Staff_Roster::send_roster();
 assert_equals( 'warning', $_test_logs[0]['level'] ?? '', 'a transport failure logs a warning' );
 $GLOBALS['_test_http_error'] = false;
 
@@ -443,7 +443,7 @@ $GLOBALS['_test_http_error'] = false;
 foreach ( array( 413, 422, 503 ) as $code ) {
 	$_test_logs               = array();
 	$GLOBALS['_test_http_code'] = $code;
-	DEF_Core_Staff_Roster::send_roster();
+	Widrow_AI_Staff_Roster::send_roster();
 	assert_equals( $code, $_test_logs[0]['context']['status'] ?? 0, "a $code refusal logs its response code" );
 }
 $GLOBALS['_test_http_code'] = 200;
@@ -453,13 +453,13 @@ $GLOBALS['_test_http_code'] = 200;
 $_test_logs                 = array();
 $GLOBALS['_test_http_code'] = 409;
 $GLOBALS['_test_http_body'] = '{"code": "staff_ai_home_portal"}';
-DEF_Core_Staff_Roster::send_roster();
+Widrow_AI_Staff_Roster::send_roster();
 assert_equals( 'info', $_test_logs[0]['level'] ?? '', "DEF's staff_ai_home_portal 409 logs at info" );
 assert_equals( 1, count( $_test_logs ), '... and nothing else' );
 // Any other 409 is still a refusal worth a warning.
 $_test_logs                 = array();
 $GLOBALS['_test_http_body'] = '{"detail": "conflict"}';
-DEF_Core_Staff_Roster::send_roster();
+Widrow_AI_Staff_Roster::send_roster();
 assert_equals( 'warning', $_test_logs[0]['level'] ?? '', 'another 409 still logs a warning' );
 $GLOBALS['_test_http_code'] = 200;
 $GLOBALS['_test_http_body'] = '';
@@ -471,11 +471,11 @@ echo "\n[6] Save + upgrade queue a push\n";
 $_test_cron       = array();
 $_POST            = array(
 	'nonce' => 'x',
-	'roles' => array( 11 => array( 'def_staff_access' => '1', 'def_admin_access' => '1' ) ),
+	'roles' => array( 11 => array( 'widrow_staff_access' => '1', 'widrow_admin_access' => '1' ) ),
 );
 $saved            = null;
 try {
-	DEF_Core_Admin::ajax_save_user_roles();
+	Widrow_AI_Admin::ajax_save_user_roles();
 } catch ( AjaxHalt $halt ) {
 	$saved = $halt;
 }
@@ -487,7 +487,7 @@ $_test_cron = array();
 $_POST      = array( 'nonce' => 'x', 'user_id' => 11 );
 $removed    = null;
 try {
-	DEF_Core_Admin::ajax_remove_user_roles();
+	Widrow_AI_Admin::ajax_remove_user_roles();
 } catch ( AjaxHalt $halt ) {
 	$removed = $halt;
 }
@@ -495,14 +495,14 @@ assert_true( $removed && $removed->ok, 'the × remove succeeds' );
 assert_equals( 1, count( $_test_cron ), 'revoking a user queues a roster push so the removal propagates' );
 
 // Plugin upgrade backfill: an existing install populates without anyone
-// opening User Access. maybe_upgrade() lives in class-def-core.php, which
+// opening User Access. maybe_upgrade() lives in class-widrow-ai.php, which
 // boots the plugin on load, so its wiring is asserted against the source.
-$core_php = file_get_contents( DEF_CORE_PLUGIN_DIR . 'includes/class-def-core.php' );
+$core_php = file_get_contents( WIDROW_AI_PLUGIN_DIR . 'includes/class-widrow-ai.php' );
 assert_true(
 	1 === preg_match(
 		'/version_compare\( \$current, \'7\.0\.0\', \'<\' \) \)\s*\{.*?'
-		. 'DEF_Core_Staff_Roster::schedule_push\(\);.*?'
-		. 'update_option\( \'def_core_db_version\', \'7\.0\.0\' \);/s',
+		. 'Widrow_AI_Staff_Roster::schedule_push\(\);.*?'
+		. 'update_option\( \'widrow_ai_db_version\', \'7\.0\.0\' \);/s',
 		(string) $core_php
 	),
 	'maybe_upgrade() queues the full-roster backfill once, then advances the marker'
@@ -510,11 +510,11 @@ assert_true(
 // The marker must advance whether or not the push lands: gating the bump on
 // delivery would re-push on every admin pageview forever.
 assert_true(
-	false === strpos( (string) $core_php, 'if ( DEF_Core_Staff_Roster::schedule_push() )' ),
+	false === strpos( (string) $core_php, 'if ( Widrow_AI_Staff_Roster::schedule_push() )' ),
 	'the upgrade marker is not gated on push success'
 );
 assert_true(
-	1 === preg_match( '/DEF_Core_Staff_Roster::init\(\);/', (string) $core_php ),
+	1 === preg_match( '/Widrow_AI_Staff_Roster::init\(\);/', (string) $core_php ),
 	'the roster cron worker is registered at boot'
 );
 
@@ -528,11 +528,11 @@ $_test_cron = array();
 $_test_http = array();
 $_POST      = array(
 	'nonce' => 'x',
-	'roles' => array( 22 => array( 'def_management_access' => '1', 'def_admin_access' => '1' ) ),
+	'roles' => array( 22 => array( 'widrow_management_access' => '1', 'widrow_admin_access' => '1' ) ),
 );
 $result     = null;
 try {
-	DEF_Core_Admin::ajax_save_user_roles();
+	Widrow_AI_Admin::ajax_save_user_roles();
 } catch ( AjaxHalt $halt ) {
 	$result = $halt;
 }
@@ -545,11 +545,11 @@ $_test_cron               = array();
 $GLOBALS['_test_cron_fails'] = true;
 $_POST                    = array(
 	'nonce' => 'x',
-	'roles' => array( 22 => array( 'def_management_access' => '1', 'def_admin_access' => '1' ) ),
+	'roles' => array( 22 => array( 'widrow_management_access' => '1', 'widrow_admin_access' => '1' ) ),
 );
 $result                   = null;
 try {
-	DEF_Core_Admin::ajax_save_user_roles();
+	Widrow_AI_Admin::ajax_save_user_roles();
 } catch ( AjaxHalt $halt ) {
 	$result = $halt;
 }
@@ -558,81 +558,81 @@ $GLOBALS['_test_cron_fails'] = false;
 
 // And the user's ticks were written either way — the save is not rolled back.
 assert_true(
-	in_array( 'def_management_access', $GLOBALS['_test_users'][22]['caps'], true ),
+	in_array( 'widrow_management_access', $GLOBALS['_test_users'][22]['caps'], true ),
 	'the capability change persisted regardless of the push'
 );
 
 // ── 8. The write side must not consult the lying has_cap() either ───────
 echo "\n[8] Grid writes survive the map_meta_cap lie\n";
 
-// Scenario A — Management → Staff downgrade. has_cap('def_staff_access') is
+// Scenario A — Management → Staff downgrade. has_cap('widrow_staff_access') is
 // TRUE for a Management user, so a guarded add_cap() would skip storing Staff
 // while still removing Management, leaving the user with NO Staff-AI access
 // and no roster row at all.
 $_test_users = array();
-seed_user( 70, 'Demoted Dana', 'dana@example.com', array( 'def_management_access' ) );
-seed_user( 71, 'Keeper Kim', 'kim@example.com', array( 'def_admin_access' ) );
+seed_user( 70, 'Demoted Dana', 'dana@example.com', array( 'widrow_management_access' ) );
+seed_user( 71, 'Keeper Kim', 'kim@example.com', array( 'widrow_admin_access' ) );
 
 $_POST = array(
 	'nonce' => 'x',
 	'roles' => array(
-		70 => array( 'def_staff_access' => '1' ),
-		71 => array( 'def_admin_access' => '1' ),
+		70 => array( 'widrow_staff_access' => '1' ),
+		71 => array( 'widrow_admin_access' => '1' ),
 	),
 );
 try {
-	DEF_Core_Admin::ajax_save_user_roles();
+	Widrow_AI_Admin::ajax_save_user_roles();
 } catch ( AjaxHalt $halt ) {
 	$ignored = $halt;
 }
 
 assert_true(
-	in_array( 'def_staff_access', $_test_users[70]['caps'], true ),
-	'downgrade STORES def_staff_access (the guard used to skip this write)'
+	in_array( 'widrow_staff_access', $_test_users[70]['caps'], true ),
+	'downgrade STORES widrow_staff_access (the guard used to skip this write)'
 );
 assert_true(
-	! in_array( 'def_management_access', $_test_users[70]['caps'], true ),
-	'downgrade removes def_management_access'
+	! in_array( 'widrow_management_access', $_test_users[70]['caps'], true ),
+	'downgrade removes widrow_management_access'
 );
-$roster = DEF_Core_Staff_Roster::build_roster();
+$roster = Widrow_AI_Staff_Roster::build_roster();
 assert_equals( 'staff', row_for( $roster, '70' )['access_level'] ?? '', 'the downgraded user stays rostered, as staff' );
 
 // Scenario B — DEF-Admin also ticked Staff. has_cap() already answers true via
 // the filter, so a guarded write stored nothing while the grid rendered the
 // tick as present — a tick that silently did not exist.
 $_test_users = array();
-seed_user( 80, 'Admin Andy', 'andy@example.com', array( 'def_admin_access' ) );
+seed_user( 80, 'Admin Andy', 'andy@example.com', array( 'widrow_admin_access' ) );
 
 $_POST = array(
 	'nonce' => 'x',
-	'roles' => array( 80 => array( 'def_admin_access' => '1', 'def_staff_access' => '1' ) ),
+	'roles' => array( 80 => array( 'widrow_admin_access' => '1', 'widrow_staff_access' => '1' ) ),
 );
 try {
-	DEF_Core_Admin::ajax_save_user_roles();
+	Widrow_AI_Admin::ajax_save_user_roles();
 } catch ( AjaxHalt $halt ) {
 	$ignored = $halt;
 }
 
 assert_true(
-	in_array( 'def_staff_access', $_test_users[80]['caps'], true ),
+	in_array( 'widrow_staff_access', $_test_users[80]['caps'], true ),
 	'a Staff tick on a DEF-Admin is actually STORED'
 );
 assert_true(
-	in_array( 'def_admin_access', $_test_users[80]['caps'], true ),
+	in_array( 'widrow_admin_access', $_test_users[80]['caps'], true ),
 	'and DEF-Admin is untouched'
 );
-$roster = DEF_Core_Staff_Roster::build_roster();
+$roster = Widrow_AI_Staff_Roster::build_roster();
 assert_equals( 'staff', row_for( $roster, '80' )['access_level'] ?? '', 'the DEF-Admin now rosters as staff' );
 
 // ── 9. Long display names cannot kill the whole roster ──────────────────
 echo "\n[9] display_name is bounded to DEF's limit\n";
 
 $_test_users = array();
-seed_user( 90, str_repeat( 'a', 250 ), 'long@example.com', array( 'def_staff_access' ) );
-seed_user( 91, 'Short Sam', 'sam@example.com', array( 'def_management_access' ) );
+seed_user( 90, str_repeat( 'a', 250 ), 'long@example.com', array( 'widrow_staff_access' ) );
+seed_user( 91, 'Short Sam', 'sam@example.com', array( 'widrow_management_access' ) );
 
 $_test_logs = array();
-$roster     = DEF_Core_Staff_Roster::build_roster();
+$roster     = Widrow_AI_Staff_Roster::build_roster();
 assert_equals(
 	200,
 	mb_strlen( row_for( $roster, '90' )['display_name'] ?? '' ),

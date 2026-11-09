@@ -12,7 +12,7 @@
  * into a failure, and headers_list() stays empty under the CLI SAPI — so an
  * assertion on it would pass whether or not anything was ever sent.
  *
- * @package def-core
+ * @package widrow-ai
  * @group security
  */
 
@@ -27,7 +27,7 @@ class Test_Console_Frame_Headers extends WP_UnitTestCase {
 	 */
 	private function emitted_headers(): array {
 		$calls  = array();
-		$method = new ReflectionMethod( 'DEF_Core_Staff_AI', 'send_console_frame_headers' );
+		$method = new ReflectionMethod( 'Widrow_AI_Staff_AI', 'send_console_frame_headers' );
 		$method->setAccessible( true );
 		$method->invoke(
 			null,
@@ -66,7 +66,7 @@ class Test_Console_Frame_Headers extends WP_UnitTestCase {
 	public function test_real_path_is_silent_once_output_has_begun(): void {
 		$this->assertTrue( headers_sent(), 'Precondition: this suite runs with output already begun.' );
 
-		$method = new ReflectionMethod( 'DEF_Core_Staff_AI', 'send_console_frame_headers' );
+		$method = new ReflectionMethod( 'Widrow_AI_Staff_AI', 'send_console_frame_headers' );
 		$method->setAccessible( true );
 		$method->invoke( null );
 
@@ -88,10 +88,10 @@ class Test_Console_Frame_Headers extends WP_UnitTestCase {
 	 *
 	 * @dataProvider render_paths
 	 *
-	 * @param string $method Method name on DEF_Core_Staff_AI.
+	 * @param string $method Method name on Widrow_AI_Staff_AI.
 	 */
 	public function test_render_paths_send_them( string $method ): void {
-		$reflected = new ReflectionMethod( 'DEF_Core_Staff_AI', $method );
+		$reflected = new ReflectionMethod( 'Widrow_AI_Staff_AI', $method );
 		$source    = file( $reflected->getFileName() );
 		$body      = implode(
 			'',

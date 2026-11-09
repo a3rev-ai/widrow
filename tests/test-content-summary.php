@@ -3,7 +3,7 @@
  * Content Drafts coverage strip — /content/summary BFF tests.
  *
  * Verifies:
- *  - DEF_Core_Staff_AI::normalize_summary_payload() shapes the backend payload
+ *  - Widrow_AI_Staff_AI::normalize_summary_payload() shapes the backend payload
  *    safely: null/no-summary collapses to null; every bucket is whitelisted and
  *    coerced to a non-negative int; unknown bucket keys are dropped; malformed
  *    type keys are dropped; missing types/buckets are tolerated; totals carry a
@@ -12,7 +12,7 @@
  *
  * Runs standalone (no WordPress bootstrap).
  *
- * @package def-core/tests
+ * @package widrow-ai/tests
  */
 
 declare(strict_types=1);
@@ -30,7 +30,7 @@ if ( ! function_exists( 'register_rest_route' ) ) {
 	}
 }
 
-require_once DEF_CORE_PLUGIN_DIR . 'includes/class-def-core-staff-ai.php';
+require_once WIDROW_AI_PLUGIN_DIR . 'includes/class-widrow-ai-staff-ai.php';
 
 // ── Tiny assertion harness ──────────────────────────────────────────────
 
@@ -51,14 +51,14 @@ function assert_same( $expected, $actual, string $label ): void {
 
 // ── 1. No summary → null ────────────────────────────────────────────────
 echo "[1] absent/malformed summary → null\n";
-assert_same( null, DEF_Core_Staff_AI::normalize_summary_payload( array() ), 'missing key → null' );
-assert_same( null, DEF_Core_Staff_AI::normalize_summary_payload( array( 'summary' => null ) ), 'null summary → null' );
-assert_same( null, DEF_Core_Staff_AI::normalize_summary_payload( 'nope' ), 'non-array payload → null' );
-assert_same( null, DEF_Core_Staff_AI::normalize_summary_payload( array( 'summary' => 'oops' ) ), 'non-array summary → null' );
+assert_same( null, Widrow_AI_Staff_AI::normalize_summary_payload( array() ), 'missing key → null' );
+assert_same( null, Widrow_AI_Staff_AI::normalize_summary_payload( array( 'summary' => null ) ), 'null summary → null' );
+assert_same( null, Widrow_AI_Staff_AI::normalize_summary_payload( 'nope' ), 'non-array payload → null' );
+assert_same( null, Widrow_AI_Staff_AI::normalize_summary_payload( array( 'summary' => 'oops' ) ), 'non-array summary → null' );
 
 // ── 2. Buckets coerced to non-negative ints; unknown keys dropped ───────
 echo "[2] buckets whitelisted + int-coerced\n";
-$norm = DEF_Core_Staff_AI::normalize_summary_payload( array(
+$norm = Widrow_AI_Staff_AI::normalize_summary_payload( array(
 	'summary' => array(
 		'by_type' => array(
 			'product' => array(
@@ -91,7 +91,7 @@ assert_same( 34, $norm['totals']['total_reviewed'], 'total_reviewed "34" → 34'
 
 // ── 3. Malformed type keys dropped; missing buckets tolerated ───────────
 echo "[3] malformed type keys dropped\n";
-$mixed = DEF_Core_Staff_AI::normalize_summary_payload( array(
+$mixed = Widrow_AI_Staff_AI::normalize_summary_payload( array(
 	'summary' => array(
 		'by_type' => array(
 			'post' => array( 'needs_keyphrase' => 10 ),
@@ -108,7 +108,7 @@ assert_same( 0, $mixed['totals']['total_reviewed'], 'missing totals → total_re
 
 // A bucket value that is itself an array must coerce to 0 without a PHP warning
 // (is_scalar guard), not the misleading 1 that (int)array yields.
-$arr = DEF_Core_Staff_AI::normalize_summary_payload( array(
+$arr = Widrow_AI_Staff_AI::normalize_summary_payload( array(
 	'summary' => array(
 		'by_type' => array( 'product' => array( 'good' => array( 1, 2, 3 ), 'optimized' => 4 ) ),
 		'totals'  => array( 'total_reviewed' => array( 9 ) ),
@@ -120,7 +120,7 @@ assert_same( 0, $arr['totals']['total_reviewed'], 'array total_reviewed → 0' )
 
 // ── 4. a3rev sanity values pass through intact ──────────────────────────
 echo "[4] a3rev sanity values\n";
-$a3 = DEF_Core_Staff_AI::normalize_summary_payload( array(
+$a3 = Widrow_AI_Staff_AI::normalize_summary_payload( array(
 	'summary' => array(
 		'by_type' => array(
 			'product' => array( 'good' => 9, 'optimized' => 2, 'needs_keyphrase' => 20, 'total' => 31 ),
@@ -138,8 +138,8 @@ assert_same( 10, $a3['by_type']['page']['needs_keyphrase'], 'page needs_keyphras
 
 // ── 5. Route registration: GET /staff-ai/content/summary ────────────────
 echo "[5] summary route is registered (GET)\n";
-DEF_Core_Staff_AI::register_rest_routes();
-$key = DEF_CORE_API_NAME_SPACE . '/staff-ai/content/summary';
+Widrow_AI_Staff_AI::register_rest_routes();
+$key = WIDROW_AI_API_NAME_SPACE . '/staff-ai/content/summary';
 assert_true( isset( $_wp_test_rest_routes[ $key ] ), 'summary route registered' );
 if ( isset( $_wp_test_rest_routes[ $key ] ) ) {
 	assert_same( 'GET', $_wp_test_rest_routes[ $key ]['methods'], 'summary route is GET' );

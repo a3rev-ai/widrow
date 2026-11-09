@@ -30,7 +30,7 @@ const JS = require('fs').readFileSync(extract.JS_PATH, 'utf8');
 const CSS = require('fs').readFileSync(
 	require('path').join(extract.REPO, 'assets', 'css', 'staff-ai.css'), 'utf8');
 const PHP = require('fs').readFileSync(
-	require('path').join(extract.REPO, 'includes', 'class-def-core-staff-ai.php'), 'utf8');
+	require('path').join(extract.REPO, 'includes', 'class-widrow-ai-staff-ai.php'), 'utf8');
 const TEMPLATE = extract.templateSource();
 
 // The origin PHP decides and localises; the console never holds a host of its own.
@@ -185,7 +185,7 @@ function check(label, ok, detail) {
 			&& /'callback'\s*=> array\(__CLASS__, 'rest_share_document'\)/.test(PHP)
 			&& /'callback'\s*=> array\(__CLASS__, 'rest_unshare_document'\)/.test(PHP));
 		check('the console is handed the origin by PHP — no host is written into the JS',
-			/shareOrigin: <\?php echo wp_json_encode\( DEF_Core_OAuth::get_defho_url\(\) \); \?>,/.test(TEMPLATE)
+			/shareOrigin: <\?php echo wp_json_encode\( Widrow_AI_OAuth::get_defho_url\(\) \); \?>,/.test(TEMPLATE)
 			&& /const shareOrigin = StaffAIConfig\.shareOrigin \|\| '';/.test(JS)
 			&& !/defho\.ai/.test(JS), 'defho.ai appears in the JS');
 		check('the viewer writes no markup: the token and the title reach the DOM as a value or as text only',

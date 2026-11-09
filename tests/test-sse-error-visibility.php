@@ -16,7 +16,7 @@
  *
  * Runs standalone (no WordPress bootstrap). Uses ReflectionMethod for the private helpers.
  *
- * @package def-core/tests
+ * @package widrow-ai/tests
  */
 
 declare(strict_types=1);
@@ -24,8 +24,8 @@ declare(strict_types=1);
 if ( ! defined( 'ABSPATH' ) ) {
 	define( 'ABSPATH', dirname( __DIR__ ) . '/' );
 }
-if ( ! defined( 'DEF_CORE_PLUGIN_DIR' ) ) {
-	define( 'DEF_CORE_PLUGIN_DIR', dirname( __DIR__ ) . '/' );
+if ( ! defined( 'WIDROW_AI_PLUGIN_DIR' ) ) {
+	define( 'WIDROW_AI_PLUGIN_DIR', dirname( __DIR__ ) . '/' );
 }
 
 require_once __DIR__ . '/wp-stubs.php';
@@ -59,15 +59,15 @@ if ( ! function_exists( '__' ) ) {
 		return $text;
 	}
 }
-if ( ! class_exists( 'DEF_Core' ) ) {
-	class DEF_Core {
+if ( ! class_exists( 'Widrow_AI' ) ) {
+	class Widrow_AI {
 		public static function get_def_api_url_internal(): string {
 			return 'http://localhost:8000';
 		}
 	}
 }
 
-require_once DEF_CORE_PLUGIN_DIR . 'includes/class-def-core-tools.php';
+require_once WIDROW_AI_PLUGIN_DIR . 'includes/class-widrow-ai-tools.php';
 
 $pass = 0;
 $fail = 0;
@@ -86,23 +86,23 @@ function assert_false( $value, string $label ): void {
 	assert_true( ! $value, $label );
 }
 
-/** Call a private static on DEF_Core_Tools. */
+/** Call a private static on Widrow_AI_Tools. */
 function call_private( string $method, array $args ) {
-	$m = new ReflectionMethod( 'DEF_Core_Tools', $method );
+	$m = new ReflectionMethod( 'Widrow_AI_Tools', $method );
 	$m->setAccessible( true );
 	return $m->invokeArgs( null, $args );
 }
 
 /** stream_chunk() mutates its state array, so it needs by-reference invocation. */
 function call_stream_chunk( string $data, array &$state ): string {
-	$m = new ReflectionMethod( 'DEF_Core_Tools', 'stream_chunk' );
+	$m = new ReflectionMethod( 'Widrow_AI_Tools', 'stream_chunk' );
 	$m->setAccessible( true );
 	$args = array( $data, &$state );
 	return $m->invokeArgs( null, $args );
 }
 
 function call_note_header( string $header, array &$state ): void {
-	$m = new ReflectionMethod( 'DEF_Core_Tools', 'note_upstream_header' );
+	$m = new ReflectionMethod( 'Widrow_AI_Tools', 'note_upstream_header' );
 	$m->setAccessible( true );
 	$args = array( $header, &$state );
 	$m->invokeArgs( null, $args );

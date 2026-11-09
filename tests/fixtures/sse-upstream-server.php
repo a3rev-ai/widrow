@@ -11,7 +11,7 @@
  * Usage: php sse-upstream-server.php <port> <scenario>
  * Writes "READY\n" to stdout once listening, so the driver never races the bind.
  *
- * @package def-core/tests
+ * @package widrow-ai/tests
  */
 
 declare(strict_types=1);

@@ -10,7 +10,7 @@
  *
  * Runs standalone (no WordPress bootstrap).
  *
- * @package def-core/tests
+ * @package widrow-ai/tests
  */
 
 declare(strict_types=1);
@@ -98,17 +98,17 @@ if ( ! function_exists( 'wp_get_current_user' ) ) {
 		return $_wp_test_current_user ?? new WP_User( 0 );
 	}
 }
-if ( ! class_exists( 'DEF_Core' ) ) {
-	class DEF_Core {
+if ( ! class_exists( 'Widrow_AI' ) ) {
+	class Widrow_AI {
 		public static function get_def_api_url_internal(): ?string {
-			return $GLOBALS['_def_test_api_url'] ?? null;
+			return $GLOBALS['_widrow_test_api_url'] ?? null;
 		}
 	}
 }
-if ( ! class_exists( 'DEF_Core_Tools' ) ) {
-	class DEF_Core_Tools {
+if ( ! class_exists( 'Widrow_AI_Tools' ) ) {
+	class Widrow_AI_Tools {
 		public static function get_user_def_capabilities( $user ): array {
-			return array( 'def_staff_access' );
+			return array( 'widrow_staff_access' );
 		}
 	}
 }
@@ -188,7 +188,7 @@ if ( ! class_exists( 'WP_REST_Request' ) ) {
 	}
 }
 
-require_once DEF_CORE_PLUGIN_DIR . 'includes/class-def-core-staff-ai.php';
+require_once WIDROW_AI_PLUGIN_DIR . 'includes/class-widrow-ai-staff-ai.php';
 
 // ── Assertion harness ─────────────────────────────────────────────────────────
 
@@ -210,8 +210,8 @@ function assert_same( $expected, $actual, string $label ): void {
 
 // ── 1. Route spot-check ───────────────────────────────────────────────────────
 echo "[1] Route spot-check\n";
-DEF_Core_Staff_AI::register_rest_routes();
-$ns = DEF_CORE_API_NAME_SPACE;
+Widrow_AI_Staff_AI::register_rest_routes();
+$ns = WIDROW_AI_API_NAME_SPACE;
 assert_true( isset( $_wp_test_rest_routes[ $ns . '/staff-ai/content/list' ] ), 'GET /content/list registered' );
 
 // ── 2. Bucket validation — good / optimized / awaiting_review all pass ────────
@@ -219,8 +219,8 @@ echo "[2] rest_list_content_items — non-dismissed buckets pass validation\n";
 foreach ( array( 'good', 'optimized', 'awaiting_review' ) as $bucket ) {
 	$req = new WP_REST_Request( 'GET', '/staff-ai/content/list' );
 	$req->set_param( 'bucket', $bucket );
-	$GLOBALS['_def_test_api_url'] = null;
-	$result = DEF_Core_Staff_AI::rest_list_content_items( $req );
+	$GLOBALS['_widrow_test_api_url'] = null;
+	$result = Widrow_AI_Staff_AI::rest_list_content_items( $req );
 	if ( is_wp_error( $result ) ) {
 		assert_true(
 			$result->get_error_code() !== 'invalid_bucket',
@@ -235,8 +235,8 @@ foreach ( array( 'good', 'optimized', 'awaiting_review' ) as $bucket ) {
 echo "[3] rest_list_content_items — view_url preserved by allowlist\n";
 $_wp_test_current_user     = new WP_User( 1 );
 $_wp_test_current_user->ID = 1;
-update_option( 'def_core_api_key', 'test-api-key' );
-$GLOBALS['_def_test_api_url']      = 'https://def-api.test';
+update_option( 'widrow_ai_api_key', 'test-api-key' );
+$GLOBALS['_widrow_test_api_url']      = 'https://def-api.test';
 $GLOBALS['_wp_test_remote_status'] = 200;
 $GLOBALS['_wp_test_remote_body']   = (string) json_encode( array(
 	'items' => array(
@@ -256,7 +256,7 @@ $GLOBALS['_wp_test_remote_body']   = (string) json_encode( array(
 // backend-supplied view_url must pass through the allowlist unchanged.
 $req = new WP_REST_Request( 'GET', '/staff-ai/content/list' );
 $req->set_param( 'bucket', 'good' );
-$result      = DEF_Core_Staff_AI::rest_list_content_items( $req );
+$result      = Widrow_AI_Staff_AI::rest_list_content_items( $req );
 $is_response = $result instanceof WP_REST_Response;
 assert_true( $is_response, 'good bucket with backend view_url → WP_REST_Response' );
 if ( $is_response ) {
@@ -297,7 +297,7 @@ $GLOBALS['_wp_test_remote_body'] = (string) json_encode( array(
 
 $req    = new WP_REST_Request( 'GET', '/staff-ai/content/list' );
 $req->set_param( 'bucket', 'optimized' );
-$result = DEF_Core_Staff_AI::rest_list_content_items( $req );
+$result = Widrow_AI_Staff_AI::rest_list_content_items( $req );
 assert_true( $result instanceof WP_REST_Response, 'optimized bucket → WP_REST_Response' );
 if ( $result instanceof WP_REST_Response ) {
 	$items = $result->get_data()['items'] ?? array();
@@ -328,7 +328,7 @@ $GLOBALS['_wp_test_remote_body'] = (string) json_encode( array(
 ) );
 $req = new WP_REST_Request( 'GET', '/staff-ai/content/list' );
 $req->set_param( 'bucket', 'good' );
-$result = DEF_Core_Staff_AI::rest_list_content_items( $req );
+$result = Widrow_AI_Staff_AI::rest_list_content_items( $req );
 if ( $result instanceof WP_REST_Response ) {
 	$item = ( $result->get_data()['items'] ?? array() )[0] ?? array();
 	assert_true( array_key_exists( 'view_url', $item ),         'view_url passes through allowlist' );
@@ -359,7 +359,7 @@ $GLOBALS['_wp_test_remote_body'] = (string) json_encode( array(
 ) );
 $req    = new WP_REST_Request( 'GET', '/staff-ai/content/list' );
 $req->set_param( 'bucket', 'good' );
-$result = DEF_Core_Staff_AI::rest_list_content_items( $req );
+$result = Widrow_AI_Staff_AI::rest_list_content_items( $req );
 if ( $result instanceof WP_REST_Response ) {
 	$items = $result->get_data()['items'] ?? array();
 	if ( count( $items ) === 1 ) {
@@ -375,7 +375,7 @@ if ( $result instanceof WP_REST_Response ) {
 
 // ── Cleanup ───────────────────────────────────────────────────────────────────
 $_wp_test_current_user             = null;
-$GLOBALS['_def_test_api_url']      = null;
+$GLOBALS['_widrow_test_api_url']      = null;
 $GLOBALS['_wp_test_remote_status'] = null;
 $GLOBALS['_wp_test_remote_body']   = null;
 

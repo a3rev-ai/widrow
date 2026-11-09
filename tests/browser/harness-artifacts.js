@@ -216,7 +216,7 @@ function check(label, ok, detail) {
 			noHead.startsWith('<!DOCTYPE html>' + META), noHead.slice(0, 80));
 		check('the console page refuses the frame\'s own navigation at the request: its CSP carries frame-src \'self\'',
 			/Content-Security-Policy: frame-ancestors 'self'; frame-src 'self';/.test(
-				require('fs').readFileSync(require('path').join(extract.REPO, 'includes', 'class-def-core-staff-ai.php'), 'utf8')));
+				require('fs').readFileSync(require('path').join(extract.REPO, 'includes', 'class-widrow-ai-staff-ai.php'), 'utf8')));
 	}
 
 	// ── Opening an artifact ───────────────────────────────────────────────

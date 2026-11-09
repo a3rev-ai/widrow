@@ -268,10 +268,10 @@ function check(label, ok, detail) {
 	// ── Both halves wired, not just the block ──────────────────────────────
 	{
 		const shell = fs.readFileSync(path.join(REPO, 'templates/staff-ai-shell.php'), 'utf8');
-		const php = fs.readFileSync(path.join(REPO, 'includes/class-def-core-staff-ai.php'), 'utf8');
+		const php = fs.readFileSync(path.join(REPO, 'includes/class-widrow-ai-staff-ai.php'), 'utf8');
 		check('the page carries the version it was SERVED with, and the manifest the live one',
-			/version:\s*<\?php echo wp_json_encode\( DEF_CORE_VERSION \)/.test(shell)
-			&& /'version'\s*=>\s*DEF_CORE_VERSION,/.test(php));
+			/version:\s*<\?php echo wp_json_encode\( WIDROW_AI_VERSION \)/.test(shell)
+			&& /'version'\s*=>\s*WIDROW_AI_VERSION,/.test(php));
 	}
 
 	console.log('C3b — the installed app keeps up with the release');

@@ -105,7 +105,7 @@ const read = f => fs.readFileSync(path.join(extract.REPO, f), 'utf8');
 const DRAWER_CSS = read('assets/css/setup-assistant-drawer.css');
 const DRAWER_JS = read('assets/js/setup-assistant-drawer.js');
 const TPL = read('templates/setup-assistant-drawer.php');
-const ADMIN_PHP = read('includes/class-def-core-admin.php');
+const ADMIN_PHP = read('includes/class-widrow-ai-admin.php');
 
 let pass = 0, fail = 0;
 const results = [];
@@ -128,7 +128,7 @@ const LABELS = {
 
 // The namespaced prefix the shipped script builds from the site's REST URL
 // (line ~88). The block derives its own key from it, which is what check 3 reads.
-const LS_PREFIX = 'def_sa_httpsexamplecomwpjsonde_';
+const LS_PREFIX = 'widrow_sa_httpsexamplecomwpjsonde_';
 const KEY = LS_PREFIX + 'collapsed';
 
 // A localStorage that can be made to misbehave the way a real one does: holding
@@ -533,22 +533,22 @@ check('the header button ships both icons and the phone\'s aria-label',
 	/class="def-sa-close"/.test(TPL) &&
 	/dashicons-no-alt def-sa-close-icon/.test(TPL) &&
 	/dashicons-arrow-right-alt2 def-sa-collapse-icon/.test(TPL) &&
-	/esc_attr_e\( 'Close Setup Assistant', 'digital-employees' \)/.test(TPL));
+	/esc_attr_e\( 'Close Setup Assistant', 'widrow-ai' \)/.test(TPL));
 
 // The trigger chip is written inline at every page that carries the drawer, so
 // the rail's label has to be at all three or one page collapses to a blank
 // strip. Both desktop labels reach a translator through PHP — the JS carries the
 // English as a fallback, not as the shipped text.
 const CALL_SITES = ['templates/admin-settings.php',
-	'includes/class-def-core-content-drafts-page.php',
-	'includes/class-def-core-logs-page.php'];
+	'includes/class-widrow-ai-content-drafts-page.php',
+	'includes/class-widrow-ai-logs-page.php'];
 const missingRail = CALL_SITES.filter(f =>
-	!/<span class="def-sa-trigger-rail"><\?php esc_html_e\( 'Ask Sam', 'digital-employees' \); \?><\/span>/
+	!/<span class="def-sa-trigger-rail"><\?php esc_html_e\( 'Ask Sam', 'widrow-ai' \); \?><\/span>/
 		.test(read(f)));
 check('every page carrying the drawer renders the rail\'s label, and both desktop labels ship through __()',
 	missingRail.length === 0 &&
-	/'collapseLabel'\s*=> __\( 'Collapse Setup Assistant', 'digital-employees' \)/.test(ADMIN_PHP) &&
-	/'expandLabel'\s*=> __\( 'Expand Setup Assistant', 'digital-employees' \)/.test(ADMIN_PHP) &&
+	/'collapseLabel'\s*=> __\( 'Collapse Setup Assistant', 'widrow-ai' \)/.test(ADMIN_PHP) &&
+	/'expandLabel'\s*=> __\( 'Expand Setup Assistant', 'widrow-ai' \)/.test(ADMIN_PHP) &&
 	/config\.collapseLabel/.test(DRAWER_JS) && /config\.expandLabel/.test(DRAWER_JS),
 	missingRail.length ? 'no rail label in: ' + missingRail.join(', ') : 'labels not localized');
 
@@ -564,7 +564,7 @@ check('every page carrying the drawer renders the rail\'s label, and both deskto
 // proves the prefix is the site-derived one and not a bare literal.
 check('the remembered state hangs off the site-namespaced prefix the drawer already uses',
 	/LS_COLLAPSED_KEY\s*=\s*LS_PREFIX\s*\+\s*'collapsed'/.test(BLOCK) &&
-	/LS_PREFIX\s*=\s*'def_sa_'\s*\+\s*\(config\.restUrl/.test(DRAWER_JS) &&
+	/LS_PREFIX\s*=\s*'widrow_sa_'\s*\+\s*\(config\.restUrl/.test(DRAWER_JS) &&
 	/\.replace\(\/\[\^a-z0-9\]\/gi, ''\)\.slice\(0, 32\)/.test(DRAWER_JS),
 	'the prefix derivation at line ~88 has moved or the key no longer uses it');
 

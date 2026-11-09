@@ -17,7 +17,7 @@
  * without its panel (or added without one) is caught here.
  *
  * Checks 7-9 are the status line beside the green dot. It read "Last sync: 2
- * months ago" off def_core_conn_last_sync_at — an option written only when the
+ * months ago" off widrow_ai_conn_last_sync_at — an option written only when the
  * connection is established (the OAuth callback, or a manual save) and deleted
  * on disconnect. Nothing about the content sync touches it, so the label named
  * the wrong event: it is the date the site was connected, and now says so.
@@ -70,7 +70,7 @@ check(++n, 'no Knowledge Base panel is left behind for a stale link to open',
 	!/panel-knowledge-base|tab-knowledge-base/.test(SRC));
 
 check(++n, 'the status box nothing ever filled is gone with it',
-	!/def-core-kb-status|def-core-kb-loading|Loading sync status/.test(SRC));
+	!/widrow-ai-kb-status|widrow-ai-kb-loading|Loading sync status/.test(SRC));
 
 // ── 4-5. The Open Tenant Portal button, on Connection ───────────────────────
 //
@@ -83,7 +83,7 @@ check(++n, 'the Connection panel carries the Open Tenant Portal link',
 		: 'the only mention in the file is outside the panel');
 
 check(++n, 'the link is still the OAuth DEFHO URL, rendered only when there is one',
-	/DEF_Core_OAuth::get_defho_url\(\)/.test(connection) &&
+	/Widrow_AI_OAuth::get_defho_url\(\)/.test(connection) &&
 	/if \( ! empty\( \$defho_url \) \)/.test(connection) &&
 	/href="<\?php echo esc_url\( \$defho_url \); \?>"/.test(connection));
 
@@ -96,7 +96,7 @@ check(++n, 'every tab in the list has a panel to open (' + tabIds.length + ' tab
 
 // ── 7-9. The status line says when the site was connected ───────────────────
 check(++n, 'the status line says "since <date>", and nothing says "Last sync"',
-	/esc_html__\( 'since %s', 'digital-employees' \)/.test(connection) &&
+	/esc_html__\( 'since %s', 'widrow-ai' \)/.test(connection) &&
 	!/Last sync/.test(SRC),
 	/Last sync/.test(SRC) ? 'the old label is still in the template'
 		: 'no "since %s" in the Connection panel');

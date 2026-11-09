@@ -1,6 +1,6 @@
 /*
  * Hands-free voice — behavioural harness (V-S6b / v7.8.7). Runs the SHIPPED
- * assets/js/def-core-voice.js inside jsdom against a fake microphone, and the
+ * assets/js/widrow-ai-voice.js inside jsdom against a fake microphone, and the
  * SHIPPED voice blocks of both surfaces (the console's and Customer Chat's,
  * each extracted by marker) against their own DOM. Nothing here is a copy of
  * the code under test; the widget's phrase set is read out of its shipped
