@@ -236,7 +236,7 @@ async function bootStaff(opts) {
     composerInput: document.getElementById('composerInput'),
     autoResize() {}, updateSendButton() {}, hideInfo() {}, hasActiveFiles: () => false, stagedFiles: [],
     classifySuggestionOutcome: () => ({}), endConversation() {}, browserTimezone: () => '', clearStagedFiles() {},
-    readBack() {}, readBackSoFar() {}, loadConversations() {}, updateReadOnlyState() {}, afterSpokenTurn() {},
+    readBack() {}, readBackSoFar() {}, loadConversations() {}, rememberConversation() {}, updateReadOnlyState() {}, afterSpokenTurn() {},
     dropUnfilledTranscript() { return false; }, uploadAllStagedFiles: async () => ({ success: true, fileIds: [] }),
     renderMarkdown: s => s, applyCitations() {}, buildCitationMap: () => ({}), createToolOutputCard: () => null,
     handleSpokenStop: () => false, console: { info() {}, error() {} },

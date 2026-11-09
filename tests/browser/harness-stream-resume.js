@@ -11,7 +11,11 @@
  * And, as this is the harness that drives the console's stream reader: a `speech` frame
  * reaches the speaker as it arrives, through a tool row's pause (8.8.2).
  *
- * 24 checks.
+ * And coming back to a chat mid-reply (W88): loadConversation shows DEF's unfinished
+ * placeholder as the employee working, and a turn's frames touch the screen only while its
+ * chat is the one showing.
+ *
+ * 27 checks.
  */
 const { JSDOM } = require('jsdom');
 const extract = require('./extract');
@@ -50,6 +54,10 @@ const SEND = extract.slice('send path',
   l => l.includes('// SHARE MODAL'),
   ['async function sendMessageStreaming', 'function workingLine', 'function showProgress',
     'async function readStream', "'/turns/'", "t('reconnecting'", 'function pollBeside'], 'RESUME_SEND');
+
+const LOAD = extract.slice('loadConversation',
+  l => l.includes('async function loadConversation(id, shared) {'), l => l.includes('// Update read-only state'),
+  ['is_complete === false', 'recoverTurn()', 'stopTurn.thread === id'], 'RESUME_LOAD');
 
 const BASE = 'https://e.test/wp-json/def-core/v1/staff-ai';
 const STREAM_URL = BASE + '/chat/stream';
@@ -92,7 +100,7 @@ const HEAD = `
 	let messages = [], isLoading = false, isReadOnly = false, conversationOn = false, spokenTurn = false,
 		openingSpoken = null, lastSuggestion = null, selectedModel = '', currentConversationId = null,
 		activeProjectId = null, turnReleased = false, _isStreaming = false, _userScrolledUp = false,
-		dirtyInput = false, chipEpoch = 0, readbackBuffer = '';
+		dirtyInput = false, chipEpoch = 0, readbackBuffer = '', stopTurn = null;
 	function t(k, d) { return d; }
 	// As the console's own: only the .message elements go, anything beside them stays.
 	function renderMessages() {
@@ -117,6 +125,9 @@ const TAIL = `
 		parse: parseSSEBuffer,
 		// New chat, as resetToNewChat does it: another conversation, its messages drawn.
 		leave: function () { currentConversationId = 'th-other'; messages = []; renderMessages(); },
+		// Another chat on screen, as loadConversation leaves it.
+		show: function (id, rows) { currentConversationId = id; messages = rows; renderMessages(); },
+		loadConversation: loadConversation,
 		speakAloud: function () { spokenTurn = true; },
 		state: function () { return { isLoading: isLoading, messages: messages, conversation: currentConversationId }; }
 	};`;
@@ -159,18 +170,20 @@ function boot(script) {
     composerInput: document.getElementById('composerInput'),
     autoResize() {}, updateSendButton() {}, hideInfo() {}, hasActiveFiles: () => false, stagedFiles: [],
     classifySuggestionOutcome: () => ({}), endConversation() {}, browserTimezone: () => '', clearStagedFiles() {},
-    readBack() {}, readBackSoFar() {}, loadConversations() {}, updateReadOnlyState() {}, afterSpokenTurn() {},
+    readBack() {}, readBackSoFar() {}, loadConversations() {}, rememberConversation() {}, updateReadOnlyState() {}, afterSpokenTurn() {},
     dropUnfilledTranscript() { return false; }, uploadAllStagedFiles: async () => ({ success: true, fileIds: [] }),
     renderMarkdown: s => s,
     // Each line handed to the speaker, with the reply's words on show at that moment.
     speaker: { speak: (text, audio) => spoken.push({ audio, paused: held.length > 0,
       shown: document.getElementById('messagesList').textContent }) },
     applyCitations() {}, buildCitationMap: () => ({}), createToolOutputCard: () => null, handleSpokenStop: () => false,
-    console: { info() {}, error() {} }
+    console: { info() {}, error() {} },
+    clearActiveProject() {}, clearConfirmChips() {}, renderConversationList() {}, toggleSidebar() {},
+    sidebar: document.createElement('div')
   };
   const names = Object.keys(deps);
   const api = new window.Function(...names, HEAD + PARSER + '\n' + TOOL_LABELS + '\n' + ESCAPE + '\n' + REQUEST + '\n' +
-    BANNER + '\n' + RECOVER + '\n' + TOOL_ROWS + '\n' + SEND + TAIL)(...names.map(k => deps[k]));
+    BANNER + '\n' + RECOVER + '\n' + TOOL_ROWS + '\n' + SEND + '\n' + LOAD + TAIL)(...names.map(k => deps[k]));
   const list = deps.messagesList;
   return {
     api, calls, waits, intervals, clock, hooks, spoken,
@@ -181,6 +194,8 @@ function boot(script) {
     working: () => { const w = list.querySelector('.tool-status:not([data-tool])'); return w ? w.textContent : null; },
     rows: () => Array.prototype.map.call(list.querySelectorAll('[data-tool]'), r => r.textContent),
     bubble: () => { const b = list.querySelectorAll('.message-assistant .message-content'); return b.length ? b[b.length - 1].textContent : null; },
+    typing: () => !!list.querySelector('.typing-indicator'),
+    text: () => list.textContent,
     banner: () => deps.errorBanner.classList.contains('visible') ? deps.errorBanner.textContent : '',
     backoff: () => waits.filter(ms => ms === 1000 || ms === 2000 || ms === 5000),
   };
@@ -478,6 +493,64 @@ function check(label, cond, detail) {
     check('a stream that closes during a tool row\'s pause ends the turn only after the `done` behind the pause is shown',
       loadingDuring === true && !t.api.state().isLoading && t.bubble() === 'Here it is.',
       'loadingDuring=' + loadingDuring + ' bubble=' + JSON.stringify(t.bubble()));
+  }
+
+  // ── W88: coming back to a chat mid-reply ──
+  {
+    // The thread's last row is DEF's placeholder for a reply still being written: the working
+    // dots show, not an empty bubble, and the poll draws the reply once DEF marks it complete.
+    const placeholder = { role: 'assistant', content: '', is_complete: false };
+    const t = boot([thread(placeholder), thread(placeholder), thread({ role: 'assistant', content: 'Here is the sheet.', is_complete: true })]);
+    t.hooks.hold = ms => ms === 3000;
+    const loading = t.api.loadConversation('th-1');
+    for (let i = 0; i < 100 && !t.held(); i++) await settle();
+    const bubbles = t.api.state().messages.filter(m => m.role === 'assistant');
+    const during = { typing: t.typing(), empty: bubbles.some(m => !m.isTyping && !m.content) };
+    t.release();
+    await loading;
+    for (let i = 0; i < 100 && t.typing(); i++) await settle();
+    check('W88: opening a chat whose reply is still being written shows the working dots and no empty bubble, then the reply once DEF marks it complete',
+      during.typing && !during.empty && !t.typing() && t.bubble() === 'Here is the sheet.' && t.calls.filter(isPoll).length === 3 && t.banner() === '',
+      'during=' + JSON.stringify(during) + ' typing=' + t.typing() + ' bubble=' + JSON.stringify(t.bubble()) + ' polls=' + t.calls.filter(isPoll).length);
+  }
+  {
+    // A turn's `done` while another chat is showing: that chat's messages and id are left alone.
+    const s = liveStream();
+    const t = boot([() => s.response]);
+    const run = t.send('Build the sheet');
+    s.push(delta(1, 'Working on '));
+    await settle();
+    const other = [{ role: 'user', content: 'Other question' }, { role: 'assistant', content: 'Other answer' }];
+    t.api.show('th-B', other.slice());
+    s.push(delta(2, 'it.') + done(3, 'Working on it.'));
+    s.close();
+    await run;
+    const st = t.api.state();
+    check('W88: a turn\'s text and `done` while another chat is showing leave that chat\'s messages, screen and id unchanged',
+      st.conversation === 'th-B' && JSON.stringify(st.messages) === JSON.stringify(other) &&
+      t.text() === 'Other questionOther answer' && !st.isLoading,
+      'conv=' + st.conversation + ' messages=' + JSON.stringify(st.messages) + ' text=' + JSON.stringify(t.text()));
+  }
+  {
+    // Back to the chat while this tab's own stream still runs: the stream fills the dots from
+    // the reply's first word (nothing polls), and the reply lands once.
+    const s = liveStream();
+    const t = boot([() => s.response, thread({ role: 'assistant', content: '', is_complete: false })]);
+    const run = t.send('Build the sheet');
+    s.push(delta(1, 'Working on '));
+    await settle();
+    t.api.show('th-B', [{ role: 'user', content: 'Other question' }]);
+    s.push(delta(2, 'it, '));
+    await settle();
+    await t.api.loadConversation('th-1');
+    const typingBack = t.typing();
+    s.push(delta(3, 'done.') + done(4, 'done.'));
+    s.close();
+    await run;
+    check('W88: back to the chat mid-reply, this tab\'s stream takes over the dots with the whole reply and nothing polls',
+      typingBack && !t.typing() && t.bubble() === 'Working on it, done.' && t.calls.filter(isPoll).length === 1 &&
+      t.api.state().conversation === 'th-1',
+      'typingBack=' + typingBack + ' bubble=' + JSON.stringify(t.bubble()) + ' polls=' + t.calls.filter(isPoll).length);
   }
 
   console.log('\n' + results.join('\n'));
