@@ -4,7 +4,7 @@ Tags: ai, chat, digital employee, ai assistant, customer support
 Requires at least: 6.2
 Tested up to: 7.1
 Requires PHP: 8.0
-Stable tag: 9.7.0
+Stable tag: 9.7.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -119,6 +119,9 @@ Chat messages, user display name, session context, and the visitor's IP address 
 4. Admin Settings — Branding, Chat Settings, Escalation, User Roles, and Connection tabs
 
 == Changelog ==
+
+= 9.7.1 - 2026-11-09 =
+* Tweak - The plugin's icon on the Updates screen is now the Widrow mark. It is animated where your browser allows it, and stays still if your system prefers reduced motion.
 
 = 9.7.0 - 2026-11-09 =
 * New - This plugin is now Widrow AI. Its name, the wp-admin menu, its screens and notices, and its block category and editor panel all say Widrow AI. Your settings and your connection stay exactly as they are.
