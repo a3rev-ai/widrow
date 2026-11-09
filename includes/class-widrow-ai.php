@@ -57,6 +57,7 @@ final class Widrow_AI {
 		// Initialize components.
 		Widrow_AI_Admin::init();
 		Widrow_AI_Routes::init();
+		Widrow_AI_Legacy_Names::init();
 		Widrow_AI_Cache::init();
 		Widrow_AI_Staff_AI::init();
 		Widrow_AI_Escalation::init();
@@ -113,6 +114,7 @@ final class Widrow_AI {
 	private function load_dependencies(): void {
 		// Main plugin class (this file).
 		// Core classes.
+		require_once WIDROW_AI_PLUGIN_DIR . 'includes/class-widrow-ai-legacy-names.php';
 		require_once WIDROW_AI_PLUGIN_DIR . 'includes/class-widrow-ai-encryption.php';
 		require_once WIDROW_AI_PLUGIN_DIR . 'includes/class-widrow-ai-jwt.php';
 		require_once WIDROW_AI_PLUGIN_DIR . 'includes/class-widrow-ai-cache.php';
@@ -223,6 +225,15 @@ final class Widrow_AI {
 	 * Activation hook handler.
 	 */
 	public static function on_activate(): void {
+		// The 9.x plugin shares no class names with this one, so WordPress lets
+		// both be active, and its def-core/v1 handlers would load first. It is
+		// switched off before its data moves.
+		if ( defined( 'DEF_CORE_PLUGIN_NAME' ) ) {
+			deactivate_plugins( DEF_CORE_PLUGIN_NAME );
+		}
+		// Then: the names stored before 10.0.0 move to their Widrow AI names
+		// before anything below creates a default under a new name.
+		Widrow_AI_Legacy_Names::migrate();
 		Widrow_AI_JWT::ensure_keys_exist();
 		if ( get_option( WIDROW_AI_OPTION_ALLOWED_ORIGINS ) === false ) {
 			add_option( WIDROW_AI_OPTION_ALLOWED_ORIGINS, array(), '', false );
@@ -244,6 +255,13 @@ final class Widrow_AI {
 	 */
 	public static function maybe_upgrade(): void {
 		$current = get_option( 'widrow_ai_db_version', '0' );
+		// 10.0.0: WordPress does not rerun activation on an update, so the
+		// move to the new stored names is keyed here too, before any step
+		// reads them; the marker it moves is then the one to compare.
+		if ( version_compare( $current, '10.0.0', '<' ) ) {
+			Widrow_AI_Legacy_Names::migrate();
+			$current = get_option( 'widrow_ai_db_version', '0' );
+		}
 		if ( version_compare( $current, '2.1.0', '<' ) ) {
 			self::ensure_def_admin_capability();
 			update_option( 'widrow_ai_db_version', '2.1.0' );
@@ -262,6 +280,9 @@ final class Widrow_AI {
 			// success would retry on every admin pageview forever.
 			Widrow_AI_Staff_Roster::schedule_push();
 			update_option( 'widrow_ai_db_version', '7.0.0' );
+		}
+		if ( version_compare( $current, '10.0.0', '<' ) ) {
+			update_option( 'widrow_ai_db_version', '10.0.0' );
 		}
 	}
 
