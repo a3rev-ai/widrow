@@ -15,7 +15,7 @@
  * placeholder as the employee working, and a turn's frames touch the screen only while its
  * chat is the one showing.
  *
- * 27 checks.
+ * 28 checks.
  */
 const { JSDOM } = require('jsdom');
 const extract = require('./extract');
@@ -551,6 +551,23 @@ function check(label, cond, detail) {
       typingBack && !t.typing() && t.bubble() === 'Working on it, done.' && t.calls.filter(isPoll).length === 1 &&
       t.api.state().conversation === 'th-1',
       'typingBack=' + typingBack + ' bubble=' + JSON.stringify(t.bubble()) + ' polls=' + t.calls.filter(isPoll).length);
+  }
+  {
+    // A -> B -> A with no text while away (a tool runs): the bubble the text was streaming into
+    // went with B's redraw, so the next delta adopts the new dots and `done` finishes there.
+    const s = liveStream();
+    const t = boot([() => s.response, thread({ role: 'assistant', content: '', is_complete: false })]);
+    const run = t.send('Build the sheet');
+    s.push(delta(1, 'Working on '));
+    await settle();
+    t.api.show('th-B', [{ role: 'user', content: 'Other question' }]);
+    await t.api.loadConversation('th-1');
+    s.push(delta(2, 'it.') + done(3, 'it.'));
+    s.close();
+    await run;
+    check('W88: A -> B -> A with no text while away, the next delta fills the new dots with the whole reply and the dots go',
+      !t.typing() && t.bubble() === 'Working on it.',
+      'typing=' + t.typing() + ' bubble=' + JSON.stringify(t.bubble()));
   }
 
   console.log('\n' + results.join('\n'));

@@ -3664,6 +3664,10 @@ function t(key, fallback) {
 				processing = true;
 				while (eventQueue.length > 0) {
 					var evt = eventQueue.shift();
+					// W88: a redraw (another chat opened, then this one again) took the bubble and the
+					// working line away: the next delta adopts the new dots and replays the buffer.
+					if (streamEl && !streamEl.isConnected) { streamEl = null; lastRenderedLen = 0; }
+					if (thinkingStatusEl && !thinkingStatusEl.isConnected) thinkingStatusEl = null;
 					if (turnReleased) { eventQueue.length = 0; break; }   // let go of: nothing more of this turn is shown
 					// Every event names its thread (DEF #1118), so a brand-new chat knows where
 					// its reply lives from the first chunk — what recoverTurn() reloads if the
