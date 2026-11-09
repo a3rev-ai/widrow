@@ -525,11 +525,11 @@ final class Widrow_AI_Admin {
 			$def_users = $query->get_results();
 		}
 
-		$def_admin_ids   = get_users( array(
+		$widrow_admin_ids   = get_users( array(
 			'capability' => 'widrow_admin_access',
 			'fields'     => 'ids',
 		) );
-		$def_admin_count = count( $def_admin_ids );
+		$widrow_admin_count = count( $widrow_admin_ids );
 
 		// D-II: Chat settings.
 		$chat_settings = array(

@@ -990,7 +990,7 @@ $first_tab = 'branding';
 				<tbody id="widrow-ai-roles-tbody">
 					<?php
 					foreach ( $def_users as $u ) :
-						$is_last_admin = $u->has_cap( 'widrow_admin_access' ) && $def_admin_count <= 1;
+						$is_last_admin = $u->has_cap( 'widrow_admin_access' ) && $widrow_admin_count <= 1;
 						$is_locked     = $is_last_admin;
 						// map_def_capabilities() is filtered onto map_meta_cap, so
 						// has_cap('widrow_staff_access') answers TRUE for every Management and

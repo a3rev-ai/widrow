@@ -2878,7 +2878,7 @@ function t(key, fallback) {
 	// employee's own voice — or the device voice reads them from the text. A
 	// pause after speaking sends; when the employee finishes speaking the mic
 	// opens again; a tap on the pill while she answers ends the conversation.
-	var VOICE_MODE_KEY = 'def_staff_ai_voice_mode';
+	var VOICE_MODE_KEY = 'widrow_staff_ai_voice_mode';
 	var VOICE_MODES = ['server', 'device', 'off'];
 	var voiceRecorder = null;
 	var speaker = null;

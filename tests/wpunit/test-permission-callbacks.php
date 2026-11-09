@@ -194,7 +194,7 @@ class Test_Permission_Callbacks extends WP_UnitTestCase {
 	 * Access is built in for widrow_admin_access / widrow_management_access holders:
 	 * map_def_capabilities (map_meta_cap, 9130808) grants widrow_staff_access
 	 * through the capability system, NOT through the admin role itself. On a
-	 * real site ensure_def_admin_capability() gives every administrator
+	 * real site ensure_widrow_admin_capability() gives every administrator
 	 * widrow_admin_access; the factory user has no such grant, so the fixture
 	 * makes it explicit — real WP's map_meta_cap then does the passing, which
 	 * is exactly what this test pins (see the unhook mutation in the PR).

@@ -241,7 +241,7 @@ final class Widrow_AI {
 		// Flush rewrite rules for Staff AI endpoint.
 		Widrow_AI_Staff_AI::on_activate();
 		// Grant widrow_admin_access to administrators.
-		self::ensure_def_admin_capability();
+		self::ensure_widrow_admin_capability();
 		// Set button colors from theme if not already configured.
 		self::maybe_set_theme_button_colors();
 		// Create log table and schedule cleanup.
@@ -263,12 +263,12 @@ final class Widrow_AI {
 			$current = get_option( 'widrow_ai_db_version', '0' );
 		}
 		if ( version_compare( $current, '2.1.0', '<' ) ) {
-			self::ensure_def_admin_capability();
+			self::ensure_widrow_admin_capability();
 			update_option( 'widrow_ai_db_version', '2.1.0' );
 		}
 		if ( version_compare( $current, '2.2.0', '<' ) ) {
 			Widrow_AI_Logger::create_table();
-			self::ensure_def_admin_capability();
+			self::ensure_widrow_admin_capability();
 			update_option( 'widrow_ai_db_version', '2.2.0' );
 		}
 		if ( version_compare( $current, '7.0.0', '<' ) ) {
@@ -291,7 +291,7 @@ final class Widrow_AI {
 	 * Grants widrow_admin_access to all current administrators.
 	 * Includes lockout prevention with V1.1 fallback chain.
 	 */
-	public static function ensure_def_admin_capability(): void {
+	public static function ensure_widrow_admin_capability(): void {
 		$admins = get_users( array(
 			'capability' => 'manage_options',
 			'fields'     => 'ids',
