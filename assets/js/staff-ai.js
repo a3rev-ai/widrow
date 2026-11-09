@@ -1774,8 +1774,7 @@ function t(key, fallback) {
 			// An iPhone or iPad takes the share sheet, as every download there does (7.9.19).
 			const file = new File([blob], name, { type: blob.type });
 			if (isIOS() && navigator.share && (!navigator.canShare || navigator.canShare({ files: [file] }))) {
-				await navigator.share({ files: [file], title: name }).catch(function () {});
-				return;
+				try { await navigator.share({ files: [file], title: name }); return; } catch (e) { if (e && e.name === 'AbortError') return; }
 			}
 			const objectUrl = URL.createObjectURL(blob);
 			// A tab opened after the fetch may be blocked as a popup: then it is saved.
@@ -1787,7 +1786,7 @@ function t(key, fallback) {
 				a.click();
 				a.remove();
 			}
-			setTimeout(function () { URL.revokeObjectURL(objectUrl); }, 60000);
+			setTimeout(function () { URL.revokeObjectURL(objectUrl); }, 1000);
 		} catch (e) {
 			showError(t('downloadFailed', 'Could not download the file. Please try again.'));
 		}
@@ -1884,10 +1883,12 @@ function t(key, fallback) {
 		info.appendChild(type);
 
 		const fileUrl = rewriteDownloadUrl(tool.download_url) || '#';
+		// Only DEF's own file path is fetched with the person's token (W85 S5).
+		const hostFile = !!(window.StaffAIConfig && window.StaffAIConfig.host) && String(tool.download_url || '').startsWith('/api/files/');
 		const download = document.createElement('a');
 		download.className = 'tool-output-download';
 		download.href = saveHref(fileUrl);
-		if (window.StaffAIConfig && window.StaffAIConfig.host && fileUrl !== '#') {
+		if (hostFile) {
 			download.setAttribute('data-host-file', tool.file_name || '');
 		}
 		download.target = '_blank';
@@ -1929,7 +1930,7 @@ function t(key, fallback) {
 			wrap.className = 'tool-output-image-wrap';
 			const img = document.createElement('img');
 			img.className = 'tool-output-image';
-			if (window.StaffAIConfig && window.StaffAIConfig.host) hostImage(img, fileUrl);
+			if (hostFile) hostImage(img, fileUrl);
 			else img.src = fileUrl;
 			img.alt = tool.file_name || '';
 			img.loading = 'lazy';

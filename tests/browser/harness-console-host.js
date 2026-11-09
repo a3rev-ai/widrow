@@ -83,11 +83,15 @@ function bootFiles(host, opts) {
 	}
 	const nav = (opts || {}).ios
 		? { userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)', maxTouchPoints: 5,
-			share: (d) => { seen.shared.push(d.files[0]); return Promise.resolve(); } }
+			share: (d) => {
+				if ((opts || {}).shareRefused) return Promise.reject(Object.assign(new Error('refused'), { name: 'NotAllowedError' }));
+				seen.shared.push(d.files[0]); return Promise.resolve();
+			} }
 		: { userAgent: 'Mozilla/5.0 (X11; Linux x86_64)' };
 	window.HTMLAnchorElement.prototype.click = function () { seen.saved.push({ href: this.href, download: this.download }); };
 	const URLStub = { createObjectURL: (b) => { seen.blobs.push(b); return 'blob:' + seen.blobs.length; }, revokeObjectURL() {} };
-	const SAFE_OPEN_TYPES = ['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp', 'image/bmp'];
+	// The shipped list, so a type added there is a type this harness opens.
+	const SAFE_OPEN_TYPES = JSON.parse(/var SAFE_OPEN_TYPES = (\[[^\]]*\]);/.exec(ATTACH)[1].replace(/'/g, '"'));
 	const files = new window.Function('window', 'document', 'StaffAIConfig', 'SAFE_OPEN_TYPES', 'URL', 'Blob',
 		'showError', 't', 'navigator', 'TextDecoder', 'File',
 		FILES + '\nreturn { rewriteDownloadUrl, saveHref, openHostFile, hostImage, shareFile, isIOS };')(
@@ -194,6 +198,10 @@ function click(window, el) {
 		check('on an iPhone the file goes to the share sheet, typed octet-stream, and no tab opens',
 			ios.seen.shared.length === 1 && ios.seen.shared[0].type === 'application/octet-stream'
 			&& ios.seen.opened.length === 0 && ios.seen.saved.length === 0, JSON.stringify(ios.seen));
+		const refused = bootFiles(stubHost({}, files), { ios: true, shareRefused: true });
+		await refused.files.openHostFile(DOOR + '/download/t1/page.html', 'page.html');
+		check('a share sheet that refuses (NotAllowedError) falls through and saves',
+			refused.seen.saved.length === 1 && refused.seen.shared.length === 0, JSON.stringify(refused.seen));
 	}
 
 	// ── A link Sue writes can't ask for the token ───────────────────────────────
@@ -211,6 +219,19 @@ function click(window, el) {
 		const [evil, real] = box.querySelectorAll('a');
 		check('a data-host-file written into the reply is stripped; the console marks only its own /api/files link',
 			!evil.hasAttribute('data-host-file') && real.hasAttribute('data-host-file'), html);
+	}
+
+	// ── A card whose address is not DEF's file path never gets the token ────────
+	{
+		const host = stubHost();
+		const b = bootFiles(host);
+		const card = b.card({ file_name: 'x.png', file_type: 'png', download_url: 'https://evil.example/x.png' });
+		b.document.body.appendChild(card);
+		click(b.window, card.querySelector('.tool-output-download'));
+		await tick(); await tick();
+		check('a card whose download_url is not /api/files/ makes no host call',
+			host.calls.length === 0 && !card.querySelector('.tool-output-download').hasAttribute('data-host-file'),
+			JSON.stringify(host.calls));
 	}
 
 	// ── No host: the download path is the one it always was ─────────────────────
