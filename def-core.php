@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Widrow AI
  * Description: AI-powered Digital Employees for your WordPress site. Customer Chat for visitors, Staff AI for your team, and an intelligent Setup Assistant — all connected to the Digital Employee Framework.
- * Version: 9.7.0
+ * Version: 9.7.1
  * Author: a3rev
  * Author URI: https://a3rev.com/
  * Text Domain: digital-employees
@@ -29,7 +29,7 @@ if ( ! defined( 'DEF_CORE_KEY' ) ) {
 	define( 'DEF_CORE_KEY', 'def-core' );
 }
 if ( ! defined( 'DEF_CORE_VERSION' ) ) {
-	define( 'DEF_CORE_VERSION', '9.7.0' );
+	define( 'DEF_CORE_VERSION', '9.7.1' );
 }
 
 define( 'DEF_CORE_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
@@ -83,8 +83,9 @@ add_filter(
 $def_core_update_checker->addResultFilter( function ( $plugin_info ) {
 	$icon_base = plugins_url( 'assets/images/', __FILE__ );
 	$plugin_info->icons = array(
-		'2x' => $icon_base . 'icon-256x256.png',
-		'1x' => $icon_base . 'icon-128x128.png',
+		'svg' => $icon_base . 'icon.svg',
+		'2x'  => $icon_base . 'icon-256x256.png',
+		'1x'  => $icon_base . 'icon-128x128.png',
 	);
 	return $plugin_info;
 } );

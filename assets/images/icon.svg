@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-label="Widrow AI">
+  <!-- The Widrow signal-W loading mark (docs/brand/widrow/logo/widrow-loader.svg in the DEF repo) on the brand's
+       teal-deep ground. CSS animation only, so it plays inside an <img>; honours prefers-reduced-motion. -->
+  <style>
+    .node{transform-box:fill-box;transform-origin:center}
+    .lb{stroke-dasharray:100;stroke-dashoffset:100;animation:draw 2.8s cubic-bezier(.4,0,.2,1) infinite}
+    .n1{animation:l1 2.8s ease infinite}.n2{animation:l2 2.8s ease infinite}.n3{animation:l3 2.8s ease infinite}.n4{animation:l4 2.8s ease infinite}
+    .halo{transform-box:fill-box;transform-origin:center;animation:halo 2.8s ease infinite}
+    @keyframes draw{0%{stroke-dashoffset:100}44%{stroke-dashoffset:0}76%{stroke-dashoffset:0}92%{stroke-dashoffset:100}100%{stroke-dashoffset:100}}
+    @keyframes l1{0%,6%{opacity:.16;transform:scale(.55)}12%,82%{opacity:1;transform:scale(1)}92%,100%{opacity:.16;transform:scale(.55)}}
+    @keyframes l2{0%,18%{opacity:.16;transform:scale(.55)}24%,82%{opacity:1;transform:scale(1)}92%,100%{opacity:.16;transform:scale(.55)}}
+    @keyframes l3{0%,30%{opacity:.16;transform:scale(.55)}36%,82%{opacity:1;transform:scale(1)}92%,100%{opacity:.16;transform:scale(.55)}}
+    @keyframes l4{0%,42%{opacity:.16;transform:scale(.5)}50%,82%{opacity:1;transform:scale(1.12)}92%,100%{opacity:.16;transform:scale(.5)}}
+    @keyframes halo{0%,44%{opacity:0;transform:scale(.4)}54%{opacity:.75;transform:scale(1)}72%{opacity:0;transform:scale(1.7)}100%{opacity:0}}
+    @media (prefers-reduced-motion:reduce){.lb{stroke-dashoffset:0;animation:none}.node{opacity:1;animation:none}.halo{animation:none;opacity:0}}
+  </style>
+  <rect width="256" height="256" rx="44" fill="#0C302E"/>
+  <g transform="translate(40 57.6) scale(2.9333)">
+    <polyline points="8,40 22,22 38,30 52,9" fill="none" stroke="#F4F0E6" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" opacity=".16"/>
+    <polyline class="lb" points="8,40 22,22 38,30 52,9" fill="none" stroke="#F4F0E6" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" pathLength="100"/>
+    <circle class="halo" cx="52" cy="9" r="9" fill="none" stroke="#C8A24E" stroke-width="1.4"/>
+    <circle class="node n1" cx="8" cy="40" r="3.6" fill="#F4F0E6"/>
+    <circle class="node n2" cx="22" cy="22" r="3.6" fill="#F4F0E6"/>
+    <circle class="node n3" cx="38" cy="30" r="3.6" fill="#F4F0E6"/>
+    <circle class="node n4" cx="52" cy="9" r="6" fill="#C8A24E"/>
+  </g>
+</svg>

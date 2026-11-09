@@ -1,5 +1,8 @@
 *** Widrow AI Changelog ***
 
+= 9.7.1 - 2026/11/09 =
+* Tweak - The plugin's icon on the Updates and plugin-details screens is now the Widrow mark. Where the screen can show it, the mark is the animated one; it stays still if your system prefers reduced motion.
+
 = 9.7.0 - 2026/11/09 =
 * New - This plugin is now Widrow AI. Its name, the wp-admin menu, its screens and notices, and its block category and editor panel all say Widrow AI. Your settings and your connection stay exactly as they are.
 * Tweak - Updates and downloads now come from github.com/a3rev-ai/widrow, and the download is widrow-ai.zip.
