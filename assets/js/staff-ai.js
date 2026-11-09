@@ -190,6 +190,9 @@ function t(key, fallback) {
 			// an anchor DOMPurify stripped the href from must STAY dead —
 			// writing rewriteDownloadUrl(null) back would re-arm it as "null".
 			var href = a.getAttribute('href');
+			// Only the console marks a link to fetch with the person's token (W85 S5): one
+			// written into the reply, which DOMPurify keeps as a data- attribute, is not.
+			a.removeAttribute('data-host-file');
 			if (href) {
 				a.setAttribute('href', rewriteDownloadUrl(href));
 				// With a host the link can't carry the token: the click fetches it (W85 S5).
@@ -562,7 +565,7 @@ function t(key, fallback) {
 		if ((window.StaffAIConfig && window.StaffAIConfig.host) || data.staff_ai_home !== 'portal') return false;
 		var target;
 		try { target = new URL(data.portal_url); } catch (e) { return false; }
-		if (target.protocol !== 'https:' || !target.hostname) return false;
+		if (target.protocol !== 'https:' || !target.hostname || target.username || target.password) return false;
 		window.location.replace(target.href);
 		return true;
 	}
@@ -1766,14 +1769,20 @@ function t(key, fallback) {
 		try {
 			const got = await hostBlob(url);
 			const safe = SAFE_OPEN_TYPES.indexOf(got.blob.type) !== -1;
-			const objectUrl = URL.createObjectURL(safe ? got.blob
-				: new Blob([got.blob], { type: 'application/octet-stream' }));
-			if (safe) {
-				window.open(objectUrl, '_blank');
-			} else {
+			const blob = safe ? got.blob : new Blob([got.blob], { type: 'application/octet-stream' });
+			name = name || dispositionName(got.res);
+			// An iPhone or iPad takes the share sheet, as every download there does (7.9.19).
+			const file = new File([blob], name, { type: blob.type });
+			if (isIOS() && navigator.share && (!navigator.canShare || navigator.canShare({ files: [file] }))) {
+				await navigator.share({ files: [file], title: name }).catch(function () {});
+				return;
+			}
+			const objectUrl = URL.createObjectURL(blob);
+			// A tab opened after the fetch may be blocked as a popup: then it is saved.
+			if (!safe || !window.open(objectUrl, '_blank')) {
 				const a = document.createElement('a');
 				a.href = objectUrl;
-				a.download = name || dispositionName(got.res);
+				a.download = name;
 				document.body.appendChild(a);
 				a.click();
 				a.remove();
@@ -1920,7 +1929,8 @@ function t(key, fallback) {
 			wrap.className = 'tool-output-image-wrap';
 			const img = document.createElement('img');
 			img.className = 'tool-output-image';
-			img.src = fileUrl;
+			if (window.StaffAIConfig && window.StaffAIConfig.host) hostImage(img, fileUrl);
+			else img.src = fileUrl;
 			img.alt = tool.file_name || '';
 			img.loading = 'lazy';
 			wrap.appendChild(img);

@@ -22,6 +22,17 @@ if ( PHP_SAPI !== 'cli' || $argc !== 2 ) {
 	exit( 2 );
 }
 
+// A warning while the shell renders would be written into the page: fail the release instead.
+set_error_handler(
+	function ( $no, $message, $file, $line ) {
+		while ( ob_get_level() ) {
+			ob_end_clean();
+		}
+		fwrite( STDERR, "export: $message at $file:$line\n" );
+		exit( 1 );
+	}
+);
+
 $root = dirname( __DIR__ );
 $out  = rtrim( $argv[1], '/' );
 

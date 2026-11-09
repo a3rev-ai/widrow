@@ -34,6 +34,11 @@ const VOICE_INIT = extract.slice('initVoice',
 	l => l.startsWith('\t\tspeaker = DefVoice.createSpeaker({'),
 	['micBtn.hidden = true'], 'HOST_VOICE') + '\n\t\tthrow new Error("voice went on");\n\t}';
 const RELEASE = extract.release();
+const MARKDOWN = extract.slice('renderMarkdown',
+	l => l.startsWith('\tfunction renderMarkdown(text) {'),
+	l => l.includes('// Every request that carries the nonce'),
+	["removeAttribute('data-host-file')"], 'HOST_MARKDOWN');
+const fs = require('fs');
 
 let pass = 0, fail = 0;
 const results = [];
@@ -68,24 +73,31 @@ function dom() {
 }
 
 // The file helpers and the chat card, over a window whose StaffAIConfig carries `host`.
-function bootFiles(host) {
+function bootFiles(host, opts) {
 	const window = dom(), document = window.document;
 	window.StaffAIConfig = { homeUrl: 'https://site.test/', host };
-	const seen = { opened: [], saved: [], blobs: [], errors: [] };
-	window.open = (u) => { seen.opened.push(u); };
+	const seen = { opened: [], saved: [], blobs: [], errors: [], shared: [] };
+	window.open = (u) => { seen.opened.push(u); return (opts || {}).popupBlocked ? null : {}; };
+	if ((opts || {}).ios) {   // isIOS() reads window.navigator
+		Object.defineProperty(window.navigator, 'userAgent', { value: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)' });
+	}
+	const nav = (opts || {}).ios
+		? { userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)', maxTouchPoints: 5,
+			share: (d) => { seen.shared.push(d.files[0]); return Promise.resolve(); } }
+		: { userAgent: 'Mozilla/5.0 (X11; Linux x86_64)' };
 	window.HTMLAnchorElement.prototype.click = function () { seen.saved.push({ href: this.href, download: this.download }); };
 	const URLStub = { createObjectURL: (b) => { seen.blobs.push(b); return 'blob:' + seen.blobs.length; }, revokeObjectURL() {} };
 	const SAFE_OPEN_TYPES = ['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp', 'image/bmp'];
 	const files = new window.Function('window', 'document', 'StaffAIConfig', 'SAFE_OPEN_TYPES', 'URL', 'Blob',
-		'showError', 't', 'navigator', 'TextDecoder',
+		'showError', 't', 'navigator', 'TextDecoder', 'File',
 		FILES + '\nreturn { rewriteDownloadUrl, saveHref, openHostFile, hostImage, shareFile, isIOS };')(
 		window, document, window.StaffAIConfig, SAFE_OPEN_TYPES, URLStub, Blob,
-		(m) => seen.errors.push(m), (k, d) => d, { userAgent: 'Mozilla/5.0 (X11; Linux x86_64)' }, TextDecoder);
+		(m) => seen.errors.push(m), (k, d) => d, nav, TextDecoder, File);
 	const card = new window.Function('window', 'document', 't', 'rewriteDownloadUrl', 'saveHref',
-		'isIOS', 'shareFile', 'IMAGE_EXTENSIONS', 'ARTIFACT_TYPE', 'openDocumentViewer',
+		'isIOS', 'shareFile', 'IMAGE_EXTENSIONS', 'ARTIFACT_TYPE', 'openDocumentViewer', 'hostImage',
 		CARD + '\n\treturn createToolOutputCard;')(
 		window, document, (k, d) => d, files.rewriteDownloadUrl, files.saveHref, () => false, files.shareFile,
-		['png'], 'html', null);
+		['png'], 'html', null, files.hostImage);
 	return { window, document, files, card, seen, SAFE_OPEN_TYPES, URLStub };
 }
 
@@ -127,13 +139,19 @@ function click(window, el) {
 
 		const card = b.card({ file_name: 'chart.png', file_type: 'png', download_url: '/api/files/t1/chart.png' });
 		b.document.body.appendChild(card);
+		await tick(); await tick();
+		const picture = card.querySelector('.tool-output-image');
+		check('the chat card\'s picture is fetched through the host and shown from a blob',
+			host.calls.length === 1 && /^blob:/.test(picture.getAttribute('src') || ''), JSON.stringify(host.calls));
+		host.calls.length = 0;
 		const dl = card.querySelector('.tool-output-download');
 		click(b.window, dl);
 		await tick(); await tick();
 		check('the chat card\'s Download is fetched through host.fetch, not followed',
 			host.calls.length === 1 && host.calls[0].url.startsWith(DOOR + '/download/t1/chart.png'), JSON.stringify(host.calls));
+		const opened = b.seen.blobs[b.seen.blobs.length - 1];
 		check('a PNG opens in a tab, from a blob that keeps its type',
-			b.seen.opened.length === 1 && b.seen.blobs[0].type === 'image/png' && b.seen.saved.length === 0,
+			b.seen.opened.length === 1 && opened.type === 'image/png' && b.seen.saved.length === 0,
 			JSON.stringify({ opened: b.seen.opened, saved: b.seen.saved }));
 
 		for (const [file, label] of [['page.html', 'HTML'], ['logo.svg', 'SVG']]) {
@@ -162,6 +180,37 @@ function click(window, el) {
 		click(b.window, a);
 		await tick(); await tick();
 		check('a marked link in the chat text is fetched through the host', host.calls.length === n + 1);
+	}
+
+	// ── A blocked tab saves; an iPhone takes the share sheet ─────────────────────
+	{
+		const files = { [DOOR + '/download/t1/chart.png']: { body: 'PNG', headers: { 'content-type': 'image/png' } },
+			[DOOR + '/download/t1/page.html']: { body: '<p>', headers: { 'content-type': 'text/html' } } };
+		const blocked = bootFiles(stubHost({}, files), { popupBlocked: true });
+		await blocked.files.openHostFile(DOOR + '/download/t1/chart.png', 'chart.png');
+		check('a PNG whose tab is blocked is saved instead', blocked.seen.saved.length === 1, JSON.stringify(blocked.seen));
+		const ios = bootFiles(stubHost({}, files), { ios: true });
+		await ios.files.openHostFile(DOOR + '/download/t1/page.html', 'page.html');
+		check('on an iPhone the file goes to the share sheet, typed octet-stream, and no tab opens',
+			ios.seen.shared.length === 1 && ios.seen.shared[0].type === 'application/octet-stream'
+			&& ios.seen.opened.length === 0 && ios.seen.saved.length === 0, JSON.stringify(ios.seen));
+	}
+
+	// ── A link Sue writes can't ask for the token ───────────────────────────────
+	{
+		const window = new JSDOM('<!doctype html><body></body>', { runScripts: 'outside-only' }).window;
+		window.eval(fs.readFileSync(extract.REPO + '/assets/js/vendor/marked.min.js', 'utf8'));
+		window.eval(fs.readFileSync(extract.REPO + '/assets/js/vendor/purify.min.js', 'utf8'));
+		window.StaffAIConfig = { host: stubHost() };
+		const render = new window.Function('window', 'document', 'marked', 'DOMPurify', 'escapeHtml', 'rewriteDownloadUrl',
+			MARKDOWN + '\nreturn renderMarkdown;')(window, window.document, window.marked, window.DOMPurify,
+			(x) => x, (u) => (u.startsWith('/api/files/') ? DOOR + '/download/' + u.slice(11) : u));
+		const html = render('<a href="https://evil.example/steal" data-host-file="x.html">your file</a> and [chart](/api/files/t1/chart.png)');
+		const box = window.document.createElement('div');
+		box.innerHTML = html;
+		const [evil, real] = box.querySelectorAll('a');
+		check('a data-host-file written into the reply is stripped; the console marks only its own /api/files link',
+			!evil.hasAttribute('data-host-file') && real.hasAttribute('data-host-file'), html);
 	}
 
 	// ── No host: the download path is the one it always was ─────────────────────
@@ -259,6 +308,7 @@ function click(window, el) {
 			['an http URL is not followed', bootHandover(undefined), { staff_ai_home: 'portal', portal_url: 'http://acme.defho.test/t/acme' }],
 			['a javascript: URL is not followed', bootHandover(undefined), { staff_ai_home: 'portal', portal_url: 'javascript:alert(1)' }],
 			['a relative URL is not followed', bootHandover(undefined), { staff_ai_home: 'portal', portal_url: '/t/acme' }],
+			['a URL with credentials is not followed', bootHandover(undefined), { staff_ai_home: 'portal', portal_url: 'https://u:p@acme.defho.test/t/acme' }],
 			['a site tenancy stays', bootHandover(undefined), { staff_ai_home: 'site', portal_url: 'https://acme.defho.test/t/acme' }],
 			['no keys: nothing happens', bootHandover(undefined), { success: true }]
 		];
