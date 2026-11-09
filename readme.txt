@@ -4,7 +4,7 @@ Tags: ai, chat, digital employee, ai assistant, customer support
 Requires at least: 6.2
 Tested up to: 7.1
 Requires PHP: 8.0
-Stable tag: 9.7.1
+Stable tag: 9.8.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -119,6 +119,11 @@ Chat messages, user display name, session context, and the visitor's IP address 
 4. Admin Settings — Branding, Chat Settings, Escalation, User Roles, and Connection tabs
 
 == Changelog ==
+
+= 9.8.0 - 2026-11-09 =
+* New - The Staff AI console can run on a page other than WordPress. That page supplies its own sign-in, file links and feature switches, and each release now carries the console as a static copy, staff-ai-console.zip, for it. On a WordPress site the console works exactly as before.
+* New - When a workspace's Staff AI has moved to the Tenant Portal, opening /staff-ai takes you there.
+* Tweak - The roster push from the User Access page no longer logs a warning when the Tenant Portal keeps the roster instead.
 
 = 9.7.1 - 2026-11-09 =
 * Tweak - The plugin's icon on the Updates screen is now the Widrow mark. It is animated where your browser allows it, and stays still if your system prefers reduced motion.

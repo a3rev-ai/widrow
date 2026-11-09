@@ -1281,6 +1281,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 			taskNoProject: <?php echo wp_json_encode( __( 'No project', 'digital-employees' ) ); ?>,
 			taskProjectArchived: <?php echo wp_json_encode( __( '(archived)', 'digital-employees' ) ); ?>,
 			scheduleNewTitle: <?php echo wp_json_encode( __( 'New Email Triage schedule', 'digital-employees' ) ); ?>,
+			downloadFailed: <?php echo wp_json_encode( __( 'Could not download the file. Please try again.', 'digital-employees' ) ); ?>,
 			updatedTo: <?php echo wp_json_encode( __( 'Updated to %s', 'digital-employees' ) ); ?>
 		}
 	};

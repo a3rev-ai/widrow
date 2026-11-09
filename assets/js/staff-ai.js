@@ -192,6 +192,10 @@ function t(key, fallback) {
 			var href = a.getAttribute('href');
 			if (href) {
 				a.setAttribute('href', rewriteDownloadUrl(href));
+				// With a host the link can't carry the token: the click fetches it (W85 S5).
+				if (window.StaffAIConfig && window.StaffAIConfig.host && href.startsWith('/api/files/')) {
+					a.setAttribute('data-host-file', '');
+				}
 			}
 			a.setAttribute('target', '_blank');
 			a.setAttribute('rel', 'noopener noreferrer');
@@ -205,6 +209,9 @@ function t(key, fallback) {
 	// fresh one the way wp.apiFetch does and retry ONCE. A refresh that fails, or a
 	// second refusal, means the login itself has gone.
 	async function wpFetch(url, init = {}) {
+		// W85 S5: a host other than WordPress brings its own network — no nonce, no cookie.
+		const host = window.StaffAIConfig && window.StaffAIConfig.host;
+		if (host) return host.fetch(url, init);
 		const send = () => fetch(url, {
 			...init,
 			headers: { ...init.headers, 'X-WP-Nonce': nonce },
@@ -406,6 +413,7 @@ function t(key, fallback) {
 				.then(function (r) { return r.ok ? r.json() : null; })
 				.then(function (data) {
 					if (!data) return;
+					if (handOverToPortal(data)) return;
 					if (data.assistant_name && typeof data.assistant_name === 'string') {
 						assistantName = data.assistant_name;
 						assistantNameSubscribers.forEach(function (relabel) { relabel(); });
@@ -545,8 +553,36 @@ function t(key, fallback) {
 		installBtn.addEventListener('click', triggerPwaInstall);
 	}
 
+	// ── The handover (W85 S5) ──────────────────────────────────────────────────
+	// A tenancy whose Staff AI has moved to the Tenant Portal: DEF's status says so, from
+	// DEFHO's own config, and this page gives way to the portal. Only on WordPress (a
+	// host is the portal already), only to an https address with a host, never one
+	// taken from this page's own URL, and the address carries no token.
+	function handOverToPortal(data) {
+		if ((window.StaffAIConfig && window.StaffAIConfig.host) || data.staff_ai_home !== 'portal') return false;
+		var target;
+		try { target = new URL(data.portal_url); } catch (e) { return false; }
+		if (target.protocol !== 'https:' || !target.hostname) return false;
+		window.location.replace(target.href);
+		return true;
+	}
+	// ── end the handover
+
+	// A host other than WordPress turns on Share by email (S7), voice (S9) and the
+	// installed app (S8) only when it serves them: a flag that is not true leaves it off.
+	function hostAllows(flag) {
+		var host = window.StaffAIConfig && window.StaffAIConfig.host;
+		return !host || host[flag] === true;
+	}
+	if (!hostAllows('share')) {
+		// style, not `hidden`: the overflow menu's buttons are display:flex.
+		shareBtn.style.display = 'none';
+		var overflowShareItem = document.getElementById('overflowShare');
+		if (overflowShareItem) overflowShareItem.style.display = 'none';
+	}
+
 	// Register service worker.
-	if ('serviceWorker' in navigator) {
+	if ('serviceWorker' in navigator && hostAllows('install')) {
 		navigator.serviceWorker.register(
 			StaffAIConfig.homeUrl + 'staff-ai/sw.js',
 			{ scope: StaffAIConfig.homeUrl + 'staff-ai/' }
@@ -1463,6 +1499,9 @@ function t(key, fallback) {
 	function checkForNewRelease() {
 		var running = StaffAIConfig && StaffAIConfig.version;
 		if (!running || _updateSeen || _updateChecking) return;   // already know, or asked
+		// W85 S5: a host serves no manifest until it serves the installed app (S8).
+		var host = window.StaffAIConfig && window.StaffAIConfig.host;
+		if (host && host.install !== true) return;
 		_updateChecking = true;
 		fetch(StaffAIConfig.homeUrl + 'staff-ai/manifest.json', { cache: 'no-store' })
 			.then(function (r) { return r.ok ? r.json() : null; })
@@ -1643,6 +1682,8 @@ function t(key, fallback) {
 		if (!url || url === '#') return url;
 		// Convert /api/files/{tenant}/{filename} to /staff-ai-download/{tenant}/{filename}
 		if (url.startsWith('/api/files/')) {
+			const host = window.StaffAIConfig && window.StaffAIConfig.host;
+			if (host) return host.fileUrl(url);
 			return StaffAIConfig.homeUrl + 'staff-ai-download/' + url.replace('/api/files/', '');
 		}
 		return url;
@@ -1676,6 +1717,7 @@ function t(key, fallback) {
 	// (Save Image / Save to Files). Falls back to a same-window open if sharing is
 	// unavailable or refused; a dismissed sheet is not a failure.
 	async function shareFile(url, name) {
+		if (window.StaffAIConfig && window.StaffAIConfig.host) { openHostFile(url, name); return; }
 		try {
 			const res = await fetch(url, { credentials: 'same-origin' });
 			if (!res.ok) throw new Error('fetch failed');
@@ -1683,19 +1725,7 @@ function t(key, fallback) {
 			// A caller with no name of its own takes the proxy's. It puts the document's
 			// title on every download (DEF's Content-Disposition, 7.9.2), which is the
 			// name the reader saw on the card - the URL carries only the blob key.
-			if (!name) {
-				const m = /filename="([^"]*)"/.exec(res.headers.get('content-disposition') || '');
-				name = (m && m[1]) || 'download';
-				// The header comes back one code unit per BYTE, and the proxy writes the
-				// title's UTF-8 bytes into it (DEF's version stamp carries an em dash), so
-				// decode them back. A value that is not a run of UTF-8 bytes is kept as is.
-				if (/^[\x00-\xff]*$/.test(name)) {
-					try {
-						name = new TextDecoder('utf-8', { fatal: true })
-							.decode(Uint8Array.from(name, function (c) { return c.charCodeAt(0); }));
-					} catch (e) { /* not UTF-8 */ }
-				}
-			}
+			if (!name) name = dispositionName(res);
 			const file = new File([blob], name, { type: blob.type || 'application/octet-stream' });
 			if (navigator.canShare && !navigator.canShare({ files: [file] })) throw new Error('cannot share files');
 			await navigator.share({ files: [file], title: name });
@@ -1704,6 +1734,79 @@ function t(key, fallback) {
 			window.location.href = url;
 		}
 	}
+
+	function dispositionName(res) {
+		const m = /filename="([^"]*)"/.exec(res.headers.get('content-disposition') || '');
+		let name = (m && m[1]) || 'download';
+		// The header comes back one code unit per BYTE, and the proxy writes the
+		// title's UTF-8 bytes into it (DEF's version stamp carries an em dash), so
+		// decode them back. A value that is not a run of UTF-8 bytes is kept as is.
+		if (/^[\x00-\xff]*$/.test(name)) {
+			try {
+				name = new TextDecoder('utf-8', { fatal: true })
+					.decode(Uint8Array.from(name, function (c) { return c.charCodeAt(0); }));
+			} catch (e) { /* not UTF-8 */ }
+		}
+		return name;
+	}
+
+	// ── The console's host (W85 S5) ──────────────────────────────────────────
+	// StaffAIConfig.host is set by a page other than WordPress (the Tenant Portal). Its
+	// fetch carries the person's token, which no link can, so with a host every file the
+	// console shows comes through host.fetch as a blob. A blob: URL runs on this page's
+	// origin: only a safe raster type opens; anything else, HTML and SVG among them, is
+	// saved as application/octet-stream and never rendered here.
+	async function hostBlob(url) {
+		const res = await window.StaffAIConfig.host.fetch(url, {});
+		if (!res.ok) throw new Error('fetch failed');
+		return { res: res, blob: await res.blob() };
+	}
+
+	async function openHostFile(url, name) {
+		try {
+			const got = await hostBlob(url);
+			const safe = SAFE_OPEN_TYPES.indexOf(got.blob.type) !== -1;
+			const objectUrl = URL.createObjectURL(safe ? got.blob
+				: new Blob([got.blob], { type: 'application/octet-stream' }));
+			if (safe) {
+				window.open(objectUrl, '_blank');
+			} else {
+				const a = document.createElement('a');
+				a.href = objectUrl;
+				a.download = name || dispositionName(got.res);
+				document.body.appendChild(a);
+				a.click();
+				a.remove();
+			}
+			setTimeout(function () { URL.revokeObjectURL(objectUrl); }, 60000);
+		} catch (e) {
+			showError(t('downloadFailed', 'Could not download the file. Please try again.'));
+		}
+	}
+
+	// A picture the host serves: shown from a blob, and only a safe raster type.
+	async function hostImage(img, url) {
+		try {
+			const got = await hostBlob(url);
+			if (SAFE_OPEN_TYPES.indexOf(got.blob.type) === -1) return;
+			const objectUrl = URL.createObjectURL(got.blob);
+			img.addEventListener('load', function () { URL.revokeObjectURL(objectUrl); }, { once: true });
+			img.src = objectUrl;
+		} catch (e) { /* the picture stays empty */ }
+	}
+
+	// A link to a file the host serves is fetched, never followed. Capture runs first,
+	// so the iPhone hand-offs on the same links never see the click.
+	if (window.StaffAIConfig && window.StaffAIConfig.host) {
+		document.addEventListener('click', function (e) {
+			const a = e.target && e.target.closest && e.target.closest('a[data-host-file]');
+			if (!a) return;
+			e.preventDefault();
+			e.stopPropagation();
+			openHostFile(a.getAttribute('href'), a.getAttribute('data-host-file'));
+		}, true);
+	}
+	// ── end the console's host
 
 	// Create tool output card
 	function createToolOutputCard(tool) {
@@ -1775,6 +1878,9 @@ function t(key, fallback) {
 		const download = document.createElement('a');
 		download.className = 'tool-output-download';
 		download.href = saveHref(fileUrl);
+		if (window.StaffAIConfig && window.StaffAIConfig.host && fileUrl !== '#') {
+			download.setAttribute('data-host-file', tool.file_name || '');
+		}
 		download.target = '_blank';
 		download.rel = 'noopener';
 		download.textContent = t('download', 'Download');
@@ -2577,6 +2683,8 @@ function t(key, fallback) {
 	// immutable), so a thread's pictures cost one fetch per browser. A tap opens
 	// the original. The live turn keeps rendering the data: URL the console holds.
 	function attachmentUrl(fileId, variant) {
+		const host = window.StaffAIConfig && window.StaffAIConfig.host;
+		if (host) return host.attachmentUrl(currentConversationId, fileId, variant);
 		return StaffAIConfig.homeUrl + 'staff-ai-attachment/' + encodeURIComponent(currentConversationId)
 			+ '/' + encodeURIComponent(fileId) + (variant ? '/' + variant : '');
 	}
@@ -2592,6 +2700,7 @@ function t(key, fallback) {
 	// The original: a new tab on a desktop; the share sheet on an iPhone or iPad,
 	// where Save Image puts it in Photos (7.9.19's rule for every download).
 	function openAttachment(url, name) {
+		if (window.StaffAIConfig && window.StaffAIConfig.host) { openHostFile(url, name); return; }
 		if (isIOS()) { shareFile(url, name); return; }
 		window.open(url, '_blank');
 	}
@@ -2606,7 +2715,11 @@ function t(key, fallback) {
 				var wrapper = document.createElement('div');
 				wrapper.className = 'message-image-preview';
 				var img = document.createElement('img');
-				img.src = att.thumbnailUrl;
+				if (window.StaffAIConfig && window.StaffAIConfig.host && !att.thumbnailUrl.startsWith('data:')) {
+					hostImage(img, att.thumbnailUrl);
+				} else {
+					img.src = att.thumbnailUrl;
+				}
 				img.alt = att.name;
 				img.className = 'message-image-thumb';
 				// Only allow click-to-open for safe raster types (not SVG)
@@ -2783,7 +2896,8 @@ function t(key, fallback) {
 
 	function initVoice() {
 		if (!micBtn) return;
-		if (!window.DefVoice || !DefVoice.supported()) {
+		var host = window.StaffAIConfig && window.StaffAIConfig.host;
+		if (!window.DefVoice || !DefVoice.supported() || (host && host.voice !== true)) {
 			micBtn.hidden = true;
 			if (voiceBtn) voiceBtn.hidden = true;
 			return;
@@ -5342,13 +5456,18 @@ function t(key, fallback) {
 			// reload, a link Sue sent. Validated at the sink like every other href
 			// the console renders, even though the proxy builds it from home_url().
 			var href = safeHttpHref(doc.download_url || '');
+			var host = window.StaffAIConfig && window.StaffAIConfig.host;
+			if (host) dlLink.setAttribute('data-host-file', '');
 			if (href) { dlLink.href = href; dlLink.style.display = ''; }
 			else { dlLink.style.display = 'none'; }
 			// A picture (8.1.0, images runsheet I-4): DEF answers it with its document and
 			// no text, and the page shows it from the address Download carries, less the
 			// save flag so the proxy serves it inline. Nothing to read on, so no Show more.
 			var picture = data.kind === 'image';
-			if (picture && href) {
+			if (picture && href && host) {
+				hostImage(imgEl, href.replace(/\?staff_ai_save=1$/, ''));
+				imgEl.alt = doc.title || '';
+			} else if (picture && href) {
 				imgEl.src = href.replace(/\?staff_ai_save=1$/, '');
 				imgEl.alt = doc.title || '';
 			}
@@ -5716,7 +5835,9 @@ function t(key, fallback) {
 			// and Safari in a Files folder (row 8 canary, 2026-09-14). The chat's download
 			// card already hands the file to the share sheet there; this is the same
 			// hand-off, and the name is the proxy's.
-			if (href && isIOS() && navigator.share) {
+			if (href && window.StaffAIConfig && window.StaffAIConfig.host) {
+				items.push({ label: t('download', 'Download'), onPick: function () { openHostFile(href); } });
+			} else if (href && isIOS() && navigator.share) {
 				items.push({ label: t('download', 'Download'), onPick: function () { shareFile(href); } });
 			} else if (href) {
 				items.push({ label: t('download', 'Download'), href: href });
