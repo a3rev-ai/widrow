@@ -33,7 +33,7 @@ const STAFF_HEAD = `
 	var messages = [], spoken = [], readbackBuffer = '';
 	var currentConversationId = null, dirtyInput = false, lastSuggestion = null;
 	var composerInput = null, conversationOn = false, speaker = null;
-	var _isStreaming = false, _userScrolledUp = false, chipEpoch = 0;
+	var _isStreaming = false, _userScrolledUp = false, chipEpoch = 0, turnThread = null;
 	function renderMarkdown(s) { return s; }
 	function t(k, fb) { return fb; }
 	function renderToolStatus() { return document.createElement('div'); }
@@ -46,6 +46,7 @@ const STAFF_HEAD = `
 	function buildCitationMap() { return {}; }
 	function createToolOutputCard() { return null; }
 	function loadConversations() {}
+	function rememberConversation() {}
 	function updateReadOnlyState() {}
 	function showError() {}
 	function endConversation() {}

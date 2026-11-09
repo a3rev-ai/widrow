@@ -145,7 +145,7 @@ function boot(route, held) {   // held: an array that keeps the re-attach waits 
     showInfo: msg => { $('infoBanner').textContent = msg; },
     autoResize() {}, hideInfo() {}, hasActiveFiles: () => false, stagedFiles: [],
     classifySuggestionOutcome: () => ({}), endConversation() {}, browserTimezone: () => '', clearStagedFiles() {},
-    readBack() {}, readBackSoFar() {}, loadConversations() { loads++; }, updateReadOnlyState() {}, afterSpokenTurn() {},
+    readBack() {}, readBackSoFar() {}, loadConversations() { loads++; }, rememberConversation() {}, updateReadOnlyState() {}, afterSpokenTurn() {},
     dropUnfilledTranscript() { return false; }, uploadAllStagedFiles: async () => ({ success: true, fileIds: [] }),
     renderMarkdown: s => s, speaker: { speak() {} },
     applyCitations() {}, buildCitationMap: () => ({}), createToolOutputCard: () => null, handleSpokenStop: () => false,

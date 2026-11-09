@@ -1,5 +1,9 @@
 *** Widrow AI Changelog ***
 
+= 10.0.1 - 2026/11/09 =
+* Fix - Reloading the Staff AI console reopens the conversation you had open in that tab, instead of a new chat.
+* Fix - Going back to a conversation while its reply is still being written shows the employee working, and the reply appears when it is ready, instead of an empty message. A reply finishing in one conversation no longer lands in another you have opened.
+
 = 10.0.0 - 2026/11/09 =
 * New - A major release: the plugin's code names, file names and text domain are now Widrow AI. Its folder and main file are now widrow-ai/widrow-ai.php.
 * Tweak - Install this release by hand, not from Updates: deactivate the old plugin, upload widrow-ai.zip and activate it, and only then delete the old plugin. Your settings and your connection are preserved.
