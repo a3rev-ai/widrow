@@ -5391,14 +5391,15 @@ function t(key, fallback) {
 		const shareCopyBtn = document.getElementById('documentViewerShareCopy');
 		const shareStopBtn = document.getElementById('documentViewerShareStop');
 		// The watchdog (D-A3): the frame loads once per artifact — the srcdoc the viewer
-		// set. A second load with a srcdoc still in place means the page inside
-		// navigated (frame-src refuses the request, and a refused navigation still
-		// loads an error page): the artifact is closed and the reader is told.
+		// set, or the host's address (W85 S7b). A second load with either still in place
+		// means the page inside navigated (frame-src refuses the request, and a refused
+		// navigation still loads an error page): the artifact is closed and the reader is told.
 		let frameLoadsExpected = 0;
 		frameEl.addEventListener('load', function () {
 			if (frameLoadsExpected > 0) { frameLoadsExpected -= 1; return; }
-			if (!frameEl.getAttribute('srcdoc')) return;
+			if (!frameEl.getAttribute('srcdoc') && !frameEl.getAttribute('src')) return;
 			frameEl.removeAttribute('srcdoc');
+			frameEl.removeAttribute('src');
 			frameEl.style.display = 'none';
 			statusEl.textContent = t('documentViewerArtifactClosed', 'This artifact tried to open another page and was closed.');
 			statusEl.className = 'console-page-desc documents-status documents-status-error';
@@ -5520,9 +5521,14 @@ function t(key, fallback) {
 			// half page has an unclosed <style> or <script> — and it goes into srcdoc,
 			// never the <pre>: the frame is the containment, the console's DOM is not.
 			var artifact = String(doc.file_type || '').toLowerCase() === ARTIFACT_TYPE;
-			if (artifact) { current.html = (current.html || '') + chunk; }
-			else { textEl.textContent += chunk; }
-			current.nextOffset = data.truncated && typeof data.next_offset === 'number' ? data.next_offset : null;
+			// W85 S7b: a host whose own page policy would stop an artifact's scripts in a
+			// srcdoc frame gives the frame an address instead. The first chunk is all the
+			// page needs then: the title, version, download link and share.
+			var host = window.StaffAIConfig && window.StaffAIConfig.host;
+			var hosted = artifact && host && typeof host.artifactUrl === 'function';
+			if (artifact && !hosted) { current.html = (current.html || '') + chunk; }
+			else if (!artifact) { textEl.textContent += chunk; }
+			current.nextOffset = !hosted && data.truncated && typeof data.next_offset === 'number' ? data.next_offset : null;
 			// An artifact continues by itself, and only forward: an offset that did not
 			// advance would loop the tab.
 			if (artifact && current.nextOffset !== null && current.nextOffset <= (data.offset || 0)) { current.nextOffset = null; }
@@ -5534,7 +5540,6 @@ function t(key, fallback) {
 			// reload, a link Sue sent. Validated at the sink like every other href
 			// the console renders, even though the proxy builds it from home_url().
 			var href = safeHttpHref(doc.download_url || '');
-			var host = window.StaffAIConfig && window.StaffAIConfig.host;
 			if (host) dlLink.setAttribute('data-host-file', '');
 			if (href) { dlLink.href = href; dlLink.style.display = ''; }
 			else { dlLink.style.display = 'none'; }
@@ -5550,7 +5555,17 @@ function t(key, fallback) {
 				imgEl.alt = doc.title || '';
 			}
 			imgEl.style.display = picture && href ? '' : 'none';
-			if (artifact) { frameLoadsExpected = 1; frameEl.srcdoc = artifactDocument(current.html); }
+			if (hosted) {
+				// One page, many documents: an answer that lands after the reader moved
+				// on is dropped, a refusal as much as an address.
+				var src = await host.artifactUrl(asked).catch(function (e) {
+					if (current && current.id === asked) throw e;
+				});
+				if (!current || current.id !== asked) return;
+				frameLoadsExpected = 1;
+				frameEl.removeAttribute('srcdoc');
+				frameEl.src = src;
+			} else if (artifact) { frameLoadsExpected = 1; frameEl.srcdoc = artifactDocument(current.html); }
 			frameEl.style.display = artifact ? '' : 'none';
 			// A-3: the page opens on the share state DEF just reported for THIS row.
 			renderShare(doc.share, artifact);
@@ -5580,6 +5595,7 @@ function t(key, fallback) {
 				textEl.textContent = '';
 				imgEl.style.display = 'none';
 				frameEl.removeAttribute('srcdoc');
+				frameEl.removeAttribute('src');
 				frameEl.style.display = 'none';
 				moreBtn.style.display = 'none';
 				dlLink.style.display = 'none';
@@ -5598,6 +5614,7 @@ function t(key, fallback) {
 			// The last artifact's page must not sit in the frame while the next document
 			// loads — and an md document never shows a frame at all.
 			frameEl.removeAttribute('srcdoc');
+			frameEl.removeAttribute('src');
 			frameEl.style.display = 'none';
 			moreBtn.style.display = 'none';
 			dlLink.style.display = 'none';
