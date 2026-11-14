@@ -12,7 +12,10 @@
  * - the handover fires only with no host and an https portal_url;
  * - an artifact loads from host.artifactUrl when the host has it (10.1.0, W85 S7b): one
  *   content chunk, src not srcdoc, the watchdog, a refusal, a late answer dropped; a host
- *   without it, and no host, read and frame the artifact exactly as before.
+ *   without it, and no host, read and frame the artifact exactly as before;
+ * - the installed app lives at host.installBase when the host names it (10.1.1, W85 S8):
+ *   the worker and its scope, and the release check's manifest, through the browser's fetch;
+ * - the header Install button shows on beforeinstallprompt and hides on appinstalled.
  */
 const { JSDOM } = require('jsdom');
 const extract = require('./extract');
@@ -37,6 +40,14 @@ const VOICE_INIT = extract.slice('initVoice',
 	l => l.startsWith('\t\tspeaker = DefVoice.createSpeaker({'),
 	['micBtn.hidden = true'], 'HOST_VOICE') + '\n\t\tthrow new Error("voice went on");\n\t}';
 const RELEASE = extract.release();
+const INSTALL_BASE = extract.slice('installBase',
+	l => l.startsWith('\tfunction installBase() {'),
+	l => l.includes('var _updateSeen = null;'),
+	['host.installBase'], 'HOST_INSTALL_BASE');
+const PWA_INSTALL = extract.slice('PWA install',
+	l => l.includes('// ─── PWA Install'),
+	l => l.includes('── The handover (W85 S5)'),
+	['function showInstallButtons', 'function hideInstallButtons', "'appinstalled'"], 'HOST_PWA_INSTALL');
 const MARKDOWN = extract.slice('renderMarkdown',
 	l => l.startsWith('\tfunction renderMarkdown(text) {'),
 	l => l.includes('// Every request that carries the nonce'),
@@ -282,9 +293,9 @@ function click(window, el) {
 		const window = dom(), document = window.document;
 		const fake = { StaffAIConfig: { host }, location: { replaced: [], replace(u) { this.replaced.push(u); } } };
 		const registered = [];
-		const nav = { serviceWorker: { register(u) { registered.push(u); return Promise.resolve(); } } };
+		const nav = { serviceWorker: { register(u, o) { registered.push(u + ' scope ' + o.scope); return Promise.resolve(); } } };
 		const api = new window.Function('window', 'document', 'StaffAIConfig', 'navigator', 'shareBtn', 'URL', 'console',
-			HANDOVER + '\nreturn { handOverToPortal };')(
+			INSTALL_BASE + '\n' + HANDOVER + '\nreturn { handOverToPortal };')(
 			fake, document, { homeUrl: 'https://site.test/' }, nav, document.getElementById('shareBtn'), URL, { warn() {} });
 		return { api, fake, document, registered };
 	}
@@ -309,9 +320,10 @@ function click(window, el) {
 		} catch (e) { threw = e; }
 		check('voice is off: the mic and the voice button are hidden', !threw && mic.hidden && voice.hidden, threw && threw.message);
 	}
-	{
+	// The release check over the SHIPPED block: what it fetches, and whether the host saw it.
+	async function releaseFetches(host) {
 		const window = dom();
-		window.StaffAIConfig = { host: stubHost({ install: false }) };
+		if (host !== undefined) window.StaffAIConfig = { host };
 		const fetches = [];
 		new window.Function('window', 'document', 'StaffAIConfig', 'navigator', 'fetch',
 			'var sessionStorage = window.sessionStorage, composerInput = null, _isStreaming = false, isLoading = false,' +
@@ -320,7 +332,30 @@ function click(window, el) {
 			' function t(k, d) { return d; } function showInfo() {}\n' + RELEASE)(
 			window, window.document, { version: '9.8.0', homeUrl: 'https://site.test/' }, { onLine: true },
 			(u) => { fetches.push(u); return Promise.resolve({ ok: false }); });
-		check('the release check asks for no manifest', fetches.length === 0, JSON.stringify(fetches));
+		await tick();
+		return fetches;
+	}
+	check('the release check asks for no manifest', (await releaseFetches(stubHost({ install: false }))).length === 0);
+
+	// ── The installed app's own place (10.1.1, W85 S8) ──────────────────────────
+	for (const [label, host, sw, manifest] of [
+		['a host with install and installBase', stubHost({ install: true, installBase: '/staff-ai/acme/' }),
+			'/staff-ai/acme/sw.js scope /staff-ai/acme/', '/staff-ai/acme/manifest.json'],
+		['a host with install and no installBase', stubHost({ install: true }),
+			'https://site.test/staff-ai/sw.js scope https://site.test/staff-ai/', 'https://site.test/staff-ai/manifest.json'],
+		['no host, as 10.1.0', undefined,
+			'https://site.test/staff-ai/sw.js scope https://site.test/staff-ai/', 'https://site.test/staff-ai/manifest.json']
+	]) {
+		const h = bootHandover(host);
+		const fetches = await releaseFetches(host);
+		check(label + ': the worker registers at ' + sw, h.registered.join() === sw, h.registered.join());
+		check(label + ': the release check fetches ' + manifest + ' with the browser\'s fetch, never host.fetch',
+			fetches.join() === manifest && (!host || host.calls.length === 0), JSON.stringify({ fetches, host: host && host.calls }));
+	}
+	{
+		const host = stubHost({ install: false, installBase: '/staff-ai/acme/' });
+		check('install false with an installBase still registers no worker and asks for no manifest',
+			bootHandover(host).registered.length === 0 && (await releaseFetches(host)).length === 0);
 	}
 
 	// ── The handover ──────────────────────────────────────────────────────────
@@ -460,6 +495,28 @@ function click(window, el) {
 			v.requests.join() === '/documents/art-1/content,/documents/art-1/content?offset=' + HEAD.length
 			&& v.iframe.getAttribute('srcdoc') === v.frame.artifactDocument(HEAD + TAIL) && !v.iframe.hasAttribute('src'),
 			JSON.stringify(v.requests));
+	}
+
+	// ── The header Install button (10.1.1, W85 S8) ─────────────────────────────
+	// The SHIPPED buttons, stylesheet and install block: the header button's inline
+	// display:none outranked the class that was meant to show it.
+	{
+		const tpl = extract.templateSource();
+		const button = (id) => extract.phpToHtml(new RegExp('<button[^>]*id="' + id + '"[\\s\\S]*?</button>').exec(tpl)[0], id);
+		const window = new JSDOM('<!doctype html><head><style>' + fs.readFileSync(extract.REPO + '/assets/css/staff-ai.css', 'utf8')
+			+ '</style></head><body><div class="header-actions">' + button('installBtn') + '</div>'
+			+ button('overflowInstall') + '</body>', { pretendToBeVisual: true }).window;
+		new window.Function('window', 'document', PWA_INSTALL)(window, window.document);
+		const shown = (id) => window.getComputedStyle(window.document.getElementById(id)).display !== 'none';
+		const before = [shown('installBtn'), shown('overflowInstall')];
+		window.dispatchEvent(new window.Event('beforeinstallprompt', { cancelable: true }));
+		const offered = [shown('installBtn'), shown('overflowInstall')];
+		window.dispatchEvent(new window.Event('appinstalled'));
+		const after = [shown('installBtn'), shown('overflowInstall')];
+		check('the header Install button and the overflow item are hidden until the browser offers the install',
+			before.join() === 'false,false', before.join());
+		check('beforeinstallprompt shows the header Install button and the overflow item', offered.join() === 'true,true', offered.join());
+		check('appinstalled hides them both again', after.join() === 'false,false', after.join());
 	}
 
 	console.log('Console host (W85 S5)');

@@ -43,7 +43,8 @@ jobs:
       - name: Export the Staff AI console
         run: |
           # W85 S5: the console as a static page for the Tenant Portal, which pins a
-          # release's copy: index.html with no inline script, config.js and assets/.
+          # release's copy: index.html with no inline script, config.js and assets/, and
+          # (S8) the installed app's sw.js and manifest.json.
           # Core PHP only, from the runner's own install.
           php -v
           php bin/export-staff-ai-console.php build/staff-ai-console
