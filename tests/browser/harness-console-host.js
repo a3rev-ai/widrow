@@ -9,7 +9,10 @@
  *   opens, HTML and SVG are saved as application/octet-stream;
  * - an attachment's address is host.attachmentUrl, and its picture a blob;
  * - Share, voice, the service worker and the manifest check stay off with flags false;
- * - the handover fires only with no host and an https portal_url.
+ * - the handover fires only with no host and an https portal_url;
+ * - an artifact loads from host.artifactUrl when the host has it (10.1.0, W85 S7b): one
+ *   content chunk, src not srcdoc, the watchdog, a refusal, a late answer dropped; a host
+ *   without it, and no host, read and frame the artifact exactly as before.
  */
 const { JSDOM } = require('jsdom');
 const extract = require('./extract');
@@ -38,6 +41,8 @@ const MARKDOWN = extract.slice('renderMarkdown',
 	l => l.startsWith('\tfunction renderMarkdown(text) {'),
 	l => l.includes('// Every request that carries the nonce'),
 	["removeAttribute('data-host-file')"], 'HOST_MARKDOWN');
+const VIEWER = extract.documentViewer();
+const FRAME = extract.artifactFrame();
 const fs = require('fs');
 
 let pass = 0, fail = 0;
@@ -336,6 +341,125 @@ function click(window, el) {
 		for (const [label, b, data] of cases) {
 			check(label, b.api.handOverToPortal(data) === false && b.fake.location.replaced.length === 0);
 		}
+	}
+
+	// ── The artifact frame: the host's address (10.1.0, W85 S7b) ────────────────
+	// The SHIPPED viewer over the template's own document page. An artifact's content
+	// comes in two chunks; host.artifactUrl answers per document, now or when told to.
+	const HEAD = '<!doctype html><html><head><style>body{margin:0;', TAIL = 'color:#123}</style></head><body>k</body></html>';
+	const DOCS = {
+		'art-1': { document_id: 'art-1', title: 'Style kit', file_type: 'html', version: 2, download_url: DOOR + '/download/t1/kit.html' },
+		'art-2': { document_id: 'art-2', title: 'Mock-up', file_type: 'html', version: 1, download_url: DOOR + '/download/t1/mock.html' },
+		'doc-1': { document_id: 'doc-1', title: 'Runsheet', file_type: 'md', version: 3, download_url: DOOR + '/download/t1/run.md' }
+	};
+	const ARTIFACT_AT = (id) => 'https://artifacts.defho.test/a/' + id + '?sig=s1';
+	function bootViewer(host) {
+		const window = new JSDOM('<!doctype html><body>' + extract.templatePage('documentPage') + '</body></html>',
+			{ url: 'https://acme.defho.test/staff-ai/acme/', pretendToBeVisual: true }).window;
+		const document = window.document;
+		if (host !== undefined) window.StaffAIConfig = { host };
+		const requests = [], pages = [];
+		const t = (k, d) => d;
+		const frame = new window.Function('document', 't', FRAME + '\nreturn { ARTIFACT_TYPE, artifactDocument };')(document, t);
+		async function apiRequest(url) {
+			requests.push(url);
+			const id = url.split('/')[2], doc = DOCS[id], second = /offset=/.test(url);
+			if (doc.file_type !== 'html') return { document: doc, content: 'Body of ' + id, offset: 0, total_chars: 9, truncated: false, next_offset: null };
+			return { document: doc, content: second ? TAIL : HEAD, offset: second ? HEAD.length : 0,
+				total_chars: HEAD.length + TAIL.length, truncated: !second, next_offset: second ? null : HEAD.length };
+		}
+		const showPage = (route) => pages[0].onEnter(decodeURIComponent(route.split('/')[1]));
+		const viewer = new window.Function('window', 'document', 'consolePages', 'showPage', 't', 'apiRequest', 'apiBase',
+			'safeHttpHref', 'openDocumentViewer', 'isIOS', 'shareFile', 'ARTIFACT_TYPE', 'artifactDocument', 'shareOrigin',
+			VIEWER + '\nreturn openDocumentViewer;')(
+			window, document, pages, showPage, t, apiRequest, DOOR, (u) => u, null, () => false, () => {},
+			frame.ARTIFACT_TYPE, frame.artifactDocument, 'https://defho.test');
+		const el = (id) => document.getElementById(id);
+		const iframe = el('documentViewerFrame');
+		const srcdocWrites = [];
+		new window.MutationObserver((rs) => rs.forEach((r) => { if (r.attributeName === 'srcdoc' && iframe.hasAttribute('srcdoc')) srcdocWrites.push(r); }))
+			.observe(iframe, { attributes: true, attributeFilter: ['srcdoc'] });
+		return { window, frame, requests, srcdocWrites, open: viewer, iframe,
+			status: () => el('documentViewerStatus'), title: () => el('documentPageTitle').textContent,
+			download: () => el('documentViewerDownload'), text: () => el('documentViewerText'),
+			load: () => iframe.dispatchEvent(new window.Event('load')) };
+	}
+	function urlHost() {
+		const asked = [], pending = {};
+		return { asked, pending, artifactUrl(id) {
+			asked.push(id);
+			return new Promise((resolve, reject) => { pending[id] = { resolve, reject }; });
+		} };
+	}
+	{
+		const host = urlHost();
+		const v = bootViewer(host);
+		v.open('art-1', 'Style kit');
+		await tick(); await tick();
+		host.pending['art-1'].resolve(ARTIFACT_AT('art-1'));
+		await tick(); await tick();
+		check('with host.artifactUrl, the frame\'s src is the address the host returned, and the frame shows',
+			host.asked.join() === 'art-1' && v.iframe.getAttribute('src') === ARTIFACT_AT('art-1') && v.iframe.style.display === '',
+			JSON.stringify({ asked: host.asked, src: v.iframe.getAttribute('src') }));
+		check('srcdoc is never set', v.srcdocWrites.length === 0 && !v.iframe.hasAttribute('srcdoc'));
+		check('only the first content chunk is requested', v.requests.join() === '/documents/art-1/content', JSON.stringify(v.requests));
+		check('title, version, the download link and Share render from that first chunk',
+			v.title() === 'Style kit' && v.status().textContent === 'ARTIFACT · v2'
+			&& v.download().href === DOCS['art-1'].download_url && v.download().style.display === ''
+			&& v.window.document.getElementById('documentViewerShare').style.display === '',
+			JSON.stringify({ title: v.title(), status: v.status().textContent }));
+		v.load();
+		check('its own load leaves the artifact open', v.iframe.getAttribute('src') === ARTIFACT_AT('art-1'));
+		v.load();
+		check('a second load closes the artifact: src removed, frame hidden, the reader told',
+			!v.iframe.hasAttribute('src') && v.iframe.style.display === 'none' && /closed/.test(v.status().textContent), v.status().textContent);
+	}
+	{
+		const host = urlHost();
+		const v = bootViewer(host);
+		v.open('art-1');
+		await tick(); await tick();
+		host.pending['art-1'].reject(new Error(''));
+		await tick(); await tick();
+		check('a refused artifactUrl shows the load-error status, with no srcdoc to fall back on and no second chunk',
+			v.status().textContent === 'Could not read the document.' && /documents-status-error/.test(v.status().className)
+			&& v.srcdocWrites.length === 0 && !v.iframe.hasAttribute('src') && v.iframe.style.display === 'none'
+			&& v.requests.length === 1, JSON.stringify({ status: v.status().textContent, requests: v.requests }));
+	}
+	{
+		const host = urlHost();
+		const v = bootViewer(host);
+		v.open('art-1');
+		await tick(); await tick();
+		v.open('art-2');
+		await tick(); await tick();
+		host.pending['art-2'].resolve(ARTIFACT_AT('art-2'));
+		await tick(); await tick();
+		host.pending['art-1'].resolve(ARTIFACT_AT('art-1'));
+		await tick(); await tick();
+		v.load();
+		check('a late address for a document the reader left is dropped: the frame keeps the one open, and its one load does not close it',
+			v.iframe.getAttribute('src') === ARTIFACT_AT('art-2') && v.title() === 'Mock-up' && v.iframe.style.display === '',
+			v.iframe.getAttribute('src'));
+		v.open('art-1');
+		await tick(); await tick();
+		v.open('doc-1');
+		await tick(); await tick();
+		host.pending['art-1'].reject(new Error('gone'));
+		await tick(); await tick();
+		check('a late refusal is dropped too: the next document keeps its own status, and no artifact sits in the frame',
+			v.status().textContent === 'MD · v3 · 9 characters' && !v.iframe.hasAttribute('src')
+			&& v.iframe.style.display === 'none' && /Body of doc-1/.test(v.text().textContent), v.status().textContent);
+	}
+	// A host without artifactUrl, and no host: the 10.0.1 reads and the 10.0.1 frame, to the byte.
+	for (const [label, host] of [['a host without artifactUrl', stubHost()], ['no host', undefined]]) {
+		const v = bootViewer(host);
+		v.open('art-1');
+		await tick(); await tick(); await tick();
+		check(label + ': both chunks are read and the srcdoc is the policy in front of the whole page, with no src',
+			v.requests.join() === '/documents/art-1/content,/documents/art-1/content?offset=' + HEAD.length
+			&& v.iframe.getAttribute('srcdoc') === v.frame.artifactDocument(HEAD + TAIL) && !v.iframe.hasAttribute('src'),
+			JSON.stringify(v.requests));
 	}
 
 	console.log('Console host (W85 S5)');

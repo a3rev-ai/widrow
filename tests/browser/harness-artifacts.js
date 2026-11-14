@@ -15,7 +15,7 @@
  * own card — the one a tool result renders in the conversation — over the SHIPPED
  * createToolOutputCard and the same viewer.
  *
- * 31 checks.
+ * 32 checks.
  */
 const { JSDOM } = require('jsdom');
 const extract = require('./extract');
@@ -192,6 +192,11 @@ function check(label, ok, detail) {
 		const srcdocs = VIEWER.match(/\.srcdoc\s*=/g) || [];
 		check('srcdoc is assigned once, from the frame builder over the text the content route returned',
 			srcdocs.length === 1 && /frameEl\.srcdoc = artifactDocument\(current\.html\)/.test(VIEWER), srcdocs.length + ' assignment(s)');
+		// W85 S7b: the one other way in is the address a host other than WordPress gives.
+		const srcs = VIEWER.match(/frameEl\.src\s*=|frameEl\.setAttribute\(\s*['"]src['"]/g) || [];
+		check('the frame\'s src is assigned once, from host.artifactUrl',
+			srcs.length === 1 && /var src = await host\.artifactUrl\(asked\)/.test(VIEWER) && /frameEl\.src = src;/.test(VIEWER),
+			srcs.length + ' assignment(s)');
 	}
 
 	// ── The frame's document ──────────────────────────────────────────────

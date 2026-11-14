@@ -1,5 +1,8 @@
 *** Widrow AI Changelog ***
 
+= 10.1.0 - 2026/11/14 =
+* Feature - The Staff AI console can open an artifact from an address that the page hosting it supplies, so an artifact's scripts and fonts still work on a page with a strict security policy. On a WordPress site nothing changes.
+
 = 10.0.1 - 2026/11/09 =
 * Fix - Reloading the Staff AI console reopens the conversation you had open in that tab, instead of a new chat.
 * Fix - Going back to a conversation while its reply is still being written shows the employee working, and the reply appears when it is ready, instead of an empty message. A reply finishing in one conversation no longer lands in another you have opened.
