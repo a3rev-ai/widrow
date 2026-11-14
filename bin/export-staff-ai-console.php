@@ -11,8 +11,10 @@
  *   person, addresses and `host` before the console's scripts run;
  * - config.js: the page's two inline scripts, the theme set before paint and the
  *   StaffAIConfig strings;
- * - assets/: the stylesheets and scripts the page links.
- * The manifest and home-screen icon links are left out: the installed app is the host's.
+ * - assets/: the stylesheets and scripts the page links, and the three bundled icons;
+ * - sw.js and manifest.json (W85 S8): the worker the site serves, and the site's manifest
+ *   with every address relative, so the host serves the installed app from its own place.
+ *   index.html links both relatively: manifest.json, and the 180 icon iOS reads.
  *
  * @package widrow-ai
  */
@@ -58,6 +60,8 @@ function wp_login_url( $redirect = '' ) { return ''; }
 function wp_logout_url( $redirect = '' ) { return ''; }
 function wp_timezone_string() { return ''; }
 
+require $root . '/includes/class-widrow-ai-staff-ai.php';
+
 final class Widrow_AI_OAuth {
 	public static function get_defho_url() { return ''; }
 }
@@ -76,7 +80,7 @@ $api_base          = '';
 $nonce             = '';
 $logo_html         = '';
 $welcome_logo_html = '';
-$apple_touch_icon  = array( 'src' => '', 'sizes' => '' );
+$apple_touch_icon  = array( 'src' => 'assets/images/staff-ai-icon-180.png?ver=' . WIDROW_AI_VERSION, 'sizes' => '180x180' );
 
 ob_start();
 require $root . '/templates/staff-ai-shell.php';
@@ -95,7 +99,7 @@ $html   = preg_replace_callback(
 	},
 	$html
 );
-$html = preg_replace( '#\s*<link rel="(manifest|apple-touch-icon)"[^>]*>#', '', $html );
+$html = str_replace( '<link rel="manifest" href="/staff-ai/manifest.json">', '<link rel="manifest" href="manifest.json">', $html );
 
 if ( preg_match( '#<script(?![^>]*\bsrc=)#', $html ) || false !== strpos( $html, '<?php' ) || false !== strpos( $html, '?>' ) ) {
 	fwrite( STDERR, "export: an inline script or PHP is left in index.html\n" );
@@ -108,9 +112,12 @@ if ( ! is_dir( $out ) && ! mkdir( $out, 0755, true ) ) {
 }
 file_put_contents( $out . '/index.html', $html );
 file_put_contents( $out . '/config.js', $config );
+file_put_contents( $out . '/sw.js', Widrow_AI_Staff_AI::pwa_service_worker() );
+file_put_contents( $out . '/manifest.json', json_encode( Widrow_AI_Staff_AI::host_pwa_manifest(), JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT ) );
 
 preg_match_all( '#(?:src|href)="(assets/[^"?]+)#', $html, $assets );
-foreach ( array_unique( $assets[1] ) as $asset ) {
+$assets = array_unique( array_merge( $assets[1], array( 'assets/images/staff-ai-icon-192.png', 'assets/images/staff-ai-icon-512.png' ) ) );
+foreach ( $assets as $asset ) {
 	if ( ! is_dir( dirname( $out . '/' . $asset ) ) ) {
 		mkdir( dirname( $out . '/' . $asset ), 0755, true );
 	}
@@ -119,4 +126,4 @@ foreach ( array_unique( $assets[1] ) as $asset ) {
 		exit( 1 );
 	}
 }
-echo 'Staff AI console ' . WIDROW_AI_VERSION . ' written to ' . $out . ' (' . count( array_unique( $assets[1] ) ) . " assets)\n";
+echo 'Staff AI console ' . WIDROW_AI_VERSION . ' written to ' . $out . ' (' . count( $assets ) . " assets)\n";

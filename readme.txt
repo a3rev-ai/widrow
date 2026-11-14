@@ -4,7 +4,7 @@ Tags: ai, chat, digital employee, ai assistant, customer support
 Requires at least: 6.2
 Tested up to: 7.1
 Requires PHP: 8.0
-Stable tag: 10.1.0
+Stable tag: 10.1.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -119,6 +119,10 @@ Chat messages, user display name, session context, and the visitor's IP address 
 4. Admin Settings — Branding, Chat Settings, Escalation, User Roles, and Connection tabs
 
 == Changelog ==
+
+= 10.1.1 - 2026-11-14 =
+* Feature - The Staff AI console can be installed as an app from a page other than your WordPress site, when that page supplies the place the app lives. The downloadable console now includes the app's manifest, service worker and icons. On a WordPress site the app installs exactly as before.
+* Fix - The Install button in the Staff AI header now appears when your browser offers to install the app, and disappears once it is installed. Before, only the Install app item in the menu appeared.
 
 = 10.1.0 - 2026-11-14 =
 * Feature - The Staff AI console can open an artifact from an address that the page hosting it supplies, so an artifact's scripts and fonts still work on a page with a strict security policy. On a WordPress site nothing changes.

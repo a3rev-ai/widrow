@@ -521,12 +521,13 @@ function t(key, fallback) {
 	var overflowInstall = document.getElementById('overflowInstall');
 
 	function showInstallButtons() {
-		if (installBtn) installBtn.classList.add('available');
+		// The template hides both inline; the header button's class alone could not outrank that.
+		if (installBtn) { installBtn.classList.add('available'); installBtn.style.display = ''; }
 		if (overflowInstall) overflowInstall.style.display = '';
 	}
 
 	function hideInstallButtons() {
-		if (installBtn) installBtn.classList.remove('available');
+		if (installBtn) { installBtn.classList.remove('available'); installBtn.style.display = 'none'; }
 		if (overflowInstall) overflowInstall.style.display = 'none';
 		deferredInstallPrompt = null;
 	}
@@ -587,8 +588,8 @@ function t(key, fallback) {
 	// Register service worker.
 	if ('serviceWorker' in navigator && hostAllows('install')) {
 		navigator.serviceWorker.register(
-			StaffAIConfig.homeUrl + 'staff-ai/sw.js',
-			{ scope: StaffAIConfig.homeUrl + 'staff-ai/' }
+			installBase() + 'sw.js',
+			{ scope: installBase() }
 		).catch(function(err) {
 			console.warn('SW registration failed:', err);
 		});
@@ -1495,6 +1496,15 @@ function t(key, fallback) {
 	// canary failed on the installed app while the same page in Safari passed. The
 	// service worker is network-first and caches nothing; the live page IS the stale
 	// copy, so there is no cache to clear. The app has to notice and reload itself.
+
+	// Where the installed app's worker and manifest live: the host's own place when it
+	// names one (W85 S8), otherwise the site's /staff-ai/.
+	function installBase() {
+		var host = window.StaffAIConfig && window.StaffAIConfig.host;
+		return host && typeof host.installBase === 'string' && host.installBase
+			? host.installBase : StaffAIConfig.homeUrl + 'staff-ai/';
+	}
+
 	var _updateSeen = null;        // the newer version we are waiting for a quiet moment to take
 	var _updateChecking = false;   // one GET in flight at a time — a foreground asks once
 
@@ -1542,7 +1552,7 @@ function t(key, fallback) {
 		var host = window.StaffAIConfig && window.StaffAIConfig.host;
 		if (host && host.install !== true) return;
 		_updateChecking = true;
-		fetch(StaffAIConfig.homeUrl + 'staff-ai/manifest.json', { cache: 'no-store' })
+		fetch(installBase() + 'manifest.json', { cache: 'no-store' })
 			.then(function (r) { return r.ok ? r.json() : null; })
 			.then(function (m) {
 				// Only a DIFFERENT version is news. Not "greater than" — a rollback is a

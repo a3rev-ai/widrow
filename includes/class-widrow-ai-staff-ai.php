@@ -6335,15 +6335,61 @@ final class Widrow_AI_Staff_AI
 	}
 
 	/**
+	 * The manifest a host other than WordPress serves beside the exported console (W85 S8).
+	 *
+	 * The site's members, with every address relative to the host's own place and the
+	 * bundled icons, which the export copies to assets/images/. No site name: the export
+	 * runs without a site.
+	 *
+	 * @return array The web app manifest.
+	 */
+	public static function host_pwa_manifest(): array
+	{
+		$icons = array();
+		foreach (array(192, 512) as $size) {
+			$icons[] = array(
+				'src'     => 'assets/images/staff-ai-icon-' . $size . '.png?ver=' . WIDROW_AI_VERSION,
+				'sizes'   => $size . 'x' . $size,
+				'type'    => 'image/png',
+				'purpose' => 'any maskable',
+			);
+		}
+
+		return array(
+			'name'             => __('Staff AI', 'widrow-ai'),
+			'short_name'       => __('Staff AI', 'widrow-ai'),
+			'description'      => __('Staff AI Assistant', 'widrow-ai'),
+			'start_url'        => './',
+			'scope'            => './',
+			'display'          => 'standalone',
+			'background_color' => '#ffffff',
+			'theme_color'      => '#6366f1',
+			'icons'            => $icons,
+			'version'          => WIDROW_AI_VERSION,
+		);
+	}
+
+	/**
 	 * Serve the PWA service worker.
-	 * Minimal worker — just enough for PWA installability.
 	 */
 	private static function serve_pwa_service_worker(): void
 	{
 		header('Content-Type: application/javascript');
 		header('Service-Worker-Allowed: /staff-ai/');
 		header('Cache-Control: no-cache');
-		echo <<<'JS'
+		echo self::pwa_service_worker(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- a fixed script, not data.
+		exit;
+	}
+
+	/**
+	 * The service worker's text — served here and written by the export (W85 S8).
+	 * Minimal worker — just enough for PWA installability.
+	 *
+	 * @return string The worker.
+	 */
+	public static function pwa_service_worker(): string
+	{
+		return <<<'JS'
 // Staff AI Service Worker — enables PWA install.
 const CACHE_NAME = 'staff-ai-v1';
 
@@ -6369,7 +6415,6 @@ self.addEventListener('fetch', function(event) {
 	);
 });
 JS;
-		exit;
 	}
 
 	/**

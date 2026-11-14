@@ -1,5 +1,9 @@
 *** Widrow AI Changelog ***
 
+= 10.1.1 - 2026/11/14 =
+* Feature - The Staff AI console can be installed as an app from a page other than your WordPress site, when that page supplies the place the app lives. The downloadable console now includes the app's manifest, service worker and icons. On a WordPress site the app installs exactly as before.
+* Fix - The Install button in the Staff AI header now appears when your browser offers to install the app, and disappears once it is installed. Before, only the Install app item in the menu appeared.
+
 = 10.1.0 - 2026/11/14 =
 * Feature - The Staff AI console can open an artifact from an address that the page hosting it supplies, so an artifact's scripts and fonts still work on a page with a strict security policy. On a WordPress site nothing changes.
 
