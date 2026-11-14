@@ -49,7 +49,7 @@ check(
 $route = shell_exec(
 	'php -r ' . escapeshellarg(
 		"define('ABSPATH', '/'); require " . var_export( dirname( __DIR__ ) . '/includes/class-widrow-ai-staff-ai.php', true ) . ';'
-		. " (new ReflectionMethod('Widrow_AI_Staff_AI', 'serve_pwa_service_worker'))->invoke(null);"
+		. " \$m = new ReflectionMethod('Widrow_AI_Staff_AI', 'serve_pwa_service_worker'); \$m->setAccessible(true); \$m->invoke(null);"
 	)
 );
 $sw = (string) @file_get_contents( $out . '/sw.js' );
