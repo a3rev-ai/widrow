@@ -4,7 +4,7 @@ Tags: ai, chat, digital employee, ai assistant, customer support
 Requires at least: 6.2
 Tested up to: 7.1
 Requires PHP: 8.0
-Stable tag: 10.1.1
+Stable tag: 10.1.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -119,6 +119,9 @@ Chat messages, user display name, session context, and the visitor's IP address 
 4. Admin Settings — Branding, Chat Settings, Escalation, User Roles, and Connection tabs
 
 == Changelog ==
+
+= 10.1.2 - 2026-11-17 =
+* Fix - The Staff AI sidebar is easier to read on a phone: chat titles, the menu and the New chat button are larger, chat titles are darker, and the panel is wider so more of each title shows. On a computer, chat titles are darker and nothing else changes.
 
 = 10.1.1 - 2026-11-14 =
 * Feature - The Staff AI console can be installed as an app from a page other than your WordPress site, when that page supplies the place the app lives. The downloadable console now includes the app's manifest, service worker and icons. On a WordPress site the app installs exactly as before.

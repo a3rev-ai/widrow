@@ -408,8 +408,11 @@ body {
 	background: var(--active-bg);
 }
 
+/* The title is what a person scans the list for: the main text colour, not the
+   row's grey, which stays on the date and the menu. */
 .conversation-item-title {
 	display: block;
+	color: var(--text-primary);
 	white-space: nowrap;
 	overflow: hidden;
 	text-overflow: ellipsis;
@@ -1990,6 +1993,38 @@ html {
 		bottom: 0;
 		z-index: 100;
 		transform: translateX(-100%);
+		/* Wider on a phone so more of each title shows; the strip beside it stays
+		   tappable to close the panel on a narrow screen. */
+		width: min(300px, 85vw);
+	}
+
+	/* A phone is read at arm's length with a thumb: the sidebar's type is the size
+	   the phone's own apps use, and the menu's icons are at full strength. */
+	.new-chat-btn,
+	.sidebar-nav-item,
+	.conversation-item {
+		font-size: 16px;
+	}
+
+	.sidebar-nav-item {
+		line-height: 20px;
+		padding: 11px 12px;
+		gap: 12px;
+	}
+
+	.sidebar-nav-item svg {
+		width: 20px;
+		height: 20px;
+		opacity: 1;
+	}
+
+	.conversation-item-time {
+		font-size: 13px;
+	}
+
+	.conversation-item-project,
+	.sidebar-footer {
+		font-size: 12px;
 	}
 
 	.sidebar.open {
@@ -2026,6 +2061,20 @@ html {
 
 	.create-btn {
 		display: none;
+	}
+}
+
+/* A short screen (a small phone, or any phone on its side) cannot hold the menu and
+   a list of chats at once: the whole panel scrolls, so every menu item and every
+   chat can be reached. */
+@media (max-width: 768px) and (max-height: 560px) {
+	.sidebar {
+		overflow-y: auto;
+	}
+
+	.conversation-list {
+		flex: none;
+		overflow-y: visible;
 	}
 }
 
