@@ -263,24 +263,6 @@ foreach ( $content_routes as $route ) {
 	assert_true( isset( $_wp_test_rest_routes[ $route ] ), "route registered: $route" );
 }
 
-$console_routes = array(
-	'a3-ai/v1/staff-ai/conversations',
-	'a3-ai/v1/staff-ai/chat',
-	'a3-ai/v1/staff-ai/status',
-	'a3-ai/v1/staff-ai/tools',
-	'a3-ai/v1/staff-ai/uploads/init',
-	'a3-ai/v1/staff-ai/documents',
-	'a3-ai/v1/staff-ai/memories',
-	'a3-ai/v1/staff-ai/usage',
-	'a3-ai/v1/staff-ai/triage-schedule',
-	'a3-ai/v1/staff-ai/tasks',
-	'a3-ai/v1/staff-ai/user/integrations',
-	'a3-ai/v1/staff-ai/projects',
-	'a3-ai/v1/staff-ai/mail-connections',
-);
-foreach ( $console_routes as $route ) {
-	assert_true( ! isset( $_wp_test_rest_routes[ $route ] ), "console route NOT registered: $route" );
-}
 $outside_content = array_filter(
 	array_keys( $_wp_test_rest_routes ),
 	static fn( $r ) => false !== strpos( $r, '/staff-ai/' ) && false === strpos( $r, '/staff-ai/content/' )

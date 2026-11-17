@@ -211,11 +211,10 @@ final class Widrow_AI_Admin {
 	}
 
 	/**
-	 * Any DEF role can see the Staff AI menu link.
+	 * Any DEF role passes widrow_staff_access.
 	 *
 	 * When WordPress checks widrow_staff_access, users with widrow_management_access
-	 * or widrow_admin_access also pass. This ensures the Staff AI menu link is
-	 * visible to anyone with any DEF capability.
+	 * or widrow_admin_access also pass.
 	 *
 	 * @param string[] $caps    Required primitive capabilities.
 	 * @param string   $cap     The capability being checked.
@@ -233,7 +232,7 @@ final class Widrow_AI_Admin {
 			return $caps;
 		}
 
-		// Management and admin users also see the Staff AI menu link.
+		// Management and admin users also pass the staff check.
 		if ( $user->has_cap( 'widrow_management_access' ) || $user->has_cap( 'widrow_admin_access' ) ) {
 			return array( 'exist' );
 		}

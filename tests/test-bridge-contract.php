@@ -407,8 +407,30 @@ $result = Widrow_AI_Staff_AI::rest_content_create( $chat_request );
 assert_true( is_wp_error( $result ), 'network error returns WP_Error' );
 assert_equals( 'staff_ai_request_failed', $result->get_error_code(), 'error code is staff_ai_request_failed' );
 
-// ── 10. Escalation: service auth (X-DEF-AUTH) ───────────────────────────
-echo "\n[10] Escalation service auth\n";
+// ── 10. Other 4xx → the server's own sentence, never "Array" or the URL ─
+echo "\n[10] 400/422 → server's message surfaced\n";
+$_wp_test_remote_responses = array(
+	array(
+		'response' => array( 'code' => 400 ),
+		'body'     => '{"detail":{"error":"validation_failed","message":"File size exceeds maximum of 50.0MB"}}',
+	),
+	array(
+		'response' => array( 'code' => 422 ),
+		'body'     => '{"detail":[{"loc":["body","urls"],"msg":"ensure this value has at most 5 items","type":"value_error.list.max_items"}]}',
+	),
+);
+foreach ( array( 400 => 'File size exceeds maximum of 50.0MB', 422 => 'ensure this value has at most 5 items' ) as $code => $text ) {
+	$result = Widrow_AI_Staff_AI::rest_content_create( $chat_request );
+	assert_equals( 'staff_ai_http_' . $code, $result->get_error_code(), "$code maps to staff_ai_http_$code" );
+	assert_equals( $code, $result->get_error_data()['status'] ?? null, "$code status preserved" );
+	$msg = $result->get_error_message();
+	assert_true( strpos( $msg, $text ) !== false, "$code message carries the server's text" );
+	assert_true( strpos( $msg, 'Array' ) === false, "$code message has no 'Array'" );
+	assert_true( strpos( $msg, 'backend:8000' ) === false, "$code message has no backend URL" );
+}
+
+// ── 11. Escalation: service auth (X-DEF-AUTH) ───────────────────────────
+echo "\n[11] Escalation service auth\n";
 $secret = Widrow_AI_Escalation::get_service_secret();
 assert_true( strlen( $secret ) === 64, 'service secret is 64 hex chars (32 bytes)' );
 assert_true( ctype_xdigit( $secret ), 'service secret is hex-only (HTTP-safe)' );
@@ -422,8 +444,8 @@ $secret3 = Widrow_AI_Escalation::get_service_secret( true );
 assert_true( $secret3 !== $secret, 'force_regenerate produces new secret' );
 assert_true( strlen( $secret3 ) === 64, 'regenerated secret is also 64 hex chars' );
 
-// ── 11. Escalation: channel validation ──────────────────────────────────
-echo "\n[11] Escalation channel validation\n";
+// ── 12. Escalation: channel validation ──────────────────────────────────
+echo "\n[12] Escalation channel validation\n";
 assert_true( Widrow_AI_Escalation::validate_channel( 'customer' ), 'customer is valid channel' );
 assert_true( Widrow_AI_Escalation::validate_channel( 'staff_ai' ), 'staff_ai is valid channel' );
 assert_true( Widrow_AI_Escalation::validate_channel( 'setup_assistant' ), 'setup_assistant is valid channel' );
@@ -431,8 +453,8 @@ assert_true( ! Widrow_AI_Escalation::validate_channel( 'admin' ), 'admin is inva
 assert_true( ! Widrow_AI_Escalation::validate_channel( '' ), 'empty string is invalid channel' );
 assert_true( ! Widrow_AI_Escalation::validate_channel( '../etc' ), 'path traversal rejected' );
 
-// ── 12. Escalation email: validation ────────────────────────────────────
-echo "\n[12] Escalation email input validation\n";
+// ── 13. Escalation email: validation ────────────────────────────────────
+echo "\n[13] Escalation email input validation\n";
 Widrow_AI_Escalation::register_rest_routes();
 
 // Missing channel.
@@ -470,8 +492,8 @@ $req->set_body_params( array(
 $result = Widrow_AI_Escalation::send_escalation_email( $req );
 assert_equals( 400, $result->get_status(), 'missing body → 400' );
 
-// ── 13. Escalation: staff_ai allowed_recipients enforcement ─────────────
-echo "\n[13] Staff AI allowed_recipients enforcement\n";
+// ── 14. Escalation: staff_ai allowed_recipients enforcement ─────────────
+echo "\n[14] Staff AI allowed_recipients enforcement\n";
 update_option( 'widrow_ai_escalation_staff_ai', array(
 	'allowed_recipients' => array( 'admin@example.com' ),
 ) );

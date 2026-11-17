@@ -216,12 +216,8 @@ final class Widrow_AI_Tools {
 			},
 		) );
 
-		// What this buys: PHP's own max_execution_time no longer ends a stream that is still
-		// relaying a working turn. What it does not: a host's own wall-clock limit (the web
-		// server's or a proxy's timeout, FPM's request_terminate_timeout) still ends the
-		// request whatever PHP says. Re-attaching is what survives that: the turn runs on DEF,
-		// and the console resumes it from the last frame it saw (8.7.14). A relay whose viewer
-		// has gone is meant to die at its next write (PHP's default), freeing the worker.
+		// PHP's own max_execution_time must not end a Customer Chat or Setup Assistant stream
+		// still relaying a working turn; a host's wall-clock limit still applies regardless.
 		// set_time_limit is on many hosts' disable_functions list.
 		if ( function_exists( 'set_time_limit' ) ) {
 			set_time_limit( 0 );
@@ -810,7 +806,7 @@ final class Widrow_AI_Tools {
 	 *
 	 * Cached in the `widrow_ai_roles_catalog` option; `$refresh` re-fetches from DEF's bridge
 	 * (`GET /api/staff-ai/roles-catalog`, admin-gated — call with refresh only from a def_admin
-	 * context, e.g. the User Access page load). Fetch failure keeps the cached copy (assignment
+	 * context, e.g. the Settings page load). Fetch failure keeps the cached copy (assignment
 	 * must not break on a DEF blip). Entries are sanitized on store: slugs to the locked wire
 	 * format, names to plain text.
 	 *

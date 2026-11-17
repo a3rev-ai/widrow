@@ -1,6 +1,6 @@
 <?php
 /**
- * Admin settings page template — 5-tab layout.
+ * Admin settings page template — 4-tab layout.
  * Phase 7 D-I: Foundation tabbed layout with AJAX save.
  * Connection Config Migration: Connection moved to last tab with status dot indicator.
  *

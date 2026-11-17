@@ -103,7 +103,7 @@ function free_port(): int {
  * every output buffer (`while ( ob_get_level() ) ob_end_clean();`) so tokens are not held
  * back, which means an ob_start() capture silently collects nothing.
  */
-function drive( string $scenario ): string {
+function drive( string $scenario, string $mode = '', ?string &$err = null ): string {
 	$port   = free_port();
 	$server = __DIR__ . '/fixtures/sse-upstream-server.php';
 	$driver = __DIR__ . '/fixtures/sse-proxy-driver.php';
@@ -124,14 +124,14 @@ function drive( string $scenario ): string {
 	}
 
 	$drv = proc_open(
-		sprintf( '%s %s %s', escapeshellarg( PHP_BINARY ), escapeshellarg( $driver ),
-			escapeshellarg( "http://127.0.0.1:$port/api/chat/stream" ) ),
+		sprintf( '%s %s %s %s', escapeshellarg( PHP_BINARY ), escapeshellarg( $driver ),
+			escapeshellarg( "http://127.0.0.1:$port/api/chat/stream" ), escapeshellarg( $mode ) ),
 		array( 1 => array( 'pipe', 'w' ), 2 => array( 'pipe', 'w' ) ),
 		$dp
 	);
 	$out = is_resource( $drv ) ? (string) stream_get_contents( $dp[1] ) : '';
 	// The driver's STDERR, read once: its log rows (one JSON line each) for the stream-end
-	// checks in [8].
+	// checks in [8], then the `limit` mode's time-limit trailer for [10].
 	$err = is_resource( $drv ) ? (string) stream_get_contents( $dp[2] ) : '';
 	$GLOBALS['last_log'] = trim( $err );
 
@@ -283,6 +283,12 @@ $out  = drive( 'echo' );
 $evts = frames( $out );
 assert_true( 0 === strpos( (string) ( $evts[0]['request'] ?? '' ), 'POST /api/chat/stream ' ), 'a POST to the chat route (got ' . ( $evts[0]['request'] ?? '' ) . ')' );
 assert_true( 2 === ( $evts[0]['body_bytes'] ?? 0 ), 'the body goes with it' );
+
+// ── 10. The stream is not cut by PHP's own time limit ────────────────────
+echo "\n[10] stream_proxy lifts PHP's time limit for a long stream\n";
+
+drive( 'ok', 'limit', $err );
+assert_true( 'limit=0' === substr( $err, -7 ), 'stream_proxy lifted PHP\'s own time limit (got ' . $err . ')' );
 
 echo "\n--- SSE Proxy Integration Tests: $pass passed, $fail failed ---\n";
 exit( $fail > 0 ? 1 : 0 );

@@ -1,7 +1,7 @@
 *** Widrow AI Changelog ***
 
 = 11.0.0 - 2026/11/18 =
-* New - A major release: Staff AI has moved to the Tenant Portal. The Staff AI console at /staff-ai, the Open Staff AI menu item, the User Roles tab and the staff roster sync are removed from the plugin. After the update, /staff-ai on your site is an ordinary page not found.
+* New - A major release: Staff AI has moved to the Tenant Portal. The Staff AI console at /staff-ai, the Open Staff AI menu item, the User Roles tab and the staff roster sync are removed from the plugin. After the update, and once someone has opened wp-admin, /staff-ai on your site is an ordinary page not found.
 * Tweak - People who use the website tools from Staff AI keep their access. Site administrators grant or remove it with the Setup Assistant.
 * Tweak - Customer Chat, the Setup Assistant and Content AI are unchanged.
 

@@ -8,7 +8,9 @@
  * buffer so tokens reach the client unbuffered. An in-process ob_start() capture is
  * therefore impossible by design, and trying it silently captures nothing.
  *
- * Usage: php sse-proxy-driver.php <upstream-url>
+ * Usage: php sse-proxy-driver.php <upstream-url> [limit]
+ *        `limit` appends PHP's time limit after the stream to STDERR, so the caller can
+ *        read back what stream_proxy() set it to.
  *
  * @package widrow-ai/tests
  */
@@ -72,4 +74,9 @@ require_once WIDROW_AI_PLUGIN_DIR . 'includes/class-widrow-ai-tools.php';
 
 $method = new ReflectionMethod( 'Widrow_AI_Tools', 'stream_proxy' );
 $method->setAccessible( true );
+// A finite limit going in, so the limit stream_proxy() sets is the one read back.
+set_time_limit( 30 );
 $method->invoke( null, (string) $argv[1], array( 'Content-Type: application/json' ), '{}' );
+if ( 'limit' === ( $argv[2] ?? '' ) ) {
+	fwrite( STDERR, "\nlimit=" . ini_get( 'max_execution_time' ) );
+}

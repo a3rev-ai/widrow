@@ -8,7 +8,7 @@ Stable tag: 11.0.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-AI-powered Digital Employees for WordPress — customer chat, staff assistant, and intelligent setup, all connected to the Digital Employee Framework.
+AI-powered Digital Employees for WordPress — customer chat, content and website tools for your team, and intelligent setup, all connected to the Digital Employee Framework.
 
 == Description ==
 
@@ -120,7 +120,7 @@ Chat messages, user display name, session context, and the visitor's IP address 
 == Changelog ==
 
 = 11.0.0 - 2026-11-18 =
-* New - A major release: Staff AI has moved to the Tenant Portal. The Staff AI console at /staff-ai, the Open Staff AI menu item, the User Roles tab and the staff roster sync are removed from the plugin. After the update, /staff-ai on your site is an ordinary page not found.
+* New - A major release: Staff AI has moved to the Tenant Portal. The Staff AI console at /staff-ai, the Open Staff AI menu item, the User Roles tab and the staff roster sync are removed from the plugin. After the update, and once someone has opened wp-admin, /staff-ai on your site is an ordinary page not found.
 * Tweak - People who use the website tools from Staff AI keep their access. Site administrators grant or remove it with the Setup Assistant.
 * Tweak - Customer Chat, the Setup Assistant and Content AI are unchanged.
 

@@ -107,12 +107,10 @@ class Test_Stream_Token extends WP_UnitTestCase {
 		$staff_id = self::factory()->user->create( array( 'role' => 'administrator' ) );
 		get_user_by( 'id', $staff_id )->add_cap( 'widrow_staff_access' );
 		wp_set_current_user( $staff_id );
-		foreach ( array( 'customer_chat' ) as $channel ) {
-			$response = $this->mint( $channel, '', wp_create_nonce( 'wp_rest' ) );
-			$this->assertSame( 200, $response->get_status() );
-			$this->assertSame( array( 'token', 'exp', 'stream_url', 'live_url' ), array_keys( $response->get_data() ) );
-			$this->assertStringNotContainsString( self::API_KEY, wp_json_encode( $response->get_data() ) . wp_json_encode( $this->claims( $response ) ) );
-		}
+		$response = $this->mint( 'customer_chat', '', wp_create_nonce( 'wp_rest' ) );
+		$this->assertSame( 200, $response->get_status() );
+		$this->assertSame( array( 'token', 'exp', 'stream_url', 'live_url' ), array_keys( $response->get_data() ) );
+		$this->assertStringNotContainsString( self::API_KEY, wp_json_encode( $response->get_data() ) . wp_json_encode( $this->claims( $response ) ) );
 	}
 
 	public function test_stream_url_is_the_platform_stream_for_the_channel(): void {

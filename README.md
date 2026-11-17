@@ -1,6 +1,6 @@
 # Widrow AI
 
-AI-powered Digital Employees for your WordPress site. Customer-facing chat, internal staff assistant, and intelligent setup — all connected to the [Digital Employee Framework](https://defho.ai/).
+AI-powered Digital Employees for your WordPress site. Customer-facing chat, content and website tools for your team, and intelligent setup — all connected to the [Digital Employee Framework](https://defho.ai/).
 
 [![Download Plugin](https://img.shields.io/badge/Download_Plugin-v11.0.0-blue?style=for-the-badge&logo=wordpress)](https://github.com/a3rev-ai/widrow/releases/download/v11.0.0/widrow-ai.zip) [![License: GPL v2+](https://img.shields.io/badge/License-GPL_v2+-green?style=for-the-badge)](https://www.gnu.org/licenses/gpl-2.0.html) [![WordPress Tested 7.1](https://img.shields.io/badge/WordPress-Tested_7.1-21759b?style=for-the-badge&logo=wordpress)](https://wordpress.org/)
 
@@ -13,7 +13,7 @@ The framework is governed by a published constitution and reaches businesses thr
 - [The DEF Constitution, version 1.0](https://widrow.ai/the-def-constitution-version-1-0/)
 - [Privacy Statement](https://widrow.ai/privacy-statement/)
 - [Security and continuity](https://widrow.ai/security/) — where data runs, what is held, and what happens when you leave
-- The three Digital Employees this plugin delivers: [Joe](https://widrow.ai/digital-employees/joe/) (Customer Chat), [Suzie](https://widrow.ai/digital-employees/suzie/) (Staff AI) and [Sam](https://widrow.ai/digital-employees/sam/) (Setup Assistant)
+- The Digital Employees this plugin delivers on your site: [Joe](https://widrow.ai/digital-employees/joe/) (Customer Chat) and [Sam](https://widrow.ai/digital-employees/sam/) (Setup Assistant). [Suzie](https://widrow.ai/digital-employees/suzie/) (Staff AI) is served from the Tenant Portal and uses your site through this plugin
 
 ## What Are Digital Employees?
 
@@ -122,7 +122,7 @@ flowchart TD
     W["widrow.ai<br/>the public face"] --> P["defho.ai<br/>Partner Portal"]
     P --> T["Tenant Portal<br/>the business's settings, keys, knowledge, people"]
     T -- "One-Click Connect" --> C["Widrow AI plugin<br/>on the business's WordPress"]
-    C -- "Joe to the public; Suzie and Sam to staff" --> V["visitors and staff"]
+    C -- "Joe to the public; Sam to staff" --> V["visitors and staff"]
     V -. "the next business" .-> W
     D["DEF, the framework<br/>private, governed by the Constitution"]
     P <--> D
