@@ -15,7 +15,7 @@
  * Each also honours an override env var (BLOCK, PROJECTS, MEMORIES, USAGE,
  * INTEGRATIONS, DOCVIEWER, DOCUMENTS, ATTACH_GATE, UPLOAD_STAGED, SCHEDULED, VOICE,
  * CHAT_VOICE, CHAT_STRINGS, ASK_ENTRY, ASK_ENTRY_CALLS, CHAT_ATTACHMENTS, UPLOAD_RAIL,
- * ATTACHMENT_PROMPT, DISPLAY_TEXT, CONVERSATION_LIST, USER_ACCESS, CREATOR, TOOL_OUTPUT_CARD, CC_LOADER, CC_MODULE, PROJECT_CHIP) naming a file to load instead — that is how a "bite check" is run: put the OLD code back in
+ * ATTACHMENT_PROMPT, DISPLAY_TEXT, CONVERSATION_LIST, CREATOR, TOOL_OUTPUT_CARD, CC_LOADER, CC_MODULE, PROJECT_CHIP) naming a file to load instead — that is how a "bite check" is run: put the OLD code back in
  * a scratch file, point the env var at it, and watch the checks that are meant
  * to catch the regression actually fail.
  */
@@ -455,26 +455,6 @@ function customerChatLoader() {
 	return src;
 }
 
-// ── Settings → User Access (S3) ─────────────────────────────────────────
-// The access level, the role chips, the + Add role listbox, the filter, the
-// save payload and the wiring that joins them — out of the ADMIN script rather
-// than the console's. Sliced by the S3 markers so a harness runs the shipped
-// controls over the shipped inputs. `needs` names every function in the block,
-// not just the ones a harness calls by name: a rename that moves any of them out
-// is a hard error here rather than a check that quietly stops covering anything.
-function userAccess() {
-	return slice('user access',
-		l => l.includes('S3: User Access — access level, role chips, filter'),
-		l => l.includes('end S3: User Access'),
-		['function accessCatalog', 'function accessText', 'function accessFill',
-			'function accessRoleName', 'function accessCapInput',
-			'function accessLevelOf', 'function setAccessLevel', 'function buildAccessLevel',
-			'function accessRolesOf', 'function accessRolesAvailable', 'function setAccessRole',
-			'function renderRolesCell', 'function buildAddRole', 'function renderAccessRow',
-			'function initAccessRows', 'function applyRoleFilter', 'function accessPayload'],
-		'USER_ACCESS', ADMIN_PATH);
-}
-
 // ── Setup Assistant: the desktop column collapses to a rail (S4) ────
 // The remembered state, the paint, the two-ended disclosure and the breakpoint
 // sync - out of the SHIPPED drawer script by the S4 markers, so a harness runs
@@ -660,7 +640,7 @@ function stubMatchMedia(w) {
 	w.matchMedia = q => ({ media: q, matches: q.split(',').some(part => part.split(/\band\b/).every(holds)) });
 }
 
-module.exports = { REPO, stubMatchMedia, JS_PATH, CC_PATH, VOICE_PATH, ADMIN_PATH, userAccess, creator, DRAFT_CARDS_PATH, TEMPLATE_PATH, slice, element, pageShell, consoleMenu, projects, projectChip, memories, installedShare, toolOutputCard,
+module.exports = { REPO, stubMatchMedia, JS_PATH, CC_PATH, VOICE_PATH, ADMIN_PATH, creator, DRAFT_CARDS_PATH, TEMPLATE_PATH, slice, element, pageShell, consoleMenu, projects, projectChip, memories, installedShare, toolOutputCard,
 	chatAttachments, uploadRail, attachmentPrompt, displayText, conversationList,
 	usage, integrations, documentViewer, documents, artifacts, artifactFrame, cssRules, mediaBlock, ruleBody, RULE_START,
 	setupAssistantCollapse, DRAWER_JS_PATH, release, askEntry, askEntryCalls, buildAskEntry, pushAskEntry,

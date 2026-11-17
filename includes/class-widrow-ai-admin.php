@@ -181,9 +181,6 @@ final class Widrow_AI_Admin {
 		add_action( 'admin_notices', array( __CLASS__, 'maybe_show_encryption_notice' ) );
 		add_action( 'wp_ajax_widrow_ai_save_settings', array( __CLASS__, 'ajax_save_settings' ) );
 		add_action( 'wp_ajax_widrow_ai_test_connection', array( __CLASS__, 'ajax_test_connection' ) );
-		add_action( 'wp_ajax_widrow_ai_save_user_roles', array( __CLASS__, 'ajax_save_user_roles' ) );
-		add_action( 'wp_ajax_widrow_ai_search_users', array( __CLASS__, 'ajax_search_users' ) );
-		add_action( 'wp_ajax_widrow_ai_remove_user_roles', array( __CLASS__, 'ajax_remove_user_roles' ) );
 		add_action( 'wp_ajax_widrow_ai_test_escalation_email', array( __CLASS__, 'ajax_test_escalation_email' ) );
 		add_action( 'wp_ajax_widrow_ai_save_manual_connection', array( __CLASS__, 'ajax_save_manual_connection' ) );
 		add_action( 'admin_notices', array( __CLASS__, 'maybe_show_oauth_notice' ) );
@@ -211,19 +208,6 @@ final class Widrow_AI_Admin {
 			'widrow_admin_access',
 			'widrow-ai'
 		);
-
-		// Add "Open Staff AI" link — opens in new tab via JS (see admin_footer hook).
-		add_submenu_page(
-			'widrow-ai',
-			__( 'Staff AI', 'widrow-ai' ),
-			__( 'Open Staff AI', 'widrow-ai' ),
-			'widrow_staff_access',
-			'widrow-ai-staff-ai',
-			'__return_null'
-		);
-
-		// Redirect the Staff AI submenu slug to the actual /staff-ai frontend URL.
-		add_action( 'admin_footer', array( __CLASS__, 'staff_ai_submenu_redirect' ) );
 	}
 
 	/**
@@ -255,25 +239,6 @@ final class Widrow_AI_Admin {
 		}
 
 		return $caps;
-	}
-
-	/**
-	 * Output inline JS to make the "Open Staff AI" submenu link open /staff-ai in a new tab.
-	 */
-	public static function staff_ai_submenu_redirect(): void {
-		$staff_ai_url = home_url( '/staff-ai/' );
-		?>
-		<script>
-		(function() {
-			var link = document.querySelector('a[href="admin.php?page=widrow-ai-staff-ai"]');
-			if (link) {
-				link.href = <?php echo wp_json_encode( $staff_ai_url ); ?>;
-				link.target = '_blank';
-				link.rel = 'noopener';
-			}
-		})();
-		</script>
-		<?php
 	}
 
 	/**
@@ -381,10 +346,8 @@ final class Widrow_AI_Admin {
 		// D-II: Enqueue media uploader for branding tab.
 		wp_enqueue_media();
 
-		// Custom roles (R4): refresh the catalog BEFORE localizing so the JS row-builder and the
-		// PHP-rendered columns use the SAME catalog — a one-load-stale JS copy would shift an
-		// added row's checkboxes under the wrong headers (a privilege-grant mislabel).
-		$roles_catalog = \Widrow_AI_Tools::get_roles_catalog( true );
+		// Custom roles (R4): refresh the cached catalog the Setup Assistant's grants read.
+		\Widrow_AI_Tools::get_roles_catalog( true );
 
 		// Localize script data for JS.
 		$cached_connection = get_transient( 'widrow_ai_connection_test' );
@@ -392,40 +355,12 @@ final class Widrow_AI_Admin {
 			'ajaxUrl'          => admin_url( 'admin-ajax.php' ),
 			'saveNonce'        => wp_create_nonce( 'widrow_ai_save_settings' ),
 			'testNonce'        => wp_create_nonce( 'widrow_ai_test_connection' ),
-			'rolesNonce'       => wp_create_nonce( 'widrow_ai_save_user_roles' ),
-			'searchUsersNonce' => wp_create_nonce( 'widrow_ai_search_users' ),
 			'testEmailNonce'   => wp_create_nonce( 'widrow_ai_test_escalation_email' ),
 			'connNonce'        => wp_create_nonce( 'widrow_ai_save_manual_connection' ),
 			'oauthStartNonce'  => wp_create_nonce( 'widrow_ai_oauth_start' ),
 			'oauthDisconnectNonce' => wp_create_nonce( 'widrow_ai_oauth_disconnect' ),
 			'defhoUrl'         => Widrow_AI_OAuth::get_defho_url(),
 			'cachedConnection' => $cached_connection ? $cached_connection : null,
-			// Custom roles (R4): the just-refreshed catalog — same array the PHP columns render.
-			'rolesCatalog'     => $roles_catalog,
-			// S3: the User Access strings the script writes into the page. The
-			// checkbox grid put all of these in the markup, where esc_html_e()
-			// reached them; the chips and the two-way control are built in JS, so
-			// they would ship as English on a translated site without this.
-			'userAccessI18n'   => array(
-				'staff'        => __( 'Staff', 'widrow-ai' ),
-				'management'   => __( 'Management', 'widrow-ai' ),
-				'accessLevel'  => __( 'Access level', 'widrow-ai' ),
-				/* translators: %s: the name of the person. */
-				'accessFor'    => __( 'Access level for %s', 'widrow-ai' ),
-				'addRole'      => __( '+ Add role', 'widrow-ai' ),
-				'allRolesOn'   => __( 'Every role is on', 'widrow-ai' ),
-				/* translators: %s: the name of the role. */
-				'removeRole'   => __( 'Remove role %s', 'widrow-ai' ),
-				'onePerson'    => __( '1 person', 'widrow-ai' ),
-				/* translators: %d: how many people match the filter. */
-				'manyPeople'   => __( '%d people', 'widrow-ai' ),
-				'colUser'      => __( 'User', 'widrow-ai' ),
-				'colWpRole'    => __( 'WordPress role', 'widrow-ai' ),
-				'colRoles'     => __( 'Roles', 'widrow-ai' ),
-				'colDefAdmin'  => __( 'DEF Admin', 'widrow-ai' ),
-				'colActions'   => __( 'Actions', 'widrow-ai' ),
-				'removeAccess' => __( 'Remove all DEF access', 'widrow-ai' ),
-			),
 		) );
 
 		// Connection status data (for status indicator).
@@ -496,40 +431,6 @@ final class Widrow_AI_Admin {
 			'ack_subject'  => (string) get_option( 'widrow_ai_chat_escalation_ack_subject', '' ),
 			'ack_body'     => (string) get_option( 'widrow_ai_chat_escalation_ack_body', '' ),
 		);
-
-		// D-II: User roles data — only users with at least one DEF capability.
-		// Custom roles (R4): $roles_catalog was refreshed above (before the JS localize — the two
-		// MUST share one catalog); include users whose ONLY grant is a custom-role cap.
-		$role_caps        = \Widrow_AI_Tools::get_role_caps();
-		$widrow_capabilities = array_merge(
-			array( 'widrow_staff_access', 'widrow_management_access', 'widrow_admin_access' ),
-			$role_caps
-		);
-		$def_user_ids     = array();
-		foreach ( $widrow_capabilities as $cap ) {
-			$ids = get_users( array(
-				'capability' => $cap,
-				'fields'     => 'ids',
-			) );
-			$def_user_ids = array_merge( $def_user_ids, $ids );
-		}
-		$def_user_ids = array_unique( array_map( 'intval', $def_user_ids ) );
-
-		$def_users = array();
-		if ( ! empty( $def_user_ids ) ) {
-			$query = new \WP_User_Query( array(
-				'include' => $def_user_ids,
-				'orderby' => 'display_name',
-				'order'   => 'ASC',
-			) );
-			$def_users = $query->get_results();
-		}
-
-		$widrow_admin_ids   = get_users( array(
-			'capability' => 'widrow_admin_access',
-			'fields'     => 'ids',
-		) );
-		$widrow_admin_count = count( $widrow_admin_ids );
 
 		// D-II: Chat settings.
 		$chat_settings = array(
@@ -1248,249 +1149,6 @@ final class Widrow_AI_Admin {
 		wp_send_json_success( array(
 			'message' => __( 'Settings saved.', 'widrow-ai' ),
 			'saved'   => $saved,
-		) );
-	}
-
-	// ─── D-II: AJAX User Roles ──────────────────────────────────────
-
-	/**
-	 * AJAX handler for saving user DEF capabilities.
-	 * Requires widrow_admin_access capability.
-	 */
-	public static function ajax_save_user_roles(): void {
-		if ( ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['nonce'] ) ), 'widrow_ai_save_user_roles' ) ) {
-			wp_send_json_error( array( 'message' => __( 'Security check failed.', 'widrow-ai' ) ), 403 );
-		}
-
-		if ( ! current_user_can( 'widrow_admin_access' ) ) {
-			wp_send_json_error( array( 'message' => __( 'Permission denied. DEF Admin access required.', 'widrow-ai' ) ), 403 );
-		}
-
-		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
-		$roles_data = isset( $_POST['roles'] ) ? wp_unslash( $_POST['roles'] ) : array();
-		if ( ! is_array( $roles_data ) ) {
-			wp_send_json_error( array( 'message' => __( 'Invalid data.', 'widrow-ai' ) ) );
-		}
-
-		// Custom roles (R4): the writable cap set = the fixed trio + the CACHED catalog's
-		// widrow_role_* caps — server-side from the option, never from client input.
-		$capabilities   = array_merge(
-			array( 'widrow_staff_access', 'widrow_management_access', 'widrow_admin_access' ),
-			\Widrow_AI_Tools::get_role_caps()
-		);
-		$submitted_ids  = array_map( 'intval', array_keys( $roles_data ) );
-
-		// Lockout prevention: ensure at least one user keeps widrow_admin_access.
-		$admin_count = 0;
-
-		// Count submitted users who would keep widrow_admin_access.
-		foreach ( $roles_data as $uid => $caps ) {
-			if ( ! empty( $caps['widrow_admin_access'] ) ) {
-				$admin_count++;
-			}
-		}
-
-		// Count existing widrow_admin_access users NOT in the submitted data.
-		$existing_admins = get_users( array(
-			'capability' => 'widrow_admin_access',
-			'fields'     => 'ids',
-			'exclude'    => $submitted_ids,
-		) );
-		$admin_count += count( $existing_admins );
-
-		if ( $admin_count < 1 ) {
-			wp_send_json_error( array(
-				'message' => __( 'Cannot save — at least one user must have DEF Admin access.', 'widrow-ai' ),
-			) );
-			return;
-		}
-
-		// Apply capability changes.
-		foreach ( $roles_data as $user_id => $caps ) {
-			$user_id = (int) $user_id;
-			$user    = get_userdata( $user_id );
-			if ( ! $user ) {
-				continue;
-			}
-
-			// Staff and Management are mutually exclusive.
-			// If both are submitted, keep Management only (higher access level).
-			$has_staff = isset( $caps['widrow_staff_access'] ) && '1' === $caps['widrow_staff_access'];
-			$has_mgmt  = isset( $caps['widrow_management_access'] ) && '1' === $caps['widrow_management_access'];
-			if ( $has_staff && $has_mgmt ) {
-				$caps['widrow_staff_access'] = '0';
-			}
-
-			foreach ( $capabilities as $cap ) {
-				// Written unconditionally. add_cap/remove_cap are idempotent, so
-				// the has_cap() guards these lines used to carry bought nothing
-				// and cost correctness: map_def_capabilities() makes
-				// has_cap('widrow_staff_access') answer TRUE for every Management
-				// and DEF-Admin user, so the guard skipped the very writes that
-				// mattered. A Management→Staff downgrade removed Management but
-				// never stored Staff, locking the user out of Staff-AI entirely;
-				// ticking Staff on a DEF-Admin stored nothing while the grid
-				// rendered the tick as present.
-				if ( ! empty( $caps[ $cap ] ) ) {
-					$user->add_cap( $cap );
-				} else {
-					$user->remove_cap( $cap );
-				}
-			}
-		}
-
-		// Staff/Management ticks changed — tell DEF who the Staff-AI users are
-		// now (D-U10). Queued, never sent inline: the save must not wait on an
-		// outbound call, nor fail because one did.
-		Widrow_AI_Staff_Roster::schedule_push();
-
-		wp_send_json_success( array(
-			'message' => __( 'User roles updated.', 'widrow-ai' ),
-		) );
-	}
-
-	// ─── D-II: AJAX Search Users ────────────────────────────────────
-
-	/**
-	 * AJAX handler for searching WordPress users by email or display name.
-	 * Returns users not already in the DEF user roles table.
-	 */
-	public static function ajax_search_users(): void {
-		if ( ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['nonce'] ) ), 'widrow_ai_search_users' ) ) {
-			wp_send_json_error( array( 'message' => __( 'Security check failed.', 'widrow-ai' ) ), 403 );
-		}
-
-		if ( ! current_user_can( 'widrow_admin_access' ) ) {
-			wp_send_json_error( array( 'message' => __( 'Permission denied.', 'widrow-ai' ) ), 403 );
-		}
-
-		$term = isset( $_POST['term'] ) ? sanitize_text_field( wp_unslash( $_POST['term'] ) ) : '';
-		if ( strlen( $term ) < 2 ) {
-			wp_send_json_success( array( 'users' => array() ) );
-			return;
-		}
-
-		// Search by email, display name, or user login.
-		$core_query = new \WP_User_Query( array(
-			'search'         => '*' . $term . '*',
-			'search_columns' => array( 'user_email', 'display_name', 'user_login' ),
-			'number'         => 10,
-			'orderby'        => 'display_name',
-			'order'          => 'ASC',
-		) );
-
-		// Also search by first_name / last_name (user meta).
-		$meta_query = new \WP_User_Query( array(
-			'meta_query' => array(
-				'relation' => 'OR',
-				array(
-					'key'     => 'first_name',
-					'value'   => $term,
-					'compare' => 'LIKE',
-				),
-				array(
-					'key'     => 'last_name',
-					'value'   => $term,
-					'compare' => 'LIKE',
-				),
-			),
-			'number'  => 10,
-			'orderby' => 'display_name',
-			'order'   => 'ASC',
-		) );
-
-		// Merge and deduplicate.
-		$seen    = array();
-		$results = array();
-		$all_users = array_merge( $core_query->get_results(), $meta_query->get_results() );
-		foreach ( $all_users as $user ) {
-			if ( isset( $seen[ $user->ID ] ) ) {
-				continue;
-			}
-			$seen[ $user->ID ] = true;
-
-			$first = get_user_meta( $user->ID, 'first_name', true );
-			$last  = get_user_meta( $user->ID, 'last_name', true );
-			$full  = trim( $first . ' ' . $last );
-
-			$results[] = array(
-				'id'           => $user->ID,
-				'display_name' => $full ? $full : $user->display_name,
-				'user_login'   => $user->user_login,
-				'email'        => $user->user_email,
-				'role'         => implode( ', ', array_map( 'ucfirst', $user->roles ) ),
-				'avatar'       => get_avatar_url( $user->ID, array( 'size' => 24 ) ),
-				'has_staff'    => $user->has_cap( 'widrow_staff_access' ),
-				'has_mgmt'     => $user->has_cap( 'widrow_management_access' ),
-				'has_admin'    => $user->has_cap( 'widrow_admin_access' ),
-			);
-			if ( count( $results ) >= 10 ) {
-				break;
-			}
-		}
-
-		wp_send_json_success( array( 'users' => $results ) );
-	}
-
-	// ─── D-II: AJAX Remove User Roles ───────────────────────────────
-
-	/**
-	 * AJAX handler for removing all DEF capabilities from a user.
-	 */
-	public static function ajax_remove_user_roles(): void {
-		if ( ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['nonce'] ) ), 'widrow_ai_save_user_roles' ) ) {
-			wp_send_json_error( array( 'message' => __( 'Security check failed.', 'widrow-ai' ) ), 403 );
-		}
-
-		if ( ! current_user_can( 'widrow_admin_access' ) ) {
-			wp_send_json_error( array( 'message' => __( 'Permission denied.', 'widrow-ai' ) ), 403 );
-		}
-
-		$user_id = isset( $_POST['user_id'] ) ? (int) $_POST['user_id'] : 0;
-		if ( ! $user_id ) {
-			wp_send_json_error( array( 'message' => __( 'Invalid user.', 'widrow-ai' ) ) );
-			return;
-		}
-
-		$user = get_userdata( $user_id );
-		if ( ! $user ) {
-			wp_send_json_error( array( 'message' => __( 'User not found.', 'widrow-ai' ) ) );
-			return;
-		}
-
-		// Lockout prevention: cannot remove the last DEF Admin.
-		if ( $user->has_cap( 'widrow_admin_access' ) ) {
-			$admin_ids = get_users( array(
-				'capability' => 'widrow_admin_access',
-				'fields'     => 'ids',
-			) );
-			if ( count( $admin_ids ) <= 1 && in_array( $user_id, array_map( 'intval', $admin_ids ), true ) ) {
-				wp_send_json_error( array(
-					'message' => __( 'Cannot remove the last DEF Admin. At least one user must have DEF Admin access.', 'widrow-ai' ),
-				) );
-				return;
-			}
-		}
-
-		$capabilities = array_merge(
-			array( 'widrow_staff_access', 'widrow_management_access', 'widrow_admin_access' ),
-			\Widrow_AI_Tools::get_role_caps()
-		);
-		foreach ( $capabilities as $cap ) {
-			if ( $user->has_cap( $cap ) ) {
-				$user->remove_cap( $cap );
-			}
-		}
-
-		// A revoked user must leave DEF's roster too (D-U10).
-		Widrow_AI_Staff_Roster::schedule_push();
-
-		wp_send_json_success( array(
-			'message' => sprintf(
-				/* translators: %s: user display name */
-				__( '%s removed from DEF access.', 'widrow-ai' ),
-				$user->display_name
-			),
 		) );
 	}
 
