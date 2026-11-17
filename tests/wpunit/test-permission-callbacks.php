@@ -115,64 +115,31 @@ class Test_Permission_Callbacks extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Test: Staff AI conversations rejects anonymous (401).
+	 * Test: Content AI drafts rejects anonymous (401).
 	 */
 	public function test_staff_ai_rejects_anonymous(): void {
 		wp_set_current_user( 0 );
 
-		$request  = new WP_REST_Request( 'GET', '/a3-ai/v1/staff-ai/conversations' );
+		$request  = new WP_REST_Request( 'GET', '/a3-ai/v1/staff-ai/content/drafts' );
 		$response = $this->server->dispatch( $request );
 
 		$this->assertEquals( 401, $response->get_status(), 'Staff AI should reject anonymous users with 401' );
 	}
 
 	/**
-	 * Test: Staff AI conversations rejects subscriber without cap (403).
+	 * Test: Content AI drafts rejects subscriber without cap (403).
 	 */
 	public function test_staff_ai_rejects_subscriber_without_cap(): void {
 		wp_set_current_user( $this->subscriber_id );
 
-		$request  = new WP_REST_Request( 'GET', '/a3-ai/v1/staff-ai/conversations' );
+		$request  = new WP_REST_Request( 'GET', '/a3-ai/v1/staff-ai/content/drafts' );
 		$response = $this->server->dispatch( $request );
 
 		$this->assertEquals( 403, $response->get_status(), 'Staff AI should reject subscriber without widrow_staff_access with 403' );
 	}
 
 	/**
-	 * Chat Options: the ⋮ menu's write verbs reject anonymous (401) and a
-	 * subscriber without the capability (403) - all three routes.
-	 */
-	public function test_chat_options_rejects_anonymous_and_uncapped(): void {
-		$calls = array(
-			array( 'PATCH', '/a3-ai/v1/staff-ai/conversations/abc123' ),
-			array( 'DELETE', '/a3-ai/v1/staff-ai/conversations/abc123' ),
-			array( 'PUT', '/a3-ai/v1/staff-ai/conversations/abc123/project' ),
-		);
-		foreach ( $calls as $call ) {
-			wp_set_current_user( 0 );
-			$response = $this->server->dispatch( new WP_REST_Request( $call[0], $call[1] ) );
-			$this->assertEquals( 401, $response->get_status(), $call[0] . ' should 401 anonymously' );
-
-			wp_set_current_user( $this->subscriber_id );
-			$response = $this->server->dispatch( new WP_REST_Request( $call[0], $call[1] ) );
-			$this->assertEquals( 403, $response->get_status(), $call[0] . ' should 403 without the capability' );
-		}
-	}
-
-	/**
-	 * Projects P-C: the bound-tasks list rejects anonymous (401) and a
-	 * subscriber without the capability (403).
-	 */
-	public function test_project_tasks_rejects_anonymous_and_uncapped(): void {
-		$path = '/a3-ai/v1/staff-ai/projects/abc-123/tasks';
-		wp_set_current_user( 0 );
-		$this->assertEquals( 401, $this->server->dispatch( new WP_REST_Request( 'GET', $path ) )->get_status() );
-		wp_set_current_user( $this->subscriber_id );
-		$this->assertEquals( 403, $this->server->dispatch( new WP_REST_Request( 'GET', $path ) )->get_status() );
-	}
-
-	/**
-	 * Test: Staff AI conversations passes for user with widrow_staff_access cap.
+	 * Test: Content AI drafts passes for user with widrow_staff_access cap.
 	 *
 	 * Note: The actual backend call will fail (no Python backend), but
 	 * permission check should pass — we just verify the response is NOT 401/403.
@@ -180,7 +147,7 @@ class Test_Permission_Callbacks extends WP_UnitTestCase {
 	public function test_staff_ai_passes_for_staff_user(): void {
 		wp_set_current_user( $this->staff_user_id );
 
-		$request  = new WP_REST_Request( 'GET', '/a3-ai/v1/staff-ai/conversations' );
+		$request  = new WP_REST_Request( 'GET', '/a3-ai/v1/staff-ai/content/drafts' );
 		$response = $this->server->dispatch( $request );
 
 		// Permission passed if we don't get 401 or 403.
@@ -189,7 +156,7 @@ class Test_Permission_Callbacks extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Test: Staff AI status — an admin PASSES, via the ratified built-in model.
+	 * Test: Content AI drafts — an admin PASSES, via the ratified built-in model.
 	 *
 	 * Access is built in for widrow_admin_access / widrow_management_access holders:
 	 * map_def_capabilities (map_meta_cap, 9130808) grants widrow_staff_access
@@ -199,16 +166,16 @@ class Test_Permission_Callbacks extends WP_UnitTestCase {
 	 * makes it explicit — real WP's map_meta_cap then does the passing, which
 	 * is exactly what this test pins (see the unhook mutation in the PR).
 	 */
-	public function test_status_passes_for_admin(): void {
+	public function test_content_drafts_passes_for_admin(): void {
 		$admin = get_user_by( 'id', $this->admin_id );
 		$admin->add_cap( 'widrow_admin_access' );
 		wp_set_current_user( $this->admin_id );
 
-		$request  = new WP_REST_Request( 'GET', '/a3-ai/v1/staff-ai/status' );
+		$request  = new WP_REST_Request( 'GET', '/a3-ai/v1/staff-ai/content/drafts' );
 		$response = $this->server->dispatch( $request );
 
-		$this->assertNotEquals( 401, $response->get_status(), 'Admin with widrow_admin_access should not get 401 on status' );
-		$this->assertNotEquals( 403, $response->get_status(), 'Admin with widrow_admin_access should not get 403 on status' );
+		$this->assertNotEquals( 401, $response->get_status(), 'Admin with widrow_admin_access should not get 401 on content drafts' );
+		$this->assertNotEquals( 403, $response->get_status(), 'Admin with widrow_admin_access should not get 403 on content drafts' );
 	}
 
 	/**
@@ -219,10 +186,10 @@ class Test_Permission_Callbacks extends WP_UnitTestCase {
 	 * def_staff_access_required (5.7.7) precisely so this assertion can tell
 	 * the gate from every other 401/403 — including an absent backend.
 	 */
-	public function test_status_refuses_manage_options_alone(): void {
+	public function test_content_drafts_refuses_manage_options_alone(): void {
 		wp_set_current_user( $this->admin_id ); // administrator role, NO def caps
 
-		$request  = new WP_REST_Request( 'GET', '/a3-ai/v1/staff-ai/status' );
+		$request  = new WP_REST_Request( 'GET', '/a3-ai/v1/staff-ai/content/drafts' );
 		$response = $this->server->dispatch( $request );
 
 		$this->assertEquals( 403, $response->get_status(), 'manage_options alone is refused' );
@@ -237,10 +204,10 @@ class Test_Permission_Callbacks extends WP_UnitTestCase {
 	/**
 	 * Test: a user with no DEF caps gets the named 403 — the inverse pin.
 	 */
-	public function test_status_refuses_no_caps_user_with_named_code(): void {
+	public function test_content_drafts_refuses_no_caps_user_with_named_code(): void {
 		wp_set_current_user( $this->subscriber_id );
 
-		$request  = new WP_REST_Request( 'GET', '/a3-ai/v1/staff-ai/status' );
+		$request  = new WP_REST_Request( 'GET', '/a3-ai/v1/staff-ai/content/drafts' );
 		$response = $this->server->dispatch( $request );
 
 		$this->assertEquals( 403, $response->get_status(), 'no-caps user is refused with 403' );
@@ -249,18 +216,18 @@ class Test_Permission_Callbacks extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Test: Staff AI status endpoint — subscriber without cap gets 403.
+	 * Test: Content AI drafts — subscriber without cap gets 403.
 	 */
-	public function test_status_rejects_subscriber(): void {
+	public function test_content_drafts_rejects_subscriber(): void {
 		wp_set_current_user( $this->subscriber_id );
 
-		$request  = new WP_REST_Request( 'GET', '/a3-ai/v1/staff-ai/status' );
+		$request  = new WP_REST_Request( 'GET', '/a3-ai/v1/staff-ai/content/drafts' );
 		$response = $this->server->dispatch( $request );
 
 		$this->assertContains(
 			$response->get_status(),
 			array( 401, 403 ),
-			'Subscriber should get 401 or 403 on status endpoint'
+			'Subscriber should get 401 or 403 on content drafts'
 		);
 	}
 

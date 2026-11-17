@@ -47,51 +47,25 @@ class Test_Route_Registration extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Test that Staff AI routes are registered.
+	 * 11.0.0: the Staff AI console moved to the Tenant Portal. None of its routes, no
+	 * passthrough and no staff stream-token channel is left; Content AI's routes stay.
 	 */
-	public function test_staff_ai_routes_registered(): void {
-		// /staff-ai/tools/invoke was removed in PR #19 (tool invocation goes
-		// through /staff-ai/chat) — this list asserted it for years while the
-		// suite never ran in CI (fixed 5.7.12, the wpunit→CI slice).
-		$expected = array(
-			'/a3-ai/v1/staff-ai/conversations',
-			'/a3-ai/v1/staff-ai/chat',
-			'/a3-ai/v1/staff-ai/status',
-			'/a3-ai/v1/staff-ai/tools',
+	public function test_staff_ai_console_routes_not_registered(): void {
+		$staff_ai = array_filter(
+			array_keys( $this->routes ),
+			function ( $route ) {
+				return 0 === strpos( $route, '/a3-ai/v1/staff-ai/' );
+			}
 		);
-		foreach ( $expected as $route ) {
-			$this->assertArrayHasKey( $route, $this->routes, "Staff AI route missing: $route" );
+		$this->assertNotEmpty( $staff_ai, 'the Content AI routes are registered' );
+		foreach ( $staff_ai as $route ) {
+			$this->assertStringStartsWith( '/a3-ai/v1/staff-ai/content/', $route, "only Content AI routes stay under /staff-ai: $route" );
 		}
-		$this->assertArrayNotHasKey(
-			'/a3-ai/v1/staff-ai/tools/invoke',
-			$this->routes,
-			'tools/invoke stays removed (PR #19) — a re-registration needs its own review'
-		);
-	}
+		$this->assertArrayHasKey( '/a3-ai/v1/staff-ai/content/drafts', $this->routes, 'content drafts route missing' );
+		$this->assertArrayHasKey( '/a3-ai/v1/staff-ai/content/create', $this->routes, 'content create route missing' );
 
-	/**
-	 * Chat Options (v7.1.0): the ⋮ menu's verbs are registered on the
-	 * conversation routes, each behind rest_permission_check.
-	 */
-	public function test_chat_options_routes_registered(): void {
-		$single = '/a3-ai/v1/staff-ai/conversations/(?P<id>[a-zA-Z0-9_-]+)';
-		$this->assertArrayHasKey( $single, $this->routes, 'single-conversation route missing' );
-		$methods = $this->get_route_methods( $single );
-		foreach ( array( 'GET', 'PATCH', 'DELETE' ) as $verb ) {
-			$this->assertContains( $verb, $methods, "$single should accept $verb" );
-		}
-		$project = $single . '/project';
-		$this->assertArrayHasKey( $project, $this->routes, 'conversation project route missing' );
-		$this->assertContains( 'PUT', $this->get_route_methods( $project ), "$project should accept PUT" );
-	}
-
-	/**
-	 * Projects P-C (v7.2.0): the bound-tasks list behind rest_permission_check.
-	 */
-	public function test_project_tasks_route_registered(): void {
-		$route = '/a3-ai/v1/staff-ai/projects/(?P<project_id>[a-zA-Z0-9-]+)/tasks';
-		$this->assertArrayHasKey( $route, $this->routes, 'project tasks route missing' );
-		$this->assertContains( 'GET', $this->get_route_methods( $route ), "$route should accept GET" );
+		$channel = $this->routes['/a3-ai/v1/chat/stream-token'][0]['args']['channel']['enum'] ?? null;
+		$this->assertSame( array( 'customer_chat' ), $channel, 'the stream token has no staff_ai channel' );
 	}
 
 	/**
@@ -173,9 +147,6 @@ class Test_Route_Registration extends WP_UnitTestCase {
 			'/a3-ai/v1/context-token',
 			'/a3-ai/v1/jwks',
 			'/a3-ai/v1/tools/me',
-			'/a3-ai/v1/staff-ai/conversations',
-			'/a3-ai/v1/staff-ai/status',
-			'/a3-ai/v1/staff-ai/tools',
 			'/a3-ai/v1/settings/escalation',
 		);
 		foreach ( $get_routes as $route_path ) {
@@ -189,8 +160,6 @@ class Test_Route_Registration extends WP_UnitTestCase {
 		// POST-only routes.
 		$post_routes = array(
 			'/a3-ai/v1/chat/stream',
-			'/a3-ai/v1/staff-ai/chat',
-			'/a3-ai/v1/staff-ai/tools/invoke',
 			'/a3-ai/v1/escalation/send-email',
 		);
 		foreach ( $post_routes as $route_path ) {

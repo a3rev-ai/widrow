@@ -156,7 +156,7 @@ final class Widrow_AI_Tools {
 	 *
 	 * @param string  $url     DEF backend URL.
 	 * @param array   $headers HTTP headers for the upstream request.
-	 * @param ?string $body    Request body; null sends a GET (the Staff AI turn resume).
+	 * @param string  $body    Request body.
 	 * @return void
 	 */
 	private static function stream_proxy( $url, $headers, $body ) {
@@ -215,9 +215,6 @@ final class Widrow_AI_Tools {
 				return strlen( $data );
 			},
 		) );
-		if ( null === $body ) {
-			curl_setopt( $ch, CURLOPT_HTTPGET, true );
-		}
 
 		// What this buys: PHP's own max_execution_time no longer ends a stream that is still
 		// relaying a working turn. What it does not: a host's own wall-clock limit (the web

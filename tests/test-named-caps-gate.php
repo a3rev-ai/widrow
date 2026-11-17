@@ -191,14 +191,6 @@ const CAPS_REGISTRY = array(
 		'class' => 'system',
 		'why'   => 'Tool-response bound protecting the LLM context window; oversize is reported in the payload.',
 	),
-	'includes/class-widrow-ai-staff-ai.php::SHARE_MAX_ATTACHMENT_COUNT' => array(
-		'class' => 'system',
-		'why'   => 'Email transport ceiling on share attachments; refuses visibly and is documented (5.7.0).',
-	),
-	'includes/class-widrow-ai-staff-ai.php::SHARE_MAX_ATTACHMENT_BYTES' => array(
-		'class' => 'system',
-		'why'   => 'The byte half of the same transport ceiling (~SMTP message limits).',
-	),
 	'includes/class-widrow-ai-staff-ai.php::CREATE_MAX_REFERENCE_FILE_BYTES' => array(
 		'class' => 'system',
 		'why'   => 'Acceptance bound on the total DECODED size of reference files — refuses over-size, never slices.',

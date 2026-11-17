@@ -280,19 +280,19 @@ update_option( 'widrow_ai_staff_ai_api_url', 'http://backend:8000' );
 $_wp_test_remote_responses = array(
 	array(
 		'response' => array( 'code' => 200 ),
-		'body'     => json_encode( array( 'threads' => array() ) ),
+		'body'     => json_encode( array( 'last_run' => null ) ),
 	),
 );
 $_wp_test_remote_calls = array();
 
-$request = new WP_REST_Request( 'GET', '/staff-ai/conversations' );
-Widrow_AI_Staff_AI::rest_list_conversations( $request );
+$request = new WP_REST_Request( 'GET', '/staff-ai/content/last-run' );
+Widrow_AI_Staff_AI::rest_content_last_run( $request );
 
 assert_true( count( $_wp_test_remote_calls ) === 1, 'exactly 1 HTTP call made' );
 assert_equals(
-	'http://backend:8000/api/staff-ai/threads',
+	'http://backend:8000/api/staff-ai/content/last-run',
 	$_wp_test_remote_calls[0]['url'],
-	'URL = base + /api/staff-ai/threads'
+	'URL = base + /api/staff-ai/content/last-run'
 );
 
 // 2. Trailing slash stripped from base URL.
@@ -302,14 +302,14 @@ update_option( 'widrow_ai_staff_ai_api_url', 'http://backend:8000/' ); // Note t
 $_wp_test_remote_responses = array(
 	array(
 		'response' => array( 'code' => 200 ),
-		'body'     => json_encode( array( 'threads' => array() ) ),
+		'body'     => json_encode( array( 'last_run' => null ) ),
 	),
 );
 $_wp_test_remote_calls = array();
 
-Widrow_AI_Staff_AI::rest_list_conversations( $request );
+Widrow_AI_Staff_AI::rest_content_last_run( $request );
 assert_equals(
-	'http://backend:8000/api/staff-ai/threads',
+	'http://backend:8000/api/staff-ai/content/last-run',
 	$_wp_test_remote_calls[0]['url'],
 	'trailing slash stripped — no double slash'
 );
@@ -349,9 +349,9 @@ $_wp_test_remote_responses = array(
 	),
 );
 
-$chat_request = new WP_REST_Request( 'POST', '/staff-ai/chat' );
-$chat_request->set_body_params( array( 'message' => 'hello' ) );
-$result = Widrow_AI_Staff_AI::rest_send_message( $chat_request );
+$chat_request = new WP_REST_Request( 'POST', '/staff-ai/content/create' );
+$chat_request->set_body_params( array( 'keyphrase' => 'hello' ) );
+$result = Widrow_AI_Staff_AI::rest_content_create( $chat_request );
 assert_true( is_wp_error( $result ), '401 returns WP_Error' );
 assert_equals( 'staff_ai_auth_failed', $result->get_error_code(), 'error code is staff_ai_auth_failed' );
 // Verify no raw backend token/secret in message.
@@ -367,7 +367,7 @@ $_wp_test_remote_responses = array(
 	),
 );
 
-$result = Widrow_AI_Staff_AI::rest_send_message( $chat_request );
+$result = Widrow_AI_Staff_AI::rest_content_create( $chat_request );
 assert_true( is_wp_error( $result ), '403 returns WP_Error' );
 assert_equals( 'staff_ai_auth_failed', $result->get_error_code(), '403 also maps to auth_failed' );
 
@@ -380,7 +380,7 @@ $_wp_test_remote_responses = array(
 	),
 );
 
-$result = Widrow_AI_Staff_AI::rest_send_message( $chat_request );
+$result = Widrow_AI_Staff_AI::rest_content_create( $chat_request );
 assert_true( is_wp_error( $result ), '500 returns WP_Error' );
 assert_equals( 'staff_ai_service_error', $result->get_error_code(), 'error code is staff_ai_service_error' );
 $msg = $result->get_error_message();
@@ -396,14 +396,14 @@ $_wp_test_remote_responses = array(
 	),
 );
 
-$result = Widrow_AI_Staff_AI::rest_send_message( $chat_request );
+$result = Widrow_AI_Staff_AI::rest_content_create( $chat_request );
 assert_true( is_wp_error( $result ), '404 returns WP_Error' );
 assert_equals( 'staff_ai_not_found', $result->get_error_code(), 'error code is staff_ai_not_found' );
 
 // ── 9. Network error → 502 ──────────────────────────────────────────────
 echo "\n[9] Network error → 502\n";
 $_wp_test_remote_responses = array(); // Empty = returns WP_Error from stub.
-$result = Widrow_AI_Staff_AI::rest_send_message( $chat_request );
+$result = Widrow_AI_Staff_AI::rest_content_create( $chat_request );
 assert_true( is_wp_error( $result ), 'network error returns WP_Error' );
 assert_equals( 'staff_ai_request_failed', $result->get_error_code(), 'error code is staff_ai_request_failed' );
 

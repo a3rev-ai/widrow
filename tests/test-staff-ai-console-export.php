@@ -45,15 +45,13 @@ check(
 	'index.html links manifest.json and the 180 icon relatively'
 );
 
-// What the site's /staff-ai/sw.js route sends, run in its own process: the route exits.
-$route = shell_exec(
-	'php -r ' . escapeshellarg(
-		"define('ABSPATH', '/'); require " . var_export( dirname( __DIR__ ) . '/includes/class-widrow-ai-staff-ai.php', true ) . ';'
-		. " \$m = new ReflectionMethod('Widrow_AI_Staff_AI', 'serve_pwa_service_worker'); \$m->setAccessible(true); \$m->invoke(null);"
-	)
-);
+// The exported worker: GETs go to the network, every other request is left alone, no cache is written.
 $sw = (string) @file_get_contents( $out . '/sw.js' );
-check( '' !== $sw && $sw === $route, 'sw.js is the text the site\'s route serves' );
+check(
+	'' !== $sw && false !== strpos( $sw, "if (event.request.method !== 'GET') return;" )
+		&& false !== strpos( $sw, 'fetch(event.request)' ) && false === strpos( $sw, '.put(' ),
+	'sw.js passes GETs to the network, leaves other requests untouched and never writes a cache'
+);
 
 $manifest = json_decode( (string) @file_get_contents( $out . '/manifest.json' ), true );
 $icons    = array_map( function ( $i ) { return $i['src']; }, (array) ( $manifest['icons'] ?? array() ) );

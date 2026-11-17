@@ -3,9 +3,8 @@
  * W74: the stream token a widget streams straight from DEF on.
  *
  * POST /chat/stream-token {channel, thread}: Customer Chat's follows the chat proxy's
- * nonce rule and carries an anonymous `anon:` sub or the user id + display name; Staff
- * AI's takes the staff stream's permission and carries what build_proxy_headers(true)
- * sends. Ten minutes, no-store, never the API key.
+ * nonce rule and carries an anonymous `anon:` sub or the user id + display name. Ten
+ * minutes, no-store, never the API key. Staff AI's channel left with the console (11.0.0).
  *
  * @package widrow-ai
  * @group permissions
@@ -108,7 +107,7 @@ class Test_Stream_Token extends WP_UnitTestCase {
 		$staff_id = self::factory()->user->create( array( 'role' => 'administrator' ) );
 		get_user_by( 'id', $staff_id )->add_cap( 'widrow_staff_access' );
 		wp_set_current_user( $staff_id );
-		foreach ( array( 'customer_chat', 'staff_ai' ) as $channel ) {
+		foreach ( array( 'customer_chat' ) as $channel ) {
 			$response = $this->mint( $channel, '', wp_create_nonce( 'wp_rest' ) );
 			$this->assertSame( 200, $response->get_status() );
 			$this->assertSame( array( 'token', 'exp', 'stream_url', 'live_url' ), array_keys( $response->get_data() ) );
@@ -118,19 +117,12 @@ class Test_Stream_Token extends WP_UnitTestCase {
 
 	public function test_stream_url_is_the_platform_stream_for_the_channel(): void {
 		$this->assertSame( Widrow_AI::get_def_api_url() . '/api/chat/stream', $this->mint( 'customer_chat' )->get_data()['stream_url'] );
-		$staff_id = self::factory()->user->create();
-		get_user_by( 'id', $staff_id )->add_cap( 'widrow_staff_access' );
-		wp_set_current_user( $staff_id );
-		$this->assertSame( Widrow_AI::get_def_api_url() . '/api/staff-ai/chat/stream', $this->mint( 'staff_ai' )->get_data()['stream_url'] );
 	}
 
 	public function test_live_url_is_the_platform_voice_socket_for_the_channel(): void {
 		$this->assertSame( 'wss://api.defho.ai/api/customer/voice/live', $this->mint( 'customer_chat' )->get_data()['live_url'], 'https becomes wss' );
 		update_option( 'widrow_ai_staff_ai_api_url', 'http://localhost:8000' );
-		$staff_id = self::factory()->user->create();
-		get_user_by( 'id', $staff_id )->add_cap( 'widrow_staff_access' );
-		wp_set_current_user( $staff_id );
-		$this->assertSame( 'ws://localhost:8000/api/staff_ai/voice/live', $this->mint( 'staff_ai' )->get_data()['live_url'], 'http becomes ws' );
+		$this->assertSame( 'ws://localhost:8000/api/customer/voice/live', $this->mint( 'customer_chat' )->get_data()['live_url'], 'http becomes ws' );
 	}
 
 	public function test_logged_in_customer_with_a_bad_nonce_is_refused(): void {
@@ -146,26 +138,12 @@ class Test_Stream_Token extends WP_UnitTestCase {
 		$this->assertSame( array( 'display_name', 'ip', 'sub' ), array_keys( $this->identity( $claims ) ), 'no email, roles or capabilities' );
 	}
 
-	public function test_staff_mint_refuses_anonymous_and_uncapped(): void {
-		$this->assertSame( 401, $this->mint( 'staff_ai' )->get_status(), 'anonymous' );
-		wp_set_current_user( self::factory()->user->create( array( 'role' => 'subscriber' ) ) );
-		$this->assertSame( 403, $this->mint( 'staff_ai' )->get_status(), 'logged in without staff access' );
-	}
-
-	public function test_staff_claims_are_what_the_staff_proxy_sends(): void {
-		$staff_id = self::factory()->user->create( array( 'role' => 'editor', 'display_name' => 'Sue Staff', 'user_email' => 'sue@example.com' ) );
-		get_user_by( 'id', $staff_id )->add_cap( 'widrow_staff_access' );
-		wp_set_current_user( $staff_id );
-		update_option( 'blogname', 'Widrow & Co' );
-
-		$claims = $this->claims( $this->mint( 'staff_ai', 'thr-9', wp_create_nonce( 'wp_rest' ) ) );
-		$this->assertSame( $this->proxy_fields( true ), $this->identity( $claims ) );
-		$this->assertSame( (string) $staff_id, $claims['sub'] );
-		$this->assertSame( 'staff_ai', $claims['channel'] );
-		$this->assertSame( 'thr-9', $claims['thread'] );
-	}
-
 	public function test_an_unknown_channel_is_refused(): void {
 		$this->assertSame( 400, $this->mint( 'setup_assistant' )->get_status() );
+		// 11.0.0: Staff AI's channel left with the console, for a staff user too.
+		$staff_id = self::factory()->user->create();
+		get_user_by( 'id', $staff_id )->add_cap( 'widrow_staff_access' );
+		wp_set_current_user( $staff_id );
+		$this->assertSame( 400, $this->mint( 'staff_ai', '', wp_create_nonce( 'wp_rest' ) )->get_status() );
 	}
 }
