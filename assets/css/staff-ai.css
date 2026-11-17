@@ -408,11 +408,11 @@ body {
 	background: var(--active-bg);
 }
 
-/* The title is what a person scans the list for: the main text colour, not the
-   row's grey, which stays on the date and the menu. */
+/* The title is what a person scans the list for: the same colour as the menu above
+   it, not the row's grey, which stays on the date and the row's menu button. */
 .conversation-item-title {
 	display: block;
-	color: var(--text-primary);
+	color: var(--text-heading);
 	white-space: nowrap;
 	overflow: hidden;
 	text-overflow: ellipsis;
