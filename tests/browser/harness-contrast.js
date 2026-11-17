@@ -216,6 +216,19 @@ check(++n, 'every token used as plain text clears 4.5:1 on every ground, both th
   textTokens.size + ' tokens)',
   belowAA.length === 0, belowAA.join('; '));
 
+// ── A chat's title in the sidebar ───────────────────────────────────────────
+//
+// The list of chats is scanned for a title, so the title is held to 7:1 (WCAG AAA for
+// text). At 4.5:1 the row's grey passes, and that grey is what made the list hard to
+// read on a phone: this measures the title's own colour, in both themes.
+[['light', LIGHT_VARS], ['dark', DARK_VARS]].forEach(function (t) {
+  const fg = resolve(ruleProp('.conversation-item-title', 'color'), t[1]);
+  const bg = tokenIn(t[1], 'bg-sidebar') || tokenIn(LIGHT_VARS, 'bg-sidebar');
+  const r = ratio(fg, bg);
+  check(++n, 'a chat title in the ' + t[0] + ' sidebar clears 7:1 (' + fg + ' on ' + bg + ')',
+    r >= 7, r.toFixed(2) + ':1');
+});
+
 console.log('\n' + results.join('\n'));
 console.log('\n=== ' + pass + ' passed, ' + fail + ' failed (of ' + (pass + fail) + ') ===');
 process.exit(fail > 0 ? 1 : 0);
