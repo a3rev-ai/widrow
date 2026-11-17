@@ -1,5 +1,8 @@
 *** Widrow AI Changelog ***
 
+= 10.1.3 - 2026/11/17 =
+* Tweak - Chat titles in the Staff AI sidebar are the same near-black as the menu above them, so they are easier to pick out.
+
 = 10.1.2 - 2026/11/17 =
 * Fix - The Staff AI sidebar is easier to read on a phone: chat titles, the menu and the New chat button are larger, chat titles are darker, and the panel is wider so more of each title shows. On a computer, chat titles are darker and nothing else changes.
 
