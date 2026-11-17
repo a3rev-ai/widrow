@@ -2064,6 +2064,20 @@ html {
 	}
 }
 
+/* A short screen (a small phone, or any phone on its side) cannot hold the menu and
+   a list of chats at once: the whole panel scrolls, so every menu item and every
+   chat can be reached. */
+@media (max-width: 768px) and (max-height: 560px) {
+	.sidebar {
+		overflow-y: auto;
+	}
+
+	.conversation-list {
+		flex: none;
+		overflow-y: visible;
+	}
+}
+
 /* =============================================
    Upload UI Styles (Phase 7 Sub-PR B)
    ============================================= */
