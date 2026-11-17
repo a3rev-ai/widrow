@@ -115,8 +115,7 @@ final class Widrow_AI_Admin_API {
 	 * With has_cap(), revoking Staff from a user who also holds DEF Admin
 	 * removed the stored cap and then reported it as still true, so the drawer
 	 * re-ticked Staff and the next Save granted back exactly what Sam had just
-	 * taken away. Same reading as Widrow_AI_Staff_Roster::build_roster() and the
-	 * User Access row renderer.
+	 * taken away.
 	 *
 	 * Takes the array rather than the user so it can be exercised directly.
 	 *
@@ -1324,13 +1323,6 @@ final class Widrow_AI_Admin_API {
 			null,
 			$wp_user_id
 		);
-
-		// Same ticks, different door (D-U10). Sam granting Staff access during
-		// onboarding is exactly when a tenant's roster first comes into
-		// existence, and this was the last write path to these caps that did
-		// not tell DEF about it. Queued, never inline — the response cannot
-		// fail because a push did.
-		Widrow_AI_Staff_Roster::schedule_push();
 
 		// Build current capabilities for this user — from what is STORED, not
 		// from has_cap(). This map is written straight onto the User Access row
