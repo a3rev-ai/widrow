@@ -1999,43 +1999,49 @@ html {
 	}
 
 	/* A phone is read at arm's length with a thumb: the sidebar's type is the size
-	   the phone's own apps use, and the menu's icons are at full strength. */
+	   the Claude app's own sidebar uses (22px, measured from its menu), and the
+	   menu's icons are at full strength. */
 	.new-chat-btn,
 	.sidebar-nav-item,
 	.conversation-item {
-		font-size: 16px;
+		font-size: 22px;
 	}
 
 	.sidebar-nav-item {
-		line-height: 20px;
-		padding: 11px 12px;
-		gap: 12px;
+		line-height: 28px;
+		padding: 12px;
+		gap: 14px;
 	}
 
+	.new-chat-btn svg,
 	.sidebar-nav-item svg {
-		width: 20px;
-		height: 20px;
+		width: 22px;
+		height: 22px;
 		opacity: 1;
 	}
 
-	.conversation-item-time {
-		font-size: 13px;
+	.conversation-item-time,
+	.conversation-item-project {
+		font-size: 16px;
 	}
 
-	.conversation-item-project,
 	.sidebar-footer {
 		font-size: 12px;
 	}
 
 	.sidebar.open {
 		transform: translateX(0);
+		box-shadow: var(--dropdown-shadow);
 	}
 
+	/* Beside the open panel the chat fades into the page's own colour rather than
+	   going dark: a light sheet in the light theme, a dark one in the dark theme. */
 	.sidebar-overlay {
 		display: none;
 		position: fixed;
 		inset: 0;
-		background: var(--overlay-bg);
+		background: var(--bg-main);
+		opacity: 0.85;
 		z-index: 99;
 	}
 

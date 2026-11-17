@@ -4,7 +4,7 @@ Tags: ai, chat, digital employee, ai assistant, customer support
 Requires at least: 6.2
 Tested up to: 7.1
 Requires PHP: 8.0
-Stable tag: 10.1.3
+Stable tag: 10.1.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -119,6 +119,9 @@ Chat messages, user display name, session context, and the visitor's IP address 
 4. Admin Settings — Branding, Chat Settings, Escalation, User Roles, and Connection tabs
 
 == Changelog ==
+
+= 10.1.4 - 2026-11-17 =
+* Tweak - On a phone, the Staff AI sidebar's text is the size of the Claude app's sidebar, and the area beside the open sidebar is a light sheet over the chat instead of a dark one.
 
 = 10.1.3 - 2026-11-17 =
 * Tweak - Chat titles in the Staff AI sidebar are the same near-black as the menu above them, so they are easier to pick out.

@@ -1,5 +1,8 @@
 *** Widrow AI Changelog ***
 
+= 10.1.4 - 2026/11/17 =
+* Tweak - On a phone, the Staff AI sidebar's text is the size of the Claude app's sidebar, and the area beside the open sidebar is a light sheet over the chat instead of a dark one.
+
 = 10.1.3 - 2026/11/17 =
 * Tweak - Chat titles in the Staff AI sidebar are the same near-black as the menu above them, so they are easier to pick out.
 
