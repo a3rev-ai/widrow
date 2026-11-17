@@ -4,7 +4,7 @@ Tags: ai, chat, digital employee, ai assistant, customer support
 Requires at least: 6.2
 Tested up to: 7.1
 Requires PHP: 8.0
-Stable tag: 10.1.3
+Stable tag: 11.0.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -17,7 +17,7 @@ Digital Employees are AI agents that work alongside your team. They understand y
 = Three AI Channels =
 
 * **Customer Chat** — AI chat widget for site visitors. Floating button or shortcode. Real-time streaming responses powered by your site's content and knowledge base.
-* **Staff AI** — Internal AI assistant in wp-admin for your team. Product lookups, order queries, customer context, and knowledge base searches.
+* **Staff AI** — Internal AI assistant for your team, in your Tenant Portal. Product lookups, order queries, customer context, and knowledge base searches.
 * **Setup Assistant** — Intelligent configuration agent that guides you through plugin setup conversationally. Knows the current state of every setting.
 
 = Key Features =
@@ -75,7 +75,6 @@ The plugin checks GitHub for updates automatically — standard WordPress update
 4. **Branding** — set display name, logo, and app icon
 5. **Chat Settings** — configure button position, colors, display mode, and AI disclosure notice
 6. **Escalation** — set email recipients for Customer Chat and Setup Assistant
-7. **User Roles** — assign Staff AI and Management access per user
 
 == Frequently Asked Questions ==
 
@@ -93,7 +92,7 @@ By default, yes. You can configure the display mode (floating button or drawer),
 
 = Can I control which staff members access Staff AI? =
 
-Yes. The User Roles tab lets you assign DEF capabilities per user. You can grant Staff-level access (basic tools) or Management-level access (additional tools and permissions).
+Yes. A site administrator grants or removes access per user with the Setup Assistant: Staff-level access (basic tools) or Management-level access (additional tools and permissions).
 
 = Does this work with WooCommerce? =
 
@@ -114,11 +113,16 @@ Chat messages, user display name, session context, and the visitor's IP address 
 == Screenshots ==
 
 1. Customer Chat — AI chat widget on the frontend with real-time streaming
-2. Staff AI — Internal assistant in wp-admin for team members
+2. Staff AI — Internal assistant for team members, in the Tenant Portal
 3. Setup Assistant — Conversational configuration in the admin settings drawer
-4. Admin Settings — Branding, Chat Settings, Escalation, User Roles, and Connection tabs
+4. Admin Settings — Branding, Chat Settings, Escalation, and Connection tabs
 
 == Changelog ==
+
+= 11.0.0 - 2026-11-18 =
+* New - A major release: Staff AI has moved to the Tenant Portal. The Staff AI console at /staff-ai, the Open Staff AI menu item, the User Roles tab and the staff roster sync are removed from the plugin. After the update, /staff-ai on your site is an ordinary page not found.
+* Tweak - People who use the website tools from Staff AI keep their access. Site administrators grant or remove it with the Setup Assistant.
+* Tweak - Customer Chat, the Setup Assistant and Content AI are unchanged.
 
 = 10.1.3 - 2026-11-17 =
 * Tweak - Chat titles in the Staff AI sidebar are the same near-black as the menu above them, so they are easier to pick out.

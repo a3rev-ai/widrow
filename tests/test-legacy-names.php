@@ -640,14 +640,13 @@ $hidden = true;
 foreach ( Widrow_AI_Legacy_Names::ADMIN_PAGES as $old => $new ) {
 	$hidden = $hidden && array( '', 'read' ) === ( $_test_pages[ $old ] ?? null );
 }
-check( 4 === count( $_test_pages ) && $hidden, 'Each old slug is a hidden page (no parent), open to any logged-in user; the new page checks its own capability' );
+check( 3 === count( $_test_pages ) && $hidden, 'Each old slug is a hidden page (no parent), open to any logged-in user; the new page checks its own capability' );
 
 $redirects = array();
 foreach ( array(
 	'def-core'                => '/wp-admin/admin.php?page=def-core',
 	'def-core-content-drafts' => '/wp-admin/admin.php?page=def-core-content-drafts',
 	'def-core-logs'           => '/wp-admin/admin.php?page=def-core-logs&level=error&paged=2',
-	'def-core-staff-ai'       => '/wp-admin/admin.php?page=def-core-staff-ai',
 ) as $old => $uri ) {
 	$_SERVER['REQUEST_URI'] = $uri;
 	try {
@@ -662,7 +661,6 @@ check(
 		'def-core'                => '302 /wp-admin/admin.php?page=widrow-ai',
 		'def-core-content-drafts' => '302 /wp-admin/admin.php?page=widrow-ai-content-drafts',
 		'def-core-logs'           => '302 /wp-admin/admin.php?page=widrow-ai-logs&level=error&paged=2',
-		'def-core-staff-ai'       => '302 /wp-admin/admin.php?page=widrow-ai-staff-ai',
 	) === $redirects,
 	'Each redirects (302, wp_safe_redirect) to its new slug, keeping the rest of the query: ' . json_encode( $redirects )
 );

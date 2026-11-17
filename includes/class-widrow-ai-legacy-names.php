@@ -164,7 +164,6 @@ final class Widrow_AI_Legacy_Names {
 		'def-core'                => 'widrow-ai',
 		'def-core-logs'           => 'widrow-ai-logs',
 		'def-core-content-drafts' => 'widrow-ai-content-drafts',
-		'def-core-staff-ai'       => 'widrow-ai-staff-ai',
 	);
 
 	/**
