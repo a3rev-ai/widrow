@@ -15,7 +15,7 @@
  * placeholder as the employee working, and a turn's frames touch the screen only while its
  * chat is the one showing.
  *
- * 28 checks.
+ * 29 checks.
  */
 const { JSDOM } = require('jsdom');
 const extract = require('./extract');
@@ -173,9 +173,12 @@ function boot(script) {
     readBack() {}, readBackSoFar() {}, loadConversations() {}, rememberConversation() {}, updateReadOnlyState() {}, afterSpokenTurn() {},
     dropUnfilledTranscript() { return false; }, uploadAllStagedFiles: async () => ({ success: true, fileIds: [] }),
     renderMarkdown: s => s,
-    // Each line handed to the speaker, with the reply's words on show at that moment.
-    speaker: { speak: (text, audio) => spoken.push({ audio, paused: held.length > 0,
-      shown: document.getElementById('messagesList').textContent }) },
+    // Each line handed to the speaker, with the reply's words on show at that moment; each
+    // round dropped, with what was on show then.
+    speaker: { speak: (text, audio, step) => spoken.push({ audio, step, paused: held.length > 0,
+      shown: document.getElementById('messagesList').textContent }),
+      discard: step => spoken.push({ discard: step, paused: held.length > 0,
+        shown: document.getElementById('messagesList').textContent }) },
     applyCitations() {}, buildCitationMap: () => ({}), createToolOutputCard: () => null, handleSpokenStop: () => false,
     console: { info() {}, error() {} },
     clearActiveProject() {}, clearConfirmChips() {}, renderConversationList() {}, toggleSidebar() {},
@@ -474,6 +477,32 @@ function check(label, cond, detail) {
       during.length === 1 && line.paused && line.audio.seq === 1 && line.audio.part === 0 && line.audio.base64 === 'AAAA' &&
       line.shown.indexOf('Australia') === -1 && t.spoken.length === 1 && t.bubble() === 'In Australia, Widrow helps.',
       'during=' + JSON.stringify(during) + ' spoken=' + t.spoken.length + ' bubble=' + JSON.stringify(t.bubble()));
+  }
+  {
+    // A round the employee moves on from: its speech frame carries its step to the speaker, and
+    // the step_superseded behind it reaches discard() as it arrives, during the tool row's pause,
+    // while the round's text is still to be drawn and moved out.
+    const s = liveStream();
+    const t = boot([() => s.response]);
+    t.hooks.hold = ms => ms === 400;
+    const run = t.send('Check my orders');
+    t.api.speakAloud();
+    s.push(frame(1, { type: 'tool_done', tool: 'search', status: 'success' }));
+    for (let i = 0; i < 100 && !t.held(); i++) await settle();
+    s.push(delta(2, 'Let me look that up.') + frame(3, { type: 'speech', text: 'Let me look that up.',
+      audio_base64: 'AAAA', mime: 'audio/pcm;rate=24000', seq: 1, part: 0, last: true, step: 1 }) +
+      frame(4, { type: 'step_superseded', step: 1 }));
+    await settle();
+    const during = t.spoken.slice();
+    t.release();
+    await settle();
+    s.push(done(5, ''));
+    s.close();
+    await run;
+    check('a round moved on from: its speech goes to the speaker with its step, and the marker reaches discard() as it arrives, before the round\'s text is drawn',
+      during.length === 2 && during[0].step === 1 && during[1].discard === 1 && during[1].paused &&
+      during[1].shown.indexOf('Let me look') === -1,
+      'during=' + JSON.stringify(during));
   }
   {
     // ...and reading on through the pause does not end the turn early: a stream that closes

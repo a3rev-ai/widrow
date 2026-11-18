@@ -655,8 +655,8 @@ window.DefVoice = (function () {
 			unlock: unlock,
 			// audio may carry seq/part/last (a streamed line); a missing part is 0 and a
 			// missing last is true. A later part joins its line; a closing frame (last,
-			// no audio) closes it.
-			speak: function (text, audio) {
+			// no audio) closes it. step is the round the line belongs to, for discard().
+			speak: function (text, audio, step) {
 				if (mode === 'off' || (!text && !audio)) return;
 				if (audio && audio.part > 0) {
 					var line = openLine(audio.seq);
@@ -667,8 +667,16 @@ window.DefVoice = (function () {
 					return;
 				}
 				queue.push({ text: text, audio: audio || null, parts: audio ? [audio.base64] : [],
-					last: !audio || audio.last !== false });
+					last: !audio || audio.last !== false, step: step });
 				pump();
+			},
+			// The employee moved on from round `step`: its lines not yet begun are dropped
+			// (their later parts find no line); the line playing finishes. A line spoken
+			// with no step is never dropped.
+			discard: function (step) {
+				var kept = queue.filter(function (item) { return item.step !== step; });
+				if (kept.length < queue.length) log('dropped ' + (queue.length - kept.length) + ' (step ' + step + ')');
+				queue = kept;
 			},
 			// The stream is over: a line whose closing frame never came plays the parts it
 			// has and finishes, so whenIdle still resolves.

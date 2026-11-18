@@ -2407,17 +2407,21 @@
 			if (spokenTurn && speaker) {
 				speaker.speak(evt.text || '', evt.audio_base64 || evt.part > 0
 					? { base64: evt.audio_base64 || '', mime: evt.mime, seq: evt.seq, part: evt.part, last: evt.last }
-					: null);
+					: null, evt.step);
 			}
 		}
 
 		// A `speech` frame goes to the speaker as it arrives, never through the paced queue:
 		// a part held there behind the text and the tool rows is heard as a gap (8.8.2). The
-		// text depends on nothing a speech frame carries.
+		// text depends on nothing a speech frame carries. A `step_superseded` drops that
+		// round's speech not yet begun as it arrives too; its text waits its turn.
 		function enqueue(events) {
 			for (var i = 0; i < events.length; i++) {
 				if (events[i].type === 'speech') speakFrame(events[i]);
-				else eventQueue.push(events[i]);
+				else {
+					if (events[i].type === 'step_superseded' && spokenTurn && speaker) speaker.discard(events[i].step);
+					eventQueue.push(events[i]);
+				}
 			}
 			processEventQueue();
 		}

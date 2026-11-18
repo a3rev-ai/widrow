@@ -4,7 +4,8 @@
  * speaker as it arrives, ahead of the paced queue (8.8.2). #34-35 (W58, 9.1.1): a streamed
  * reply or a suggestion moves the thread to its end only when it was already there
  * (9.1.0's module fails both). #36 (9.1.2): so does the rest of a reply that `done` renders
- * at once, ahead of the word drain (9.1.1's module fails it).
+ * at once, ahead of the word drain (9.1.1's module fails it). #37 (11.2.0): a speech frame's
+ * step reaches the speaker, and a `step_superseded` reaches its discard().
  *
  * Runs the SHIPPED chat module (assets/js/widrow-ai-customer-chat.js), whole, in a
  * jsdom page with the shipped marked, DOMPurify and product-card renderer, over a
@@ -156,7 +157,8 @@ async function boot(opts) {
       supported: () => true,
       micAllowedBySite: () => true,
       createSpeaker: () => ({ stop() {}, unlock() {}, whenIdle: () => new Promise(() => {}),
-        speak: (text, audio) => h.voice.spoken.push({ audio, shown: h.bubbleTexts().join(' | ') }) }),
+        speak: (text, audio, step) => h.voice.spoken.push({ audio, step, shown: h.bubbleTexts().join(' | ') }),
+        discard: step => h.voice.spoken.push({ discard: step }) }),
       createRecorder: o => {
         h.voice.opts = o;
         return {
@@ -560,6 +562,24 @@ const WELCOME = {
     h.voice.spoken.length === 1 && line.audio.seq === 1 && line.audio.part === 0 && line.audio.base64 === 'AAAA' &&
     line.shown.indexOf('Australia') === -1 && h.bubbleTexts().join(' ').indexOf('In Australia, Widrow helps.') !== -1,
     'spoken=' + JSON.stringify(h.voice.spoken) + ' bubbles=' + show(h.bubbleTexts()));
+
+  // A round the employee moves on from: its speech frame carries its step to the speaker, and
+  // the step_superseded behind it reaches discard().
+  h = await boot({ stream: true, voice: true });
+  h.root.querySelector('.def-cc-composer-mic').click();
+  await sleep(20);
+  h.voice.opts.onSilence();
+  await sleep(40);
+  await h.event({ type: 'transcript', text: 'is my order shipped' });
+  h.stream().send({ type: 'text_delta', text: 'Let me look that up.', step: 1 });
+  h.stream().send({ type: 'speech', text: 'Let me look that up.', audio_base64: 'AAAA',
+    mime: 'audio/pcm;rate=24000', seq: 1, part: 0, last: true, step: 1 });
+  h.stream().send({ type: 'step_superseded', step: 1 });
+  for (let i = 0; i < 50 && h.voice.spoken.length < 2; i++) await sleep(20);
+  const marked = h.voice.spoken;
+  check(37, 'a round moved on from: its speech goes to the speaker with its step, and the marker reaches discard() once',
+    marked.length === 2 && marked[0].step === 1 && marked[1].discard === 1,
+    'spoken=' + JSON.stringify(marked));
 
   // ── No duplicates, across a whole session ──────────────────────────────
   h = await boot({ stream: true, storage: RESTORE_STORAGE });
