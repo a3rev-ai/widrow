@@ -120,7 +120,7 @@ Chat messages, user display name, session context, and the visitor's IP address 
 == Changelog ==
 
 = 11.1.0 - 2026-11-18 =
-* Feature - Staff AI on a phone: the message box's controls are thumb-sized, with space between them. The microphone is the main button and becomes Send when you type, the model picker is a compact chip showing the model's short name (tap it to choose from the full list), and Tap to send fills the row while it listens. The keyboard hint is hidden on a phone. On a computer nothing changes.
+* Feature - Staff AI in the Tenant Portal, on a phone: the message box's controls are thumb-sized, with space between them. The microphone is the main button and becomes Send when you type, the model picker is a compact chip showing the model's short name (tap it to choose from the full list), and Tap to send fills the row while it listens. The keyboard hint is hidden on a phone. On a computer nothing changes.
 
 = 11.0.0 - 2026-11-18 =
 * New - A major release: Staff AI has moved to the Tenant Portal. The Staff AI console at /staff-ai, the Open Staff AI menu item, the User Roles tab and the staff roster sync are removed from the plugin. After the update, and once someone has opened wp-admin, /staff-ai on your site is an ordinary page not found.

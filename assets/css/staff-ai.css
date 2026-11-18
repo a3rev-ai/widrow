@@ -1272,9 +1272,7 @@ body {
 	border-color: var(--border-hover);
 }
 
-/* The phone's model chip (11.1.0, the phone block below). On a wider screen the
-   wrapper is not a box and the chip is not drawn: the select is the toolbar's own
-   flex item, exactly as before. */
+/* The phone's model chip (11.1.0): above 768px the wrapper is no box and the chip is not drawn. */
 .model-picker {
 	display: contents;
 }
@@ -2196,13 +2194,10 @@ html {
 	opacity: 0.55;
 }
 
-/* The message box on a phone (11.1.0): every control a thumb's size (44 by 44, the
-   main button 48) with 8 between, in the order Attach, model, read-back, then the
-   main button: the microphone while the box is empty, Send once there is something
-   to send, Stop while a reply runs. The listening pill takes the whole row. Here,
-   after the base rules above, because it overrides them.
-   Without :has() (iOS Safari before 15.4) the row is today's controls at these
-   sizes: the mic and a dimmed Send side by side, the pill sharing the row. */
+/* The message box on a phone (11.1.0). After the base rules above because it
+   overrides them at equal specificity. Without :has() (iOS Safari before 15.4)
+   the row is today's controls at these sizes: the mic and a dimmed Send side by
+   side, the pill sharing the row; a rule that must hold there carries no :has(). */
 @media (max-width: 768px) {
 	.composer-toolbar {
 		justify-content: flex-start;
@@ -2225,8 +2220,7 @@ html {
 		height: 24px;
 	}
 
-	/* `hidden` loses to the buttons' own display:flex; a browser that cannot record
-	   (or a host with voice off) has no mic and no read-back here. */
+	/* `hidden` loses to the buttons' own display:flex. */
 	.composer-toolbar .mic-btn[hidden],
 	.composer-toolbar .voice-btn[hidden] {
 		display: none;
@@ -2259,9 +2253,7 @@ html {
 		margin-left: auto;
 	}
 
-	/* The select is what is tapped (the phone's own picker lists every model with
-	   its description); the chip under it shows the short name. 16px stops iOS
-	   zooming the page when the select takes focus. */
+	/* The transparent select is what is tapped; 16px stops iOS zooming on focus. */
 	.composer-toolbar .model-select {
 		position: absolute;
 		inset: 0;
@@ -2300,21 +2292,19 @@ html {
 		color: var(--text-secondary);
 	}
 
-	.model-select[hidden] + .model-chip,
+	.model-select[hidden] + .model-chip {
+		display: none;
+	}
+
 	.composer-toolbar .model-picker:has(> .model-select[hidden]) {
 		display: none;
 	}
 
-	.model-picker:hover .model-chip {
-		border-color: var(--border-hover);
-	}
-
-	.model-picker:focus-within .model-chip {
-		outline: 2px solid var(--border-focus);
+	.model-select:focus-visible + .model-chip {
+		outline: 2px solid var(--text-primary);
 		outline-offset: 2px;
 	}
 
-	/* The main button: the mic, in Send's colours. */
 	.composer-toolbar .mic-btn[data-state="idle"] {
 		width: 48px;
 		height: 48px;
@@ -2328,15 +2318,15 @@ html {
 		background: #135e96;
 	}
 
-	/* Words in the box (a suggestion is not words): Send is the main button and the
-	   mic goes; while a reply runs, Stop is. */
+	/* Typed words hide the mic (a suggestion does not: it stays as the plain mic
+	   beside Send, below); so does a running reply's Stop. */
 	.composer:has(.composer-input:not(:placeholder-shown):not(.staff-ai-suggestion-text)) .mic-btn[data-state="idle"],
 	.composer-toolbar:has(.send-btn.is-stop) .mic-btn[data-state="idle"] {
 		display: none;
 	}
 
-	/* Files staged with the box empty: Send is the main button and the mic stays
-	   beside it as a plain button, since a spoken turn carries the files too. */
+	/* Send enabled (files staged, a suggestion): the mic stays as a plain button,
+	   since a spoken turn carries the staged files too. */
 	.composer-toolbar:has(.send-btn:not(:disabled)) .mic-btn[data-state="idle"] {
 		width: 44px;
 		height: 44px;
@@ -2345,13 +2335,10 @@ html {
 		background: transparent;
 	}
 
-	/* Nothing to send and a mic to speak with: the mic is the main button alone. */
 	.composer:has(.composer-input:placeholder-shown):has(.mic-btn[data-state="idle"]:not([hidden])) .send-btn:disabled:not(.is-stop) {
 		display: none;
 	}
 
-	/* Listening, transcribing or answering: the pill is the row. Stop stays beside
-	   it while the employee answers. */
 	.composer-toolbar .mic-btn[data-state="listening"],
 	.composer-toolbar .mic-btn[data-state="transcribing"],
 	.composer-toolbar .mic-btn[data-state="answering"] {
@@ -2373,11 +2360,23 @@ html {
 		text-overflow: ellipsis;
 	}
 
+	/* "… is answering · tap to end" wraps to two lines rather than losing its
+	   instruction; a third line ends in an ellipsis. */
+	.composer-toolbar .mic-btn[data-state="answering"] .mic-label {
+		display: -webkit-box;
+		-webkit-box-orient: vertical;
+		-webkit-line-clamp: 2;
+		white-space: normal;
+		line-height: 1.15;
+		font-size: 15px;
+		text-align: center;
+	}
+
+	/* Stop stays beside the answering pill: tapping the pill ends hands-free, not the reply. */
 	.composer-toolbar:has(.mic-btn:is([data-state="listening"], [data-state="transcribing"], [data-state="answering"])) > :not(.mic-btn):not(.send-btn.is-stop) {
 		display: none;
 	}
 
-	/* A keyboard hint a phone cannot use. */
 	.composer-hint {
 		display: none;
 	}

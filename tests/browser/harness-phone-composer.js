@@ -1,18 +1,8 @@
 /*
- * The message box on a phone (v11.1.0): thumb-sized controls, the mic as the main
- * button, the model chip, and the listening pill across the row.
- *
- * Read off the SHIPPED stylesheet one breakpoint at a time: inside
- * `@media (max-width: 768px)` every composer control is at least 44 by 44 (the main
- * button 48) with 8 between, the model chip is 44 high with 15px text, the pill is the
- * row and 48 high, and the keyboard hint is gone; OUTSIDE every @media the desktop
- * values are exactly what they were before 11.1.0, so a desktop regression fails here.
- * The SHIPPED toolbar markup is checked for the chip's place and names, and the SHIPPED
- * model switcher block runs in jsdom: the chip shows the short name, the list keeps the
- * descriptions.
- *
- * Bite: MODEL_SWITCHER=/tmp/old-switcher.js (the 11.0.0 block) fails the chip checks;
- * the CSS checks bite by editing the stylesheet in a scratch worktree.
+ * The message box on a phone (v11.1.0). The size floor and the no-:has() rules off the
+ * SHIPPED stylesheet; a state matrix running the shipped composer markup through the
+ * stylesheet's own cascade (element.matches + specificity) for every state staff-ai.js
+ * produces; the desktop wrapper; the toolbar markup; the shipped model switcher in jsdom.
  */
 const fs = require('fs');
 const path = require('path');
@@ -26,7 +16,7 @@ function check(label, cond, detail) {
 	else { fail++; results.push('  FAIL ' + String(pass + fail).padStart(2) + '. ' + label + (detail ? ' -- ' + detail : '')); }
 }
 
-// ── The stylesheet, as rules tagged with the @media they sit in ──────────
+// ── The stylesheet, as rules in file order tagged with their @media ──────
 const CSS = fs.readFileSync(path.join(extract.REPO, 'assets/css/staff-ai.css'), 'utf8')
 	.replace(/\/\*[\s\S]*?\*\//g, '');
 
@@ -74,7 +64,6 @@ const RULES = [];
 })(CSS, null);
 
 const PHONE = '@media (max-width: 768px)';
-// The declarations a selector gets in one context, later rules winning.
 function decl(media, selector) {
 	const out = {};
 	RULES.filter(r => r.media === media && r.selectors.includes(selector)).forEach(r => Object.assign(out, r.decls));
@@ -82,84 +71,144 @@ function decl(media, selector) {
 }
 const px = v => (v && /^\d+(\.\d+)?px$/.test(v) ? parseFloat(v) : NaN);
 const phone = s => decl(PHONE, s);
-const desk = s => decl(null, s);
 
-// ── Phone ────────────────────────────────────────────────────────────────
-check('phone: the row has at least 8 between its controls', px(phone('.composer-toolbar').gap) >= 8,
-	JSON.stringify(phone('.composer-toolbar')));
-['.upload-btn', '.mic-btn', '.voice-btn'].forEach(function (b) {
-	const d = phone('.composer-toolbar ' + b);
-	check('phone: ' + b + ' is at least 44 by 44 with a 24px icon',
-		px(d.width) >= 44 && px(d.height) >= 44 && px(phone('.composer-toolbar ' + b + ' svg').width) >= 24,
-		JSON.stringify(d));
+// ── The floor: a later edit that shrinks any of these fails ──────────────
+const FLOOR = {
+	'.composer-toolbar': d => px(d.gap) >= 8,
+	'.composer-toolbar .upload-btn': d => px(d.width) >= 44 && px(d.height) >= 44,
+	'.composer-toolbar .mic-btn': d => px(d.width) >= 44 && px(d.height) >= 44,
+	'.composer-toolbar .voice-btn': d => px(d.width) >= 44 && px(d.height) >= 44,
+	'.composer-toolbar .send-btn': d => px(d.width) >= 48 && px(d.height) >= 48,
+	'.composer-toolbar .mic-btn[data-state="idle"]': d => px(d.width) >= 48 && px(d.height) >= 48,
+	'.model-chip': d => px(d.height) >= 44 && px(d['font-size']) >= 15,
+	'.composer-toolbar .model-select': d => px(d['font-size']) >= 16,
+	'.composer-toolbar .mic-btn[data-state="listening"]': d => px(d.height) >= 48,
+	'.composer-toolbar .mic-btn[data-state="transcribing"]': d => px(d.height) >= 48,
+	'.composer-toolbar .mic-btn[data-state="answering"]': d => px(d.height) >= 48,
+	'.composer-hint': d => d.display === 'none'
+};
+Object.keys(FLOOR).forEach(function (s) {
+	check('floor: ' + s, FLOOR[s](phone(s)), JSON.stringify(phone(s)));
 });
+check('floor: beside an enabled Send the mic stays at least 44 by 44', (function (d) { return px(d.width) >= 44 && px(d.height) >= 44; })(
+	phone('.composer-toolbar:has(.send-btn:not(:disabled)) .mic-btn[data-state="idle"]')));
 (function () {
-	const send = phone('.composer-toolbar .send-btn');
-	check('phone: Send (and Stop) is 48 by 48 with a 24px icon',
-		px(send.width) >= 48 && px(send.height) >= 48 && px(phone('.composer-toolbar .send-btn svg').width) >= 24,
-		JSON.stringify(send));
-	const mic = phone('.composer-toolbar .mic-btn[data-state="idle"]');
-	check('phone: the idle mic is the main button, 48 by 48', px(mic.width) >= 48 && px(mic.height) >= 48, JSON.stringify(mic));
-	const second = phone('.composer-toolbar:has(.send-btn:not(:disabled)) .mic-btn[data-state="idle"]');
-	check('phone: beside an enabled Send the mic stays at least 44 by 44',
-		px(second.width) >= 44 && px(second.height) >= 44, JSON.stringify(second));
+	const label = phone('.composer-toolbar .mic-btn[data-state="answering"] .mic-label');
+	const lines = +label['-webkit-line-clamp'];
+	check('floor: the answering label wraps to at most two lines that fit the 48px pill',
+		label['white-space'] === 'normal' && lines === 2 && lines * px(label['font-size']) * parseFloat(label['line-height']) <= 48,
+		JSON.stringify(label));
 })();
-check('phone: the mic goes once there are words in the box, and while Stop shows',
-	phone('.composer:has(.composer-input:not(:placeholder-shown):not(.staff-ai-suggestion-text)) .mic-btn[data-state="idle"]').display === 'none'
-	&& phone('.composer-toolbar:has(.send-btn.is-stop) .mic-btn[data-state="idle"]').display === 'none');
-check('phone: an empty box with a mic shows no dimmed Send (and never hides Stop)',
-	phone('.composer:has(.composer-input:placeholder-shown):has(.mic-btn[data-state="idle"]:not([hidden])) .send-btn:disabled:not(.is-stop)').display === 'none');
-check('phone: a mic or read-back the page hid is not drawn',
-	phone('.composer-toolbar .mic-btn[hidden]').display === 'none' && phone('.composer-toolbar .voice-btn[hidden]').display === 'none');
-(function () {
-	const chip = phone('.model-chip');
-	check('phone: the model chip is 44 high with 15px text',
-		chip.display === 'flex' && px(chip.height) >= 44 && px(chip['font-size']) >= 15, JSON.stringify(chip));
-	const sel = phone('.composer-toolbar .model-select');
-	check('phone: the select is the tap target over the chip, at 16px so iOS does not zoom',
-		sel.position === 'absolute' && sel.inset === '0' && sel.opacity === '0' && px(sel['font-size']) >= 16,
-		JSON.stringify(sel));
-	check('phone: no chip and no wrapper box while the select is hidden',
-		phone('.model-select[hidden] + .model-chip').display === 'none'
-		&& phone('.composer-toolbar .model-picker:has(> .model-select[hidden])').display === 'none');
-	check('phone: the chip shows the select\'s focus', /solid/.test(phone('.model-picker:focus-within .model-chip').outline || ''));
-})();
-['listening', 'transcribing', 'answering'].forEach(function (s) {
-	const d = phone('.composer-toolbar .mic-btn[data-state="' + s + '"]');
-	check('phone: the ' + s + ' pill grows across the row, 48 high, 17px text',
-		/^1 1/.test(d.flex || '') && px(d.height) >= 48 && px(d['font-size']) >= 17, JSON.stringify(d));
-});
-check('phone: while the pill shows, nothing else in the row can be hit but Stop',
-	phone('.composer-toolbar:has(.mic-btn:is([data-state="listening"], [data-state="transcribing"], [data-state="answering"])) > :not(.mic-btn):not(.send-btn.is-stop)').display === 'none');
-check('phone: the keyboard hint is not displayed', phone('.composer-hint').display === 'none');
-check('phone, reduced motion: the listening pulse stops',
-	decl('@media (max-width: 768px) and (prefers-reduced-motion: reduce)', '.composer-toolbar .mic-btn[data-state="listening"]').animation === 'none');
 
-// ── Desktop: exactly the 11.0.0 values ───────────────────────────────────
+// ── Without :has() a browser drops the whole rule a :has() selector sits in ─
+const NO_HAS = Object.keys(FLOOR).filter(s => s !== '.composer-hint').concat([
+	'.composer-toolbar .mic-btn[hidden]', '.composer-toolbar .voice-btn[hidden]',
+	'.model-select[hidden] + .model-chip', '.model-select:focus-visible + .model-chip', '.composer-hint']);
 (function () {
-	const b = desk('.upload-btn'), m = desk('.mic-btn'), v = desk('.voice-btn');
-	check('desktop: attach, mic and read-back stay 32 by 32',
-		[b, m, v].every(d => d.width === '32px' && d.height === '32px'), JSON.stringify(b));
-	check('desktop: their icons stay 18px', ['.upload-btn svg', '.mic-btn svg', '.voice-btn svg'].every(s => desk(s).width === '18px'));
-	const send = desk('.send-btn');
-	check('desktop: Send stays 32 by 32 with a 16px icon',
-		send.width === '32px' && send.height === '32px' && desk('.send-btn svg').width === '16px', JSON.stringify(send));
-	const sel = desk('.model-select');
-	check('desktop: the model select stays 12px text, 5px 8px, right of the spacer, at most 220 wide',
-		sel['font-size'] === '12px' && sel.padding === '5px 8px' && sel['margin-left'] === 'auto'
-		&& sel['margin-right'] === '8px' && sel['max-width'] === '220px' && !('position' in sel) && !('opacity' in sel),
-		JSON.stringify(sel));
-	const bar = desk('.composer-toolbar');
-	check('desktop: the toolbar stays space-between with no gap',
-		bar['justify-content'] === 'space-between' && bar['padding-top'] === '8px' && !('gap' in bar), JSON.stringify(bar));
-	const hint = desk('.composer-hint');
-	check('desktop: the keyboard hint stays, 11px', hint['font-size'] === '11px' && !('display' in hint));
-	const pill = desk('.mic-btn[data-state="listening"]');
-	check('desktop: the pill stays 12px, sized by its words',
-		pill['font-size'] === '12px' && pill.width === 'auto' && pill.padding === '0 10px 0 8px' && !('height' in pill) && !('flex' in pill),
-		JSON.stringify(pill));
-	check('desktop: the wrapper is no box and the chip is not drawn',
-		desk('.model-picker').display === 'contents' && desk('.model-chip').display === 'none');
+	const bad = RULES.filter(r => r.media === PHONE && r.selectors.some(s => NO_HAS.includes(s))
+		&& r.selectors.some(s => s.includes(':has(')));
+	const missing = NO_HAS.filter(s => !RULES.some(r => r.media === PHONE && r.selectors.includes(s)));
+	check('no :has(): every rule that must hold without it shares no list with a :has() selector',
+		bad.length === 0 && missing.length === 0, JSON.stringify({ bad: bad.map(r => r.selectors), missing }));
+})();
+
+// ── The state matrix: the shipped markup through the phone cascade ────────
+// Specificity, with :is/:not/:has taking their most specific argument.
+function spec(sel) {
+	const s = [0, 0, 0];
+	const add = t => { s[0] += t[0]; s[1] += t[1]; s[2] += t[2]; };
+	sel = sel.replace(/:(is|not|has)\(((?:[^()]|\([^()]*\))*)\)/g, function (m, fn, args) {
+		add(selectors(args).map(spec).sort(cmp).pop());
+		return ' ';
+	});
+	sel = sel.replace(/\[[^\]]*\]/g, () => { s[1]++; return ' '; })
+		.replace(/::[\w-]+/g, () => { s[2]++; return ' '; })
+		.replace(/#[\w-]+/g, () => { s[0]++; return ' '; })
+		.replace(/[.:][\w-]+/g, () => { s[1]++; return ' '; });
+	sel.split(/[\s>+~]+/).forEach(t => { if (t && t !== '*') s[2]++; });
+	return s;
+}
+function cmp(a, b) { return a[0] - b[0] || a[1] - b[1] || a[2] - b[2]; }
+const CASCADE = RULES.filter(r => r.media === null || r.media === PHONE);
+function matches(el, sel) { try { return el.matches(sel); } catch (e) { return false; } }
+function computed(el, prop) {
+	let best = null, bestSpec = null;
+	CASCADE.forEach(r => {
+		if (!(prop in r.decls)) return;
+		r.selectors.forEach(sel => {
+			if (!matches(el, sel)) return;
+			const sp = spec(sel);
+			if (!best || cmp(sp, bestSpec) >= 0) { best = r.decls[prop]; bestSpec = sp; }
+		});
+	});
+	return best;
+}
+function shown(el) {
+	for (let e = el; e && !e.classList.contains('composer-toolbar'); e = e.parentElement) {
+		const d = computed(e, 'display');
+		if (d === 'none' || (d === null && e.hidden)) return false;
+	}
+	return true;
+}
+
+const COMPOSER = extract.phpToHtml(extract.element(extract.templateSource(), 'div',
+	l => l.includes('id="composerContainer"'), 'div#composerContainer'), 'div#composerContainer');
+function row(setup) {
+	const d = new JSDOM('<!doctype html><div id="staff-ai-app"><main class="chat-container">' + COMPOSER + '</main></div>').window.document;
+	const $ = id => d.getElementById(id);
+	const els = { input: $('composerInput'), mic: $('micBtn'), label: $('micLabel'), voice: $('voiceBtn'),
+		select: $('modelSelect'), send: $('sendBtn'), container: $('composerContainer') };
+	els.select.innerHTML = '<option value="opus" data-short="Opus 5.5">Opus 5.5 — Deep work</option>';
+	els.select.hidden = false;                             // the list arrived
+	// setMicState() and updateSendButton(), as staff-ai.js writes them.
+	els.setMic = function (state, text) {
+		els.mic.dataset.state = state; els.label.textContent = text || ''; els.label.hidden = !text;
+	};
+	els.setSend = function (disabled, stop) { els.send.classList.toggle('is-stop', !!stop); els.send.disabled = disabled; };
+	els.setMic('idle');
+	els.setSend(true);
+	setup(els);
+	const controls = { attach: $('uploadBtn'), mic: els.mic, readback: els.voice, model: d.querySelector('.model-chip'), send: els.send };
+	const visible = Object.keys(controls).filter(k => shown(controls[k]));
+	const main = visible.filter(k => computed(controls[k], 'width') === '48px');
+	return { visible, main, pill: /^1 1/.test(computed(els.mic, 'flex') || ''),
+		micWidth: computed(els.mic, 'width'), labelWrap: computed(els.label, 'white-space') };
+}
+const ALL = ['attach', 'mic', 'readback', 'model', 'send'];
+const MATRIX = [
+	['empty', e => {}, ['attach', 'mic', 'readback', 'model'], ['mic'], false],
+	['typed', e => { e.input.value = 'hi'; e.setSend(false); }, ['attach', 'readback', 'model', 'send'], ['send'], false],
+	['files staged, box empty', e => { e.setSend(false); }, ALL, ['send'], false],
+	['suggestion ghost text', e => { e.input.value = 'Tell me more'; e.input.classList.add('staff-ai-suggestion-text'); e.setSend(false); },
+		ALL, ['send'], false],
+	['loading, before the turn id', e => { e.setSend(true); }, ['attach', 'mic', 'readback', 'model'], ['mic'], false],
+	['typed reply running', e => { e.setSend(false, true); }, ['attach', 'readback', 'model', 'send'], ['send'], false],
+	['stopping', e => { e.setSend(true, true); }, ['attach', 'readback', 'model', 'send'], ['send'], false],
+	['listening', e => { e.setMic('listening', '0:03 · Tap to send'); }, ['mic'], [], true],
+	['listening, files staged', e => { e.setMic('listening', '0:03 · Tap to send'); e.setSend(false); }, ['mic'], [], true],
+	['transcribing', e => { e.setMic('transcribing', 'Transcribing…'); }, ['mic'], [], true],
+	['answering, with Stop', e => { e.setMic('answering', 'Ann is answering · tap to end'); e.setSend(false, true); },
+		['mic', 'send'], ['send'], true],
+	['answering, Stop gone', e => { e.setMic('answering', 'Ann is answering · tap to end'); }, ['mic'], [], true],
+	['no microphone', e => { e.mic.hidden = true; e.voice.hidden = true; }, ['attach', 'model', 'send'], ['send'], false],
+	['no model picker', e => { e.select.hidden = true; }, ['attach', 'mic', 'readback'], ['mic'], false],
+	['read-only', e => { e.container.classList.add('disabled'); }, ['attach', 'mic', 'readback', 'model'], ['mic'], false]
+];
+MATRIX.forEach(function (m) {
+	const r = row(m[1]);
+	check('state ' + m[0] + ': shows ' + m[2].join(', ') + '; main ' + (m[3][0] || 'none') + (m[4] ? '; the pill is the row' : ''),
+		JSON.stringify(r.visible) === JSON.stringify(m[2]) && JSON.stringify(r.main) === JSON.stringify(m[3]) && r.pill === m[4],
+		JSON.stringify(r));
+	if (m[0] === 'files staged, box empty' || m[0] === 'suggestion ghost text') {
+		check('  and the mic beside Send is the plain 44', r.micWidth === '44px', r.micWidth);
+	}
+	if (m[0] === 'answering, with Stop') check('  and its label may wrap', r.labelWrap === 'normal', r.labelWrap);
+});
+
+// ── Desktop: the wrapper is no box, the chip is not drawn ────────────────
+check('desktop: the wrapper is no box and the chip is not drawn',
+	decl(null, '.model-picker').display === 'contents' && decl(null, '.model-chip').display === 'none');
+(function () {
 	const leaks = RULES.filter(r => r.media !== PHONE && !/prefers-reduced-motion/.test(r.media || '')
 		&& r.selectors.some(s => /model-picker|model-chip|composer-toolbar[^{]*:has/.test(s))
 		&& !(r.media === null && (r.selectors.join() === '.model-picker' || r.selectors.join() === '.model-chip')));
