@@ -4,7 +4,7 @@ Tags: ai, chat, digital employee, ai assistant, customer support
 Requires at least: 6.2
 Tested up to: 7.1
 Requires PHP: 8.0
-Stable tag: 11.1.0
+Stable tag: 11.1.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -118,6 +118,9 @@ Chat messages, user display name, session context, and the visitor's IP address 
 4. Admin Settings — Branding, Chat Settings, Escalation, and Connection tabs
 
 == Changelog ==
+
+= 11.1.1 - 2026-11-18 =
+* Fix - On an iPhone, the employee's own voice could play from the earpiece only after you spoke to it. The voice module now switches the phone to media playback once the microphone is off, and back when the conversation ends. Your visitors get this in Customer Chat's voice; Staff AI in the Tenant Portal gets it when the portal updates.
 
 = 11.1.0 - 2026-11-18 =
 * Feature - Staff AI in the Tenant Portal, on a phone: the message box's controls are thumb-sized, with space between them. The microphone is the main button and becomes Send when you type, the model picker is a compact chip showing the model's short name (tap it to choose from the full list), and Tap to send fills the row while it listens. The keyboard hint is hidden on a phone. On a computer nothing changes.

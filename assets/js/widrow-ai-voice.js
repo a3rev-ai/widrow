@@ -105,6 +105,16 @@ window.DefVoice = (function () {
 		return audioCtx.state === 'running';
 	}
 
+	// Safari's audio session (navigator.audioSession, Safari 16.4+ on iOS and macOS). Under the
+	// default type the reply through the page's context could stay on the earpiece after the mic
+	// (WebKit bug 218012): playback once the mic is off, play-and-record before each mic (capture
+	// under playback is refused), auto when the conversation ends, leaving the host page as found.
+	function sessionType(type) {
+		if (!navigator.audioSession) return;
+		navigator.audioSession.type = type;
+		log('session ' + navigator.audioSession.type + ' ' + navigator.audioSession.state);
+	}
+
 	function pickMime() {
 		for (var i = 0; i < MIME_CANDIDATES.length; i++) {
 			if (MediaRecorder.isTypeSupported(MIME_CANDIDATES[i])) return MIME_CANDIDATES[i];
@@ -172,12 +182,17 @@ window.DefVoice = (function () {
 		// iPhone's audio session into record mode — playback drops to the earpiece
 		// and is ducked, which is how 7.7.1's readback went unheard — so it is
 		// dropped the moment the recording stops and taken again for the next turn
-		// (no re-prompt once granted). The AudioContext, unlocked by the tap, lives
+		// (no re-prompt once granted), and the session goes to playback with it
+		// (sessionType). The AudioContext, unlocked by the tap, lives
 		// for the whole conversation: one made outside a gesture never runs on iOS,
 		// and the silence detector needs it on every turn.
 		function stopCapture() {
 			if (source) { try { source.disconnect(); } catch (e) { /* already gone */ } source = null; }
-			if (stream) { stream.getTracks().forEach(function (track) { track.stop(); }); stream = null; }
+			if (stream) {
+				stream.getTracks().forEach(function (track) { track.stop(); });
+				stream = null;
+				sessionType('playback');   // after the tracks stop: playback ends a live mic
+			}
 		}
 
 		function release() {
@@ -185,6 +200,7 @@ window.DefVoice = (function () {
 			recorder = null;
 			if (link) closeLive(link);
 			stopCapture();
+			sessionType('auto');   // the conversation is over: leave the page as it was found
 		}
 
 		// The token rides as a subprotocol (DEF echoes "def-live"), never in the URL. Frames
@@ -269,6 +285,7 @@ window.DefVoice = (function () {
 
 		async function openCapture() {
 			stopCapture();
+			sessionType('play-and-record');
 			stream = await navigator.mediaDevices.getUserMedia({ audio: true });
 			if (analyser) {
 				try {
