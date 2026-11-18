@@ -435,6 +435,8 @@ window.DefVoice = (function () {
 	function createSpeaker(handlers) {
 		handlers = handlers || {};
 		var mode = 'server', audio = null, queue = [], busy = false, idleWaiters = [], playing = [], current = null;
+		// The step of this reply's seq-1 line: the lead-in, which discard() keeps whole.
+		var leadStep;
 
 		function unlock() {
 			// Inside the tap: the page's context starts here, and stays running.
@@ -666,14 +668,16 @@ window.DefVoice = (function () {
 					if (line.wake) line.wake();
 					return;
 				}
+				if (audio && audio.seq === 1) leadStep = step;
 				queue.push({ text: text, audio: audio || null, parts: audio ? [audio.base64] : [],
 					last: !audio || audio.last !== false, step: step });
 				pump();
 			},
 			// The employee moved on from round `step`: its lines not yet begun are dropped
 			// (their later parts find no line); the line playing finishes. A line spoken
-			// with no step is never dropped.
+			// with no step is never dropped, nor the lead-in round, which DEF keeps whole.
 			discard: function (step) {
+				if (step === leadStep) return;
 				var kept = queue.filter(function (item) { return item.step !== step; });
 				if (kept.length < queue.length) log('dropped ' + (queue.length - kept.length) + ' (step ' + step + ')');
 				queue = kept;
@@ -681,6 +685,7 @@ window.DefVoice = (function () {
 			// The stream is over: a line whose closing frame never came plays the parts it
 			// has and finishes, so whenIdle still resolves.
 			end: function () {
+				leadStep = undefined;
 				[current].concat(queue).forEach(function (item) {
 					if (!item || item.last) return;
 					item.last = true;
@@ -693,6 +698,7 @@ window.DefVoice = (function () {
 				});
 			},
 			stop: function () {
+				leadStep = undefined;
 				queue = [];
 				if (current) {
 					// A streamed line waiting on its next part ends here; parts still to come are dropped.
