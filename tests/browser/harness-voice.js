@@ -868,15 +868,15 @@ function check(n, label, cond, detail) {
 		}
 	}
 
-	// 44. W92-1: a phone with an audio session (an iPhone) opens each mic under
-	//     play-and-record and drops to playback once the mic is off, turn after turn.
+	// 44. A phone with an audio session (an iPhone) opens each mic under play-and-record,
+	//     drops to playback once the mic is off, turn after turn, and returns to auto on release.
 	//     The fake refuses capture under playback as the iPhone did (InvalidStateError),
 	//     and starts on the playback another page left behind, which outlived a reload.
 	{
 		const t = boot(voicedWave);
 		const types = [], tracks = [];
 		let type = 'playback';
-		const session = {};
+		const session = { state: 'active' };
 		Object.defineProperty(session, 'type', { get: () => type, set: v => {
 			types.push(v + (tracks.some(tr => !tr.stopped) ? ' (mic live)' : ''));
 			type = v;
@@ -891,21 +891,21 @@ function check(n, label, cond, detail) {
 			return Promise.resolve({ getTracks: () => [track] });
 		};
 		const rec = t.DefVoice.createRecorder({});
-		let first = null, second = null, afterFirst = null;
+		let first = null, second = null;
 		try {
 			first = await rec.start();
 			await wait(t.window, 200);
 			await rec.stop();
-			afterFirst = type;
 			second = await rec.start();   // hands-free: the next turn, no tap
 			await wait(t.window, 200);
 			await rec.stop();
+			rec.release();   // the conversation ends
 		} catch (e) { first = first === null ? e.name : first; second = second === null ? e.name : second; }
-		check(44, 'iPhone session — each mic opens under play-and-record, playback once the mic is off, turn after turn',
-			first === true && second === true && afterFirst === 'playback' && type === 'playback' &&
-				types.join(',') === 'play-and-record,playback,play-and-record,playback' &&
+		check(44, 'iPhone session — each mic opens under play-and-record, playback once the mic is off, turn after turn, auto on release',
+			first === true && second === true &&
+				types.join(',') === 'play-and-record,playback,play-and-record,playback,auto' &&
 				tracks.length === 2 && tracks.every(tr => tr.stopped) &&
-				t.DefVoice.log().some(l => / session playback$/.test(l)),
+				t.DefVoice.log().some(l => / session playback active$/.test(l)),
 			'first=' + first + ' second=' + second + ' types=' + types.join(',') + ' log=' + t.DefVoice.log().join('|'));
 	}
 

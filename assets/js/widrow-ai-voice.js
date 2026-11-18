@@ -105,17 +105,14 @@ window.DefVoice = (function () {
 		return audioCtx.state === 'running';
 	}
 
-	// The page's audio session (navigator.audioSession, Safari on iPhone). After the mic
-	// was dropped, the employee's voice through the page's context still came from the
-	// earpiece only, while the device voice played loud (Steve's iPhone, 2026-11-18;
-	// WebKit bug 218012). So the session is set to playback once the mic is off, and to
-	// play-and-record before each mic: capture under playback is refused (InvalidStateError),
-	// and a playback another page left behind outlived a reload until the type was set
-	// again (Chrome on iPhone, 2026-11-18). No audioSession (Android, desktop): nothing.
+	// Safari's audio session (navigator.audioSession, Safari 16.4+ on iOS and macOS). Under the
+	// default type the reply through the page's context could stay on the earpiece after the mic
+	// (WebKit bug 218012): playback once the mic is off, play-and-record before each mic (capture
+	// under playback is refused), auto when the conversation ends, leaving the host page as found.
 	function sessionType(type) {
 		if (!navigator.audioSession) return;
 		navigator.audioSession.type = type;
-		log('session ' + type);
+		log('session ' + navigator.audioSession.type + ' ' + navigator.audioSession.state);
 	}
 
 	function pickMime() {
@@ -203,6 +200,7 @@ window.DefVoice = (function () {
 			recorder = null;
 			if (link) closeLive(link);
 			stopCapture();
+			sessionType('auto');   // the conversation is over: leave the page as it was found
 		}
 
 		// The token rides as a subprotocol (DEF echoes "def-live"), never in the URL. Frames
