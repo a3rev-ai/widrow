@@ -435,7 +435,7 @@ window.DefVoice = (function () {
 	function createSpeaker(handlers) {
 		handlers = handlers || {};
 		var mode = 'server', audio = null, queue = [], busy = false, idleWaiters = [], playing = [], current = null;
-		// The step of this reply's seq-1 line: the lead-in, which discard() keeps whole.
+		// The step of this reply's first line (its lead-in, which discard() keeps whole), until end() or stop().
 		var leadStep;
 
 		function unlock() {
@@ -668,7 +668,7 @@ window.DefVoice = (function () {
 					if (line.wake) line.wake();
 					return;
 				}
-				if (audio && audio.seq === 1) leadStep = step;
+				if (leadStep === undefined) leadStep = step;
 				queue.push({ text: text, audio: audio || null, parts: audio ? [audio.base64] : [],
 					last: !audio || audio.last !== false, step: step });
 				pump();

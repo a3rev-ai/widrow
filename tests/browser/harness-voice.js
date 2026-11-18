@@ -1058,37 +1058,35 @@ function check(n, label, cond, detail) {
 				JSON.stringify(played(t)) === '[1,2,3]' && !t.DefVoice.log().some(l => / dropped /.test(l)),
 				'played=' + JSON.stringify(played(t)) + ' log=' + t.DefVoice.log().join('|'));
 		}
-		// 51. the next reply's own seq-1 line names its lead-in: a later round numbered as the
-		//     last reply's lead-in is dropped
-		{
-			const t = boot(voicedWave);
-			const speaker = await bootRounds(t);
-			await leadInWithMarker(t, speaker, 3);
-			speaker.end();   // the first reply's stream is over
-			speaker.speak('One moment.', line(1), 1);
-			await settle(t.window);
-			await endLast(t);   // the wake silence: the second reply's lead-in is playing
-			speaker.speak('Four.', line(4), 3);
-			speaker.speak('Five.', line(5), 3);
-			supersede(speaker, 3);
-			await playOut(t);
-			check(51, 'superseded — two replies: the second reply\'s round 3 (the first reply\'s lead-in round) is still dropped',
-				JSON.stringify(played(t)) === '[1,2,3,1]', 'played=' + JSON.stringify(played(t)));
-		}
-		// 52. a reply whose first line came as text only (its voice failed) keeps no lead-in from the last reply
+		// 51. end() forgets the lead-in step: the next reply's round numbered as the last reply's lead-in is dropped
 		{
 			const t = boot(voicedWave);
 			const speaker = await bootRounds(t);
 			await leadInWithMarker(t, speaker, 2);
 			speaker.end();   // the first reply's stream is over
-			speaker.speak('Checking now.', null, 1);
-			speaker.speak('Four.', line(4), 2);
+			speaker.speak('One moment.', line(1), 1);
 			await settle(t.window);
+			await endLast(t);   // the wake silence: the second reply's lead-in is playing
+			speaker.speak('Four.', line(4), 2);
 			speaker.speak('Five.', line(5), 2);
 			supersede(speaker, 2);
 			await playOut(t);
-			check(52, 'superseded — two replies, the second\'s first line text only: its round 2 is still dropped',
-				JSON.stringify(played(t)) === '[1,2,3,4]', 'played=' + JSON.stringify(played(t)));
+			check(51, 'superseded — two replies: the second reply\'s round 2 (the first reply\'s lead-in round) is still dropped',
+				JSON.stringify(played(t)) === '[1,2,3,1]', 'played=' + JSON.stringify(played(t)));
+		}
+		// 52. a lead-in whose first line came as text only (its voice failed) is still kept whole
+		{
+			const t = boot(voicedWave);
+			const speaker = await bootRounds(t);
+			speaker.speak('Checking the invoices now.', null, 1);
+			speaker.speak('This takes a moment.', line(2), 1);
+			await settle(t.window);
+			speaker.speak('Nearly there.', line(3), 1);
+			supersede(speaker, 1);
+			speaker.speak('Here we go.', line(4), 1);
+			await playOut(t);
+			check(52, 'superseded — a lead-in whose first line is text only: its queued line and the one after its marker play',
+				JSON.stringify(played(t)) === '[2,3,4]', 'played=' + JSON.stringify(played(t)));
 		}
 	}
 
