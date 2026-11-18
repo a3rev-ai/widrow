@@ -4,7 +4,7 @@ Tags: ai, chat, digital employee, ai assistant, customer support
 Requires at least: 6.2
 Tested up to: 7.1
 Requires PHP: 8.0
-Stable tag: 11.2.0
+Stable tag: 11.2.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -118,6 +118,9 @@ Chat messages, user display name, session context, and the visitor's IP address 
 4. Admin Settings — Branding, Chat Settings, Escalation, and Connection tabs
 
 == Changelog ==
+
+= 11.2.1 - 2026-11-18 =
+* Fix - The update details WordPress shows for this plugin list its changelog by version again, in text that wraps, and no longer warn that the plugin is untested on a patch release of the WordPress version it is tested with. A second updater inside the plugin had been replacing that screen with the latest release's notes.
 
 = 11.2.0 - 2026-11-18 =
 * Feature - Ready for the platform update that speaks an employee's answer as it is written: when the employee moves on to a next step, what it said in the step it left that has not started playing is skipped. The sentence already playing finishes, and what the employee says first, as it starts working, is heard in full. Your visitors get this in Customer Chat's voice; Staff AI in the Tenant Portal gets it when the portal updates.
