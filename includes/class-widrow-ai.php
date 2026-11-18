@@ -206,15 +206,6 @@ final class Widrow_AI {
 			},
 			20
 		);
-
-		// GitHub auto-updater for widrow-ai itself.
-		new Widrow_AI_GitHub_Updater( array(
-			'file'    => WIDROW_AI_PLUGIN_DIR . 'widrow-ai.php',
-			'repo'    => 'a3rev-ai/widrow',
-			'slug'    => 'widrow-ai',
-			'asset'   => 'widrow-ai.zip',
-			'version' => WIDROW_AI_VERSION,
-		) );
 	}
 
 	/**
