@@ -1272,6 +1272,15 @@ body {
 	border-color: var(--border-hover);
 }
 
+/* The phone's model chip (11.1.0): above 768px the wrapper is no box and the chip is not drawn. */
+.model-picker {
+	display: contents;
+}
+
+.model-chip {
+	display: none;
+}
+
 /* Inline web-citation pills (web_search / web_fetch). Claude-style: a small
    text pill sits in the answer; hovering shows a preview card (title + site);
    one click opens the source. */
@@ -2183,6 +2192,200 @@ html {
 
 .voice-btn[data-mode="off"] {
 	opacity: 0.55;
+}
+
+/* The message box on a phone (11.1.0). After the base rules above because it
+   overrides them at equal specificity. Without :has() (iOS Safari before 15.4)
+   the row is today's controls at these sizes: the mic and a dimmed Send side by
+   side, the pill sharing the row; a rule that must hold there carries no :has(). */
+@media (max-width: 768px) {
+	.composer-toolbar {
+		justify-content: flex-start;
+		gap: 8px;
+	}
+
+	.composer-toolbar .upload-btn,
+	.composer-toolbar .mic-btn,
+	.composer-toolbar .voice-btn {
+		width: 44px;
+		height: 44px;
+		border-radius: 10px;
+	}
+
+	.composer-toolbar .upload-btn svg,
+	.composer-toolbar .mic-btn svg,
+	.composer-toolbar .voice-btn svg,
+	.composer-toolbar .send-btn svg {
+		width: 24px;
+		height: 24px;
+	}
+
+	/* `hidden` loses to the buttons' own display:flex. */
+	.composer-toolbar .mic-btn[hidden],
+	.composer-toolbar .voice-btn[hidden] {
+		display: none;
+	}
+
+	.composer-toolbar .model-picker {
+		order: 1;
+		position: relative;
+		display: flex;
+		flex: 0 1 auto;
+		min-width: 0;
+	}
+
+	.composer-toolbar .voice-btn {
+		order: 2;
+		margin-left: auto;
+	}
+
+	.composer-toolbar .mic-btn {
+		order: 3;
+	}
+
+	.composer-toolbar .send-btn {
+		order: 4;
+		width: 48px;
+		height: 48px;
+	}
+
+	.composer-toolbar .voice-btn[hidden] ~ .send-btn {
+		margin-left: auto;
+	}
+
+	/* The transparent select is what is tapped; 16px stops iOS zooming on focus. */
+	.composer-toolbar .model-select {
+		position: absolute;
+		inset: 0;
+		width: 100%;
+		height: 100%;
+		max-width: none;
+		margin: 0;
+		padding: 0;
+		font-size: 16px;
+		opacity: 0;
+	}
+
+	.model-chip {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		min-width: 0;
+		height: 44px;
+		padding: 0 12px;
+		border: 1px solid var(--border-medium);
+		border-radius: 22px;
+		color: var(--text-primary);
+		font-size: 15px;
+	}
+
+	.model-chip-name {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.model-chip svg {
+		flex: none;
+		width: 14px;
+		height: 14px;
+		color: var(--text-secondary);
+	}
+
+	.model-select[hidden] + .model-chip {
+		display: none;
+	}
+
+	.composer-toolbar .model-picker:has(> .model-select[hidden]) {
+		display: none;
+	}
+
+	.model-select:focus-visible + .model-chip {
+		outline: 2px solid var(--text-primary);
+		outline-offset: 2px;
+	}
+
+	.composer-toolbar .mic-btn[data-state="idle"] {
+		width: 48px;
+		height: 48px;
+		border-radius: 50%;
+		color: #fff;
+		background: #2271b1;
+	}
+
+	.composer-toolbar .mic-btn[data-state="idle"]:hover {
+		color: #fff;
+		background: #135e96;
+	}
+
+	/* Typed words hide the mic (a suggestion does not: it stays as the plain mic
+	   beside Send, below); so does a running reply's Stop. */
+	.composer:has(.composer-input:not(:placeholder-shown):not(.staff-ai-suggestion-text)) .mic-btn[data-state="idle"],
+	.composer-toolbar:has(.send-btn.is-stop) .mic-btn[data-state="idle"] {
+		display: none;
+	}
+
+	/* Send enabled (files staged, a suggestion): the mic stays as a plain button,
+	   since a spoken turn carries the staged files too. */
+	.composer-toolbar:has(.send-btn:not(:disabled)) .mic-btn[data-state="idle"] {
+		width: 44px;
+		height: 44px;
+		border-radius: 10px;
+		color: var(--text-tertiary);
+		background: transparent;
+	}
+
+	.composer:has(.composer-input:placeholder-shown):has(.mic-btn[data-state="idle"]:not([hidden])) .send-btn:disabled:not(.is-stop) {
+		display: none;
+	}
+
+	.composer-toolbar .mic-btn[data-state="listening"],
+	.composer-toolbar .mic-btn[data-state="transcribing"],
+	.composer-toolbar .mic-btn[data-state="answering"] {
+		flex: 1 1 auto;
+		min-width: 0;
+		width: auto;
+		height: 48px;
+		padding: 0 16px;
+		border-radius: 24px;
+		justify-content: center;
+		gap: 10px;
+		font-size: 17px;
+		font-weight: 600;
+	}
+
+	.composer-toolbar .mic-label {
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	/* "… is answering · tap to end" wraps to two lines rather than losing its
+	   instruction; a third line ends in an ellipsis. */
+	.composer-toolbar .mic-btn[data-state="answering"] .mic-label {
+		display: -webkit-box;
+		-webkit-box-orient: vertical;
+		-webkit-line-clamp: 2;
+		white-space: normal;
+		line-height: 1.15;
+		font-size: 15px;
+		text-align: center;
+	}
+
+	/* Stop stays beside the answering pill: tapping the pill ends hands-free, not the reply. */
+	.composer-toolbar:has(.mic-btn:is([data-state="listening"], [data-state="transcribing"], [data-state="answering"])) > :not(.mic-btn):not(.send-btn.is-stop) {
+		display: none;
+	}
+
+	.composer-hint {
+		display: none;
+	}
+}
+
+@media (max-width: 768px) and (prefers-reduced-motion: reduce) {
+	.composer-toolbar .mic-btn[data-state="listening"] {
+		animation: none;
+	}
 }
 
 .message-user .message-content.transcribing {

@@ -405,11 +405,18 @@ function t(key, fallback) {
 	// The option list is fetched from /staff-ai/status (DEF is the single source of
 	// truth); the chosen model rides in the chat request and DEF validates it.
 	const modelSelect = document.getElementById('modelSelect');
+	const modelChipName = document.getElementById('modelChipName');
 	let selectedModel = localStorage.getItem('staff-ai-model') || '';
+	// The phone's chip (11.1.0) names the chosen model short; the list keeps each description.
+	function paintModelChip() {
+		var opt = modelSelect.options[modelSelect.selectedIndex];
+		if (modelChipName) modelChipName.textContent = opt ? opt.dataset.short : '';
+	}
 	if (modelSelect) {
 		modelSelect.addEventListener('change', function () {
 			selectedModel = modelSelect.value;
 			localStorage.setItem('staff-ai-model', selectedModel);
+			paintModelChip();
 		});
 		if (statusUrl) {
 			wpFetch(statusUrl)
@@ -428,6 +435,7 @@ function t(key, fallback) {
 						var opt = document.createElement('option');
 						opt.value = m.id;
 						opt.textContent = m.label + (m.description ? ' — ' + m.description : '');
+						opt.dataset.short = m.label;
 						modelSelect.appendChild(opt);
 						ids.push(m.id);
 					});
@@ -465,6 +473,7 @@ function t(key, fallback) {
 					// first (most capable) — which is the employee default too.
 					modelSelect.value = (ids.indexOf(selectedModel) !== -1) ? selectedModel : ids[0];
 					selectedModel = modelSelect.value;
+					paintModelChip();
 					modelSelect.hidden = false;
 				})
 				.catch(function () { /* non-fatal: switcher stays hidden, default model applies */ });

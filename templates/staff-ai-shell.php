@@ -570,7 +570,14 @@ if ( ! defined( 'ABSPATH' ) ) {
 										<line x1="17" y1="9" x2="23" y2="15"></line>
 									</svg>
 								</button>
-								<select class="model-select" id="modelSelect" hidden aria-label="<?php echo esc_attr__( 'AI model', 'widrow-ai' ); ?>" title="<?php echo esc_attr__( 'Choose the AI model for this session', 'widrow-ai' ); ?>"></select>
+								<span class="model-picker">
+									<select class="model-select" id="modelSelect" hidden aria-label="<?php echo esc_attr__( 'AI model', 'widrow-ai' ); ?>" title="<?php echo esc_attr__( 'Choose the AI model for this session', 'widrow-ai' ); ?>"></select>
+									<!-- On a phone: the chosen model's short name, under the transparent select. -->
+									<span class="model-chip" aria-hidden="true">
+										<span class="model-chip-name" id="modelChipName"></span>
+										<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+									</span>
+								</span>
 								<button type="button" class="send-btn" id="sendBtn" disabled aria-label="<?php echo esc_attr__( 'Send message', 'widrow-ai' ); ?>">
 									<svg class="send-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
 										<line x1="22" y1="2" x2="11" y2="13"></line>
