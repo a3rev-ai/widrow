@@ -105,6 +105,19 @@ window.DefVoice = (function () {
 		return audioCtx.state === 'running';
 	}
 
+	// The page's audio session (navigator.audioSession, Safari on iPhone). After the mic
+	// was dropped, the employee's voice through the page's context still came from the
+	// earpiece only, while the device voice played loud (Steve's iPhone, 2026-11-18;
+	// WebKit bug 218012). So the session is set to playback once the mic is off, and to
+	// play-and-record before each mic: capture under playback is refused (InvalidStateError),
+	// and a playback another page left behind outlived a reload until the type was set
+	// again (Chrome on iPhone, 2026-11-18). No audioSession (Android, desktop): nothing.
+	function sessionType(type) {
+		if (!navigator.audioSession) return;
+		navigator.audioSession.type = type;
+		log('session ' + type);
+	}
+
 	function pickMime() {
 		for (var i = 0; i < MIME_CANDIDATES.length; i++) {
 			if (MediaRecorder.isTypeSupported(MIME_CANDIDATES[i])) return MIME_CANDIDATES[i];
@@ -172,12 +185,17 @@ window.DefVoice = (function () {
 		// iPhone's audio session into record mode — playback drops to the earpiece
 		// and is ducked, which is how 7.7.1's readback went unheard — so it is
 		// dropped the moment the recording stops and taken again for the next turn
-		// (no re-prompt once granted). The AudioContext, unlocked by the tap, lives
+		// (no re-prompt once granted), and the session goes to playback with it
+		// (sessionType). The AudioContext, unlocked by the tap, lives
 		// for the whole conversation: one made outside a gesture never runs on iOS,
 		// and the silence detector needs it on every turn.
 		function stopCapture() {
 			if (source) { try { source.disconnect(); } catch (e) { /* already gone */ } source = null; }
-			if (stream) { stream.getTracks().forEach(function (track) { track.stop(); }); stream = null; }
+			if (stream) {
+				stream.getTracks().forEach(function (track) { track.stop(); });
+				stream = null;
+				sessionType('playback');   // after the tracks stop: playback ends a live mic
+			}
 		}
 
 		function release() {
@@ -269,6 +287,7 @@ window.DefVoice = (function () {
 
 		async function openCapture() {
 			stopCapture();
+			sessionType('play-and-record');
 			stream = await navigator.mediaDevices.getUserMedia({ audio: true });
 			if (analyser) {
 				try {

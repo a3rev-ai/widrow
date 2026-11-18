@@ -4,7 +4,7 @@ Tags: ai, chat, digital employee, ai assistant, customer support
 Requires at least: 6.2
 Tested up to: 7.1
 Requires PHP: 8.0
-Stable tag: 11.0.0
+Stable tag: 11.0.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -118,6 +118,9 @@ Chat messages, user display name, session context, and the visitor's IP address 
 4. Admin Settings — Branding, Chat Settings, Escalation, and Connection tabs
 
 == Changelog ==
+
+= 11.0.1 - 2026-11-18 =
+* Fix - On an iPhone, the employee's own voice could play from the earpiece only, too quietly to hear at arm's length, after you spoke to it. Once the microphone is off, the voice now plays as other sound on the phone does. This reaches Staff AI in the Tenant Portal once the portal takes this release; Customer Chat's voice on an iPhone gets the same change.
 
 = 11.0.0 - 2026-11-18 =
 * New - A major release: Staff AI has moved to the Tenant Portal. The Staff AI console at /staff-ai, the Open Staff AI menu item, the User Roles tab and the staff roster sync are removed from the plugin. After the update, and once someone has opened wp-admin, /staff-ai on your site is an ordinary page not found.

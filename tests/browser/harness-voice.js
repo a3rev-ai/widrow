@@ -868,6 +868,47 @@ function check(n, label, cond, detail) {
 		}
 	}
 
+	// 44. W92-1: a phone with an audio session (an iPhone) opens each mic under
+	//     play-and-record and drops to playback once the mic is off, turn after turn.
+	//     The fake refuses capture under playback as the iPhone did (InvalidStateError),
+	//     and starts on the playback another page left behind, which outlived a reload.
+	{
+		const t = boot(voicedWave);
+		const types = [], tracks = [];
+		let type = 'playback';
+		const session = {};
+		Object.defineProperty(session, 'type', { get: () => type, set: v => {
+			types.push(v + (tracks.some(tr => !tr.stopped) ? ' (mic live)' : ''));
+			type = v;
+		} });
+		Object.defineProperty(t.window.navigator, 'audioSession', { configurable: true, value: session });
+		t.window.navigator.mediaDevices.getUserMedia = () => {
+			if (type !== 'play-and-record' && type !== 'auto') {
+				return Promise.reject(Object.assign(new Error('AudioSession category is not compatible with audio capture.'), { name: 'InvalidStateError' }));
+			}
+			const track = { stopped: false, stop() { track.stopped = true; } };
+			tracks.push(track);
+			return Promise.resolve({ getTracks: () => [track] });
+		};
+		const rec = t.DefVoice.createRecorder({});
+		let first = null, second = null, afterFirst = null;
+		try {
+			first = await rec.start();
+			await wait(t.window, 200);
+			await rec.stop();
+			afterFirst = type;
+			second = await rec.start();   // hands-free: the next turn, no tap
+			await wait(t.window, 200);
+			await rec.stop();
+		} catch (e) { first = first === null ? e.name : first; second = second === null ? e.name : second; }
+		check(44, 'iPhone session — each mic opens under play-and-record, playback once the mic is off, turn after turn',
+			first === true && second === true && afterFirst === 'playback' && type === 'playback' &&
+				types.join(',') === 'play-and-record,playback,play-and-record,playback' &&
+				tracks.length === 2 && tracks.every(tr => tr.stopped) &&
+				t.DefVoice.log().some(l => / session playback$/.test(l)),
+			'first=' + first + ' second=' + second + ' types=' + types.join(',') + ' log=' + t.DefVoice.log().join('|'));
+	}
+
 	console.log(results.join('\n'));
 	console.log('\n=== ' + pass + ' passed, ' + fail + ' failed (of ' + (pass + fail) + ') ===');
 	process.exit(fail ? 1 : 0);
