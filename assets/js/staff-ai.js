@@ -3946,10 +3946,13 @@ function t(key, fallback) {
 						if (spokenTurn) {
 							speaker.speak(evt.text || '', evt.audio_base64 || evt.part > 0
 								? { base64: evt.audio_base64 || '', mime: evt.mime, seq: evt.seq, part: evt.part, last: evt.last }
-								: null);
+								: null, evt.step);
 						}
 						continue;
 					}
+					// A round the employee moved on from: its speech not yet begun is dropped now,
+					// ahead of the paced queue, as its speech arrived; its text moves there.
+					if (evt.type === 'step_superseded' && spokenTurn) speaker.discard(evt.step);
 					eventQueue.push(evt);
 				}
 			}

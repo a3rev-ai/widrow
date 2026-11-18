@@ -165,12 +165,15 @@ const CONSOLE_TAIL = `
 	return {
 		startTurn: function () { conversationOn = true; spokenTurn = true; },
 		handleSpokenStop: handleSpokenStop,
+		afterSpokenTurn: afterSpokenTurn,
+		use: function (rec, spk) { voiceRecorder = rec; speaker = spk; },
 		state: function () { return { on: conversationOn, spoken: spokenTurn,
 			stopped: turnReleased, mic: micBtn.dataset.state }; }
 	};`;
 
 function bootConsole(spoken) {
-	const { window } = boot(voicedWave, CONSOLE_HTML);
+	const page = boot(voicedWave, CONSOLE_HTML);
+	const { window } = page;
 	const document = window.document;
 	const calls = [];
 	const messages = [
@@ -181,6 +184,7 @@ function bootConsole(spoken) {
 		'window', 'document', 't', 'micBtn', 'micLabel', 'voiceBtn', 'composerInput',
 		'messages', 'renderMessages', 'showInfo', 'showError', 'removeTypingMessage',
 		'_streamAbort', 'assistantName', 'onAssistantName', 'isLoading', 'isReadOnly',
+		'hideError', 'hideInfo', 'streamTokenLeft',
 		VOICE + CONSOLE_TAIL);
 	const api = factory(window, document,
 		(key, fallback) => fallback,
@@ -189,9 +193,10 @@ function bootConsole(spoken) {
 		messages, () => calls.push('render'), msg => calls.push('info:' + msg),
 		msg => calls.push('error:' + msg),
 		() => { const i = messages.findIndex(m => m.isTyping); if (i >= 0) messages.splice(i, 1); },
-		{ abort: () => calls.push('abort') }, 'Sue', () => {}, false, false);
+		{ abort: () => calls.push('abort') }, 'Sue', () => {}, false, false,
+		() => {}, () => {}, () => 0);
 	if (spoken !== false) api.startTurn();
-	return { api, messages, calls };
+	return { api, messages, calls, page };
 }
 
 // ── Customer Chat's voice section, same treatment ────────────────────────
@@ -907,6 +912,182 @@ function check(n, label, cond, detail) {
 				tracks.length === 2 && tracks.every(tr => tr.stopped) &&
 				t.DefVoice.log().some(l => / session playback active$/.test(l)),
 			'first=' + first + ' second=' + second + ' types=' + types.join(',') + ' log=' + t.DefVoice.log().join('|'));
+	}
+
+	// 45–52. a round the employee moved on from (`step_superseded`): its lines not yet begun
+	//     are dropped, the line playing finishes; other rounds, a line after the marker and
+	//     lines with no step play. The reply's lead-in (the round of its seq-1 line) is kept
+	//     whole. Line n is n × 100 samples long, so what played reads back as its seqs (the
+	//     0.3 s wake silences left out). Nodes end only when a check says.
+	{
+		const PCM = 'audio/pcm;rate=24000';
+		const line = (seq, last) => ({ base64: Buffer.from(new Uint8Array(200 * seq)).toString('base64'),
+			mime: PCM, seq, part: 0, last: last !== false });
+		const settle = w => wait(w, 3);
+		// A speaker with no discard() (before 11.2.0) fails these checks rather than the run.
+		const supersede = (speaker, step) => { if (speaker.discard) speaker.discard(step); };
+		async function bootRounds(t) {
+			const speaker = t.DefVoice.createSpeaker({});
+			speaker.unlock();
+			await wait(t.window, 20);   // the warm plays out
+			t.scheduled.length = 0;
+			t.ctl.hold = true;
+			return speaker;
+		}
+		const endLast = async t => { t.scheduled[t.scheduled.length - 1].end(); await settle(t.window); };
+		const playOut = async t => {
+			for (let i = 0; i < t.scheduled.length; i++) { t.scheduled[i].end(); await settle(t.window); }
+		};
+		const played = t => t.scheduled.filter(r => r.duration < 0.2).map(r => Math.round(r.duration * 240));
+		// The reply's lead-in, one line of round `step`, played out: the speaker is idle after it.
+		async function leadIn(t, speaker, step) {
+			speaker.speak('Checking now.', line(1), step);
+			await settle(t.window);
+			await endLast(t);   // the wake silence
+			await endLast(t);   // line 1
+		}
+		// A three-sentence lead-in of round `step`: the first playing and the second queued at its
+		// marker, the third (the sentence DEF cuts and sends at the marker) after it.
+		async function leadInWithMarker(t, speaker, step) {
+			speaker.speak('Checking the invoices now.', line(1), step);
+			await settle(t.window);
+			await endLast(t);   // the wake silence: line 1 is playing
+			speaker.speak('This takes a moment.', line(2), step);
+			supersede(speaker, step);
+			speaker.speak('Nearly there.', line(3), step);
+			await playOut(t);
+		}
+
+		// 45. three lines of a later round, the first playing; the marker drops the other two
+		{
+			const t = boot(voicedWave);
+			const speaker = await bootRounds(t);
+			await leadIn(t, speaker, 1);
+			speaker.speak('Two.', line(2), 2);
+			speaker.speak('Three.', line(3), 2);
+			speaker.speak('Four.', line(4), 2);
+			speaker.speak('Five.', line(5), 3);
+			speaker.speak('Six.', line(6), 3);
+			await settle(t.window);
+			const playing = t.scheduled[t.scheduled.length - 1];
+			supersede(speaker, 2);
+			await playOut(t);
+			check(45, 'superseded — the line playing finishes, the two queued lines of its round never play, step 3 behind them plays in order; the log says so',
+				!playing.stopped && JSON.stringify(played(t)) === '[1,2,5,6]' &&
+				t.DefVoice.log().some(l => / dropped 2 \(step 2\)$/.test(l)),
+				'played=' + JSON.stringify(played(t)) + ' stopped=' + playing.stopped + ' log=' + t.DefVoice.log().join('|'));
+		}
+		// 46. a line of the round arriving AFTER the marker plays; a later part and the closing
+		//     frame of a dropped line do not
+		{
+			const t = boot(voicedWave);
+			const speaker = await bootRounds(t);
+			await leadIn(t, speaker, 1);
+			speaker.speak('Two.', line(2), 2);
+			await settle(t.window);
+			speaker.speak('Three', line(3, false), 2);
+			supersede(speaker, 2);
+			speaker.speak('', { base64: Buffer.from(new Uint8Array(200)).toString('base64'), mime: PCM, seq: 3, part: 1, last: false }, 2);
+			speaker.speak('', { base64: '', mime: PCM, seq: 3, part: 2, last: true }, 2);
+			speaker.speak('In short, it is done.', line(4), 2);
+			await playOut(t);
+			check(46, 'superseded — the summary written after the marker (same step) plays; the dropped line\'s later part and closing frame do not',
+				JSON.stringify(played(t)) === '[1,2,4]', 'played=' + JSON.stringify(played(t)));
+		}
+		// 47. lines spoken with no step (an older platform) are never dropped
+		{
+			const t = boot(voicedWave);
+			const speaker = await bootRounds(t);
+			speaker.speak('One.', line(1));
+			await settle(t.window);
+			await endLast(t);
+			speaker.speak('Two.', line(2));
+			speaker.speak('Three.', line(3));
+			supersede(speaker, 2);
+			await playOut(t);
+			check(47, 'superseded — lines with no step all play, in order, and nothing is logged as dropped',
+				JSON.stringify(played(t)) === '[1,2,3]' && !t.DefVoice.log().some(l => / dropped /.test(l)),
+				'played=' + JSON.stringify(played(t)));
+		}
+		// 48. after a drop that leaves nothing queued, the speaker is idle once the line playing ends
+		{
+			const t = boot(voicedWave);
+			const speaker = await bootRounds(t);
+			await leadIn(t, speaker, 1);
+			speaker.speak('Two.', line(2), 2);
+			await settle(t.window);
+			speaker.speak('Three.', line(3), 2);
+			speaker.speak('Four.', line(4), 2);
+			supersede(speaker, 2);
+			let idle = false;
+			speaker.whenIdle().then(() => { idle = true; });
+			await settle(t.window);
+			const whilePlaying = idle;
+			await endLast(t);
+			check(48, 'superseded — whenIdle (what hands-free listens again on) resolves when the line playing ends, not after the dropped lines',
+				!whilePlaying && idle && JSON.stringify(played(t)) === '[1,2]',
+				'whilePlaying=' + whilePlaying + ' idle=' + idle + ' played=' + JSON.stringify(played(t)));
+		}
+		// 49. the console's hands-free loop: the mic opens again only once the next step's line has played
+		{
+			const c = bootConsole();
+			const t = c.page;
+			const speaker = await bootRounds(t);
+			const opened = [];
+			c.api.use({ start: () => { opened.push(played(t).length); return Promise.resolve(true); }, release() {} }, speaker);
+			await leadIn(t, speaker, 1);
+			speaker.speak('Two.', line(2), 2);
+			await settle(t.window);
+			speaker.speak('Three.', line(3), 2);
+			speaker.speak('Four.', line(4), 3);
+			supersede(speaker, 2);
+			c.api.afterSpokenTurn();   // the stream is over
+			await endLast(t);
+			const afterFirst = opened.length;
+			await endLast(t);
+			check(49, 'superseded — console: the mic stays closed while step 3\'s line is still to play, and opens once it has',
+				afterFirst === 0 && JSON.stringify(played(t)) === '[1,2,4]' && JSON.stringify(opened) === '[3]',
+				'afterFirst=' + afterFirst + ' played=' + JSON.stringify(played(t)) + ' opened=' + JSON.stringify(opened));
+		}
+		// 50. the lead-in is kept whole: its queued sentence and the one sent after its marker play
+		{
+			const t = boot(voicedWave);
+			const speaker = await bootRounds(t);
+			await leadInWithMarker(t, speaker, 1);
+			check(50, 'superseded — a three-sentence lead-in, the first playing and the second queued at its marker: all three are heard, in order',
+				JSON.stringify(played(t)) === '[1,2,3]' && !t.DefVoice.log().some(l => / dropped /.test(l)),
+				'played=' + JSON.stringify(played(t)) + ' log=' + t.DefVoice.log().join('|'));
+		}
+		// 51. end() forgets the lead-in step: the next reply's round numbered as the last reply's lead-in is dropped
+		{
+			const t = boot(voicedWave);
+			const speaker = await bootRounds(t);
+			await leadInWithMarker(t, speaker, 2);
+			speaker.end();   // the first reply's stream is over
+			speaker.speak('One moment.', line(1), 1);
+			await settle(t.window);
+			await endLast(t);   // the wake silence: the second reply's lead-in is playing
+			speaker.speak('Four.', line(4), 2);
+			speaker.speak('Five.', line(5), 2);
+			supersede(speaker, 2);
+			await playOut(t);
+			check(51, 'superseded — two replies: the second reply\'s round 2 (the first reply\'s lead-in round) is still dropped',
+				JSON.stringify(played(t)) === '[1,2,3,1]', 'played=' + JSON.stringify(played(t)));
+		}
+		// 52. a lead-in whose first line came as text only (its voice failed) is still kept whole
+		{
+			const t = boot(voicedWave);
+			const speaker = await bootRounds(t);
+			speaker.speak('Checking the invoices now.', null, 1);
+			speaker.speak('This takes a moment.', line(2), 1);
+			await settle(t.window);
+			speaker.speak('Nearly there.', line(3), 1);
+			supersede(speaker, 1);
+			speaker.speak('Here we go.', line(4), 1);
+			await playOut(t);
+			check(52, 'superseded — a lead-in whose first line is text only: its queued line and the one after its marker play',
+				JSON.stringify(played(t)) === '[2,3,4]', 'played=' + JSON.stringify(played(t)));
+		}
 	}
 
 	console.log(results.join('\n'));
