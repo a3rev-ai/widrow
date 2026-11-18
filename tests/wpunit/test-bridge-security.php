@@ -42,9 +42,9 @@ class Test_Bridge_Security extends WP_UnitTestCase {
 		// Hit multiple protected endpoints and check for token leaks.
 		$endpoints = array(
 			array( 'GET', '/a3-ai/v1/context-token' ),
-			array( 'GET', '/a3-ai/v1/staff-ai/conversations' ),
+			array( 'GET', '/a3-ai/v1/staff-ai/content/drafts' ),
 			array( 'GET', '/a3-ai/v1/tools/me' ),
-			array( 'POST', '/a3-ai/v1/staff-ai/chat' ),
+			array( 'POST', '/a3-ai/v1/staff-ai/content/create' ),
 		);
 
 		foreach ( $endpoints as list( $method, $path ) ) {
@@ -67,8 +67,8 @@ class Test_Bridge_Security extends WP_UnitTestCase {
 		wp_set_current_user( 0 );
 
 		$endpoints = array(
-			array( 'GET', '/a3-ai/v1/staff-ai/conversations' ),
-			array( 'POST', '/a3-ai/v1/staff-ai/chat' ),
+			array( 'GET', '/a3-ai/v1/staff-ai/content/drafts' ),
+			array( 'POST', '/a3-ai/v1/staff-ai/content/create' ),
 		);
 
 		foreach ( $endpoints as list( $method, $path ) ) {

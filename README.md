@@ -1,8 +1,8 @@
 # Widrow AI
 
-AI-powered Digital Employees for your WordPress site. Customer-facing chat, internal staff assistant, and intelligent setup — all connected to the [Digital Employee Framework](https://defho.ai/).
+AI-powered Digital Employees for your WordPress site. Customer-facing chat, content and website tools for your team, and intelligent setup — all connected to the [Digital Employee Framework](https://defho.ai/).
 
-[![Download Plugin](https://img.shields.io/badge/Download_Plugin-v10.1.3-blue?style=for-the-badge&logo=wordpress)](https://github.com/a3rev-ai/widrow/releases/download/v10.1.3/widrow-ai.zip) [![License: GPL v2+](https://img.shields.io/badge/License-GPL_v2+-green?style=for-the-badge)](https://www.gnu.org/licenses/gpl-2.0.html) [![WordPress Tested 7.1](https://img.shields.io/badge/WordPress-Tested_7.1-21759b?style=for-the-badge&logo=wordpress)](https://wordpress.org/)
+[![Download Plugin](https://img.shields.io/badge/Download_Plugin-v11.0.0-blue?style=for-the-badge&logo=wordpress)](https://github.com/a3rev-ai/widrow/releases/download/v11.0.0/widrow-ai.zip) [![License: GPL v2+](https://img.shields.io/badge/License-GPL_v2+-green?style=for-the-badge)](https://www.gnu.org/licenses/gpl-2.0.html) [![WordPress Tested 7.1](https://img.shields.io/badge/WordPress-Tested_7.1-21759b?style=for-the-badge&logo=wordpress)](https://wordpress.org/)
 
 ## Where this plugin sits
 
@@ -13,7 +13,7 @@ The framework is governed by a published constitution and reaches businesses thr
 - [The DEF Constitution, version 1.0](https://widrow.ai/the-def-constitution-version-1-0/)
 - [Privacy Statement](https://widrow.ai/privacy-statement/)
 - [Security and continuity](https://widrow.ai/security/) — where data runs, what is held, and what happens when you leave
-- The three Digital Employees this plugin delivers: [Joe](https://widrow.ai/digital-employees/joe/) (Customer Chat), [Suzie](https://widrow.ai/digital-employees/suzie/) (Staff AI) and [Sam](https://widrow.ai/digital-employees/sam/) (Setup Assistant)
+- The Digital Employees this plugin delivers on your site: [Joe](https://widrow.ai/digital-employees/joe/) (Customer Chat) and [Sam](https://widrow.ai/digital-employees/sam/) (Setup Assistant). [Suzie](https://widrow.ai/digital-employees/suzie/) (Staff AI) is served from the Tenant Portal and uses your site through this plugin
 
 ## What Are Digital Employees?
 
@@ -41,7 +41,7 @@ A chat widget for your site visitors. Floating button or embedded via shortcode.
 - Escalation to human support
 
 ### Staff AI (Suzie)
-An internal AI assistant in wp-admin for your team. Available to users with the appropriate role.
+An internal AI assistant for your team, in your Tenant Portal. From 11.0.0 this plugin no longer serves it on your site; it uses your site's tools for the people a site administrator grants access with the Setup Assistant.
 
 **Digital Staff Assistant**
 - Document creation (DOCX, PDF, Markdown)
@@ -105,14 +105,14 @@ Every release carries a dated entry in plain words in [changelog.txt](changelog.
 3. **Connect** — One-Click Connect from your Tenant Portal (or enter credentials manually on the Connection tab)
 4. **Configure** — Sam, the Setup Assistant, guides you through branding, chat settings, and user roles
 
-Once connected, Customer Chat is available on your frontend and Staff AI is available in wp-admin.
+Once connected, Customer Chat is available on your frontend and Staff AI is available in your Tenant Portal.
 
 ## How the four surfaces connect
 
 1. **widrow.ai** is the public face of the framework: the site partners, A3REV Software among them, use to explain Digital Employees to a business.
 2. **defho.ai** is the Partner Portal: a partner signs in, creates the tenant, and sets it up.
 3. **The Tenant Portal**, hosted on defho.ai under the partner's subdomain, is where the business's own settings, keys, knowledge and people live.
-4. **The Widrow AI plugin** (this repo) runs on the business's WordPress. One-Click Connect from the Tenant Portal links them. Joe serves the public; Suzie and Sam serve the business's own staff inside wp-admin.
+4. **The Widrow AI plugin** (this repo) runs on the business's WordPress. One-Click Connect from the Tenant Portal links them. Joe serves the public; Sam serves the business's own staff inside wp-admin, and Suzie serves them from the Tenant Portal.
 5. Every surface talks to the **Digital Employee Framework**, which runs the employees and enforces the governance. It is private and governed by the published Constitution.
 
 Joe talks to a business's visitors. Some of them run businesses. The next business meets Widrow, and the ring closes.
@@ -122,7 +122,7 @@ flowchart TD
     W["widrow.ai<br/>the public face"] --> P["defho.ai<br/>Partner Portal"]
     P --> T["Tenant Portal<br/>the business's settings, keys, knowledge, people"]
     T -- "One-Click Connect" --> C["Widrow AI plugin<br/>on the business's WordPress"]
-    C -- "Joe to the public; Suzie and Sam to staff" --> V["visitors and staff"]
+    C -- "Joe to the public; Sam to staff" --> V["visitors and staff"]
     V -. "the next business" .-> W
     D["DEF, the framework<br/>private, governed by the Constitution"]
     P <--> D
@@ -134,14 +134,13 @@ This plugin is the bridge. All AI logic, tool execution, employee orchestration 
 
 ## Admin Settings
 
-Five tabs under **Widrow AI** in wp-admin:
+Four tabs under **Widrow AI** in wp-admin:
 
 | Tab | What It Does |
 |-----|-------------|
 | **Branding** | Display name, logo, app icon |
 | **Chat Settings** | Display mode, button position/color/icon/label, AI disclosure notice |
 | **Escalation** | Email recipients for Customer Chat and Setup Assistant escalations |
-| **User Roles** | Assign DEF capabilities (Staff AI access, Management access) per user |
 | **Connection** | Connection status indicator (read-only when push-configured) |
 
 ## WooCommerce Integration

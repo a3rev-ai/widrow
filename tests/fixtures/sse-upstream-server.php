@@ -124,13 +124,6 @@ $scenarios = array(
 		array( "Content-Type: text/event-stream" ),
 		array( "id: 4\ndata: " . json_encode( array( 'type' => 'done', 'request' => $request_line, 'body_bytes' => $body_bytes ) ) . "\n\n" ),
 	),
-	// The turn resume answered by a worker that does not hold the turn (8.7.14): 410 and the
-	// reply's DB state, as DEF sends it.
-	'gone' => array(
-		"HTTP/1.1 410 Gone",
-		array( "Content-Type: application/json" ),
-		array( "{\"state\":\"in_progress\",\"is_complete\":false}" ),
-	),
 );
 
 if ( ! isset( $scenarios[ $scenario ] ) ) {

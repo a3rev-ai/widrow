@@ -4,12 +4,7 @@
 # A fingerprint excuses that one line only: a new secret anywhere still fails the gate.
 
 # 22-char share-token / API-key fixtures.
-tests/browser/harness-artifact-share.js:generic-api-key:38
-tests/test-staff-ai.php:generic-api-key:850
-tests/test-staff-ai.php:generic-api-key:875
-tests/test-staff-ai.php:generic-api-key:876
-tests/test-staff-ai.php:generic-api-key:1052
-tests/test-staff-ai.php:generic-api-key:1064
+tests/browser/harness-artifact-share.js:generic-api-key:35
 tests/test-wordfence-allowlist.php:generic-api-key:117
 # The literal placeholder test_api_key_12345.
-tests/test-admin-api.php:generic-api-key:624
+tests/test-admin-api.php:generic-api-key:598

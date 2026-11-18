@@ -73,7 +73,7 @@ final class Widrow_AI_Routes {
 		);
 
 		// The widget's stream token (W74): Customer Chat's is anyone's, as /chat/stream is
-		// (its nonce rule runs in the callback); Staff AI's takes the staff stream's permission.
+		// (its nonce rule runs in the callback).
 		register_rest_route(
 			WIDROW_AI_API_NAME_SPACE,
 			'/chat/stream-token',
@@ -83,25 +83,14 @@ final class Widrow_AI_Routes {
 					'channel' => array(
 						'type'     => 'string',
 						'required' => true,
-						'enum'     => array( 'customer_chat', 'staff_ai' ),
+						'enum'     => array( 'customer_chat' ),
 					),
 					'thread'  => array(
 						'type'    => 'string',
 						'default' => '',
 					),
 				),
-				'permission_callback' => function ( $request ) {
-					if ( 'staff_ai' !== $request->get_param( 'channel' ) ) {
-						return true;
-					}
-					if ( ! is_user_logged_in() ) {
-						return false;
-					}
-					if ( current_user_can( 'widrow_staff_access' ) || current_user_can( 'widrow_management_access' ) ) {
-						return true;
-					}
-					return \Widrow_AI_Staff_AI::access_denied_error();
-				},
+				'permission_callback' => '__return_true',
 				'callback'            => array( 'Widrow_AI_Tools', 'rest_issue_stream_token' ),
 			)
 		);
@@ -168,54 +157,6 @@ final class Widrow_AI_Routes {
 				'methods'             => 'POST',
 				'permission_callback' => '__return_true',
 				'callback'            => array( 'Widrow_AI_Tools', 'rest_proxy_tool_result_confirm' ),
-			)
-		);
-
-		// Staff AI BFF proxy — proxies chat requests to DEF backend
-		register_rest_route(
-			WIDROW_AI_API_NAME_SPACE,
-			'/staff-ai/chat/stream',
-			array(
-				'methods'             => 'POST',
-				'permission_callback' => function () {
-					if ( ! is_user_logged_in() ) {
-						return false;
-					}
-					if ( current_user_can( 'widrow_staff_access' ) || current_user_can( 'widrow_management_access' ) ) {
-						return true;
-					}
-					// Logged-in but uncapped: named refusal with actionable copy
-					// (5.7.7). Anonymous stays bare false above — 401 shape untouched.
-					return \Widrow_AI_Staff_AI::access_denied_error();
-				},
-				'callback'            => array( 'Widrow_AI_Tools', 'rest_proxy_staff_ai_stream' ),
-			)
-		);
-
-		// NOTE: GET /staff-ai/status is ALSO registered (diagnostic-only) in
-		// Widrow_AI_Staff_AI::register_rest_routes(). This passthrough wins dispatch
-		// because Widrow_AI_Routes::init() runs before Widrow_AI_Staff_AI::init() in
-		// Widrow_AI::init() (so it registers first, and WordPress matches the first
-		// method handler). The model switcher's `available_models` is only on THIS
-		// (passthrough) response, so this ordering is load-bearing — do not reorder
-		// those init() calls without moving the dropdown to a dedicated route.
-		register_rest_route(
-			WIDROW_AI_API_NAME_SPACE,
-			'/staff-ai/status',
-			array(
-				'methods'             => 'GET',
-				'permission_callback' => function () {
-					if ( ! is_user_logged_in() ) {
-						return false;
-					}
-					if ( current_user_can( 'widrow_staff_access' ) || current_user_can( 'widrow_management_access' ) ) {
-						return true;
-					}
-					// Logged-in but uncapped: named refusal with actionable copy
-					// (5.7.7). Anonymous stays bare false above — 401 shape untouched.
-					return \Widrow_AI_Staff_AI::access_denied_error();
-				},
-				'callback'            => array( 'Widrow_AI_Tools', 'rest_proxy_staff_ai_status' ),
 			)
 		);
 

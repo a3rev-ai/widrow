@@ -71,9 +71,8 @@ final class Widrow_AI_Tools {
 	 */
 	public static function rest_issue_stream_token( $request ) {
 		$channel = (string) $request->get_param( 'channel' );
-		$staff   = 'staff_ai' === $channel;
 		// The chat proxy's rule: a logged-in caller with a bad nonce is refused, never downgraded.
-		if ( ! $staff && is_user_logged_in() ) {
+		if ( is_user_logged_in() ) {
 			$nonce = $request->get_header( 'X-WP-Nonce' );
 			if ( ! $nonce || ! wp_verify_nonce( $nonce, 'wp_rest' ) ) {
 				return new \WP_Error( 'invalid_nonce', 'Authentication required.', array( 'status' => 403 ) );
@@ -86,12 +85,6 @@ final class Widrow_AI_Tools {
 			'display_name' => $user->ID ? $user->display_name : '',
 			'ip'           => self::get_visitor_ip(),
 		);
-		if ( $staff ) {
-			$identity['capabilities'] = self::get_user_def_capabilities( $user );
-			$identity['email']        = $user->user_email;
-			$identity['roles']        = array_values( array_filter( (array) $user->roles, 'is_string' ) );
-			$identity['site_name']    = get_bloginfo( 'name' );
-		}
 		$claims = array_merge(
 			array_filter( $identity ), // What build_proxy_headers leaves out when empty, this leaves out too.
 			array(
@@ -108,9 +101,9 @@ final class Widrow_AI_Tools {
 			array(
 				'token'      => Widrow_AI_JWT::issue_token( $claims, 600 ),
 				'exp'        => time() + 600,
-				'stream_url' => $api . ( $staff ? '/api/staff-ai/chat/stream' : '/api/chat/stream' ),
+				'stream_url' => $api . '/api/chat/stream',
 				// The voice socket a spoken turn is transcribed on while it is spoken (W75), on this token.
-				'live_url'   => preg_replace( '#^http#', 'ws', $api ) . ( $staff ? '/api/staff_ai/voice/live' : '/api/customer/voice/live' ),
+				'live_url'   => preg_replace( '#^http#', 'ws', $api ) . '/api/customer/voice/live',
 			),
 			200
 		);
@@ -163,7 +156,7 @@ final class Widrow_AI_Tools {
 	 *
 	 * @param string  $url     DEF backend URL.
 	 * @param array   $headers HTTP headers for the upstream request.
-	 * @param ?string $body    Request body; null sends a GET (the Staff AI turn resume).
+	 * @param string  $body    Request body.
 	 * @return void
 	 */
 	private static function stream_proxy( $url, $headers, $body ) {
@@ -222,16 +215,9 @@ final class Widrow_AI_Tools {
 				return strlen( $data );
 			},
 		) );
-		if ( null === $body ) {
-			curl_setopt( $ch, CURLOPT_HTTPGET, true );
-		}
 
-		// What this buys: PHP's own max_execution_time no longer ends a stream that is still
-		// relaying a working turn. What it does not: a host's own wall-clock limit (the web
-		// server's or a proxy's timeout, FPM's request_terminate_timeout) still ends the
-		// request whatever PHP says. Re-attaching is what survives that: the turn runs on DEF,
-		// and the console resumes it from the last frame it saw (8.7.14). A relay whose viewer
-		// has gone is meant to die at its next write (PHP's default), freeing the worker.
+		// PHP's own max_execution_time must not end a Customer Chat or Setup Assistant stream
+		// still relaying a working turn; a host's wall-clock limit still applies regardless.
 		// set_time_limit is on many hosts' disable_functions list.
 		if ( function_exists( 'set_time_limit' ) ) {
 			set_time_limit( 0 );
@@ -698,65 +684,6 @@ final class Widrow_AI_Tools {
 	}
 
 	/**
-	 * BFF proxy for Staff AI chat stream.
-	 * Auth: logged-in user with widrow_staff_access or widrow_management_access.
-	 *
-	 * @param \WP_REST_Request $request The REST request.
-	 * @return void|\WP_Error
-	 */
-	public static function rest_proxy_staff_ai_stream( $request ) {
-		$headers = self::build_proxy_headers( true );
-		$def_url = \Widrow_AI::get_def_api_url_internal() . '/api/staff-ai/chat/stream';
-		self::stream_proxy( $def_url, $headers, $request->get_body() );
-	}
-
-	/**
-	 * BFF proxy for the Staff AI turn resume (8.7.14): a console whose stream ended before
-	 * the reply did re-attaches to the turn from the last frame it saw. Relayed exactly as
-	 * the chat stream is; DEF checks the thread is this user's. No visitor IP: a resume
-	 * sends no message.
-	 *
-	 * @param \WP_REST_Request $request The REST request.
-	 * @return void
-	 */
-	public static function rest_proxy_staff_ai_turn_resume( $request ) {
-		$headers = self::build_proxy_headers( true, false );
-		$def_url = \Widrow_AI::get_def_api_url_internal() . '/api/staff-ai/threads/'
-			. rawurlencode( (string) $request->get_param( 'id' ) ) . '/turns/'
-			. rawurlencode( (string) $request->get_param( 'turn' ) ) . '/stream?after='
-			. (int) $request->get_param( 'after' );
-		self::stream_proxy( $def_url, $headers, null );
-	}
-
-	/**
-	 * BFF proxy for the Staff AI Stop button (W82): asks DEF to stop a reply still being
-	 * written. DEF checks the thread is this user's; it answers {state}. No visitor IP, no
-	 * body: a stop sends no message.
-	 *
-	 * @param \WP_REST_Request $request The REST request.
-	 * @return \WP_REST_Response|\WP_Error
-	 */
-	public static function rest_proxy_staff_ai_turn_stop( $request ) {
-		$headers = self::build_proxy_headers( true, false );
-		$def_url = \Widrow_AI::get_def_api_url_internal() . '/api/staff-ai/threads/'
-			. rawurlencode( (string) $request->get_param( 'id' ) ) . '/turns/'
-			. rawurlencode( (string) $request->get_param( 'turn' ) ) . '/stop';
-		return self::json_proxy( $def_url, $headers, '' );
-	}
-
-	/**
-	 * BFF proxy for Staff AI status check.
-	 *
-	 * @param \WP_REST_Request $request The REST request.
-	 * @return \WP_REST_Response|\WP_Error
-	 */
-	public static function rest_proxy_staff_ai_status( $request ) {
-		$headers = self::build_proxy_headers( true );
-		$def_url = \Widrow_AI::get_def_api_url_internal() . '/api/staff-ai/status';
-		return self::json_proxy_get( $def_url, $headers );
-	}
-
-	/**
 	 * BFF proxy for Setup Assistant chat stream.
 	 * Auth: logged-in user with widrow_admin_access.
 	 *
@@ -879,7 +806,7 @@ final class Widrow_AI_Tools {
 	 *
 	 * Cached in the `widrow_ai_roles_catalog` option; `$refresh` re-fetches from DEF's bridge
 	 * (`GET /api/staff-ai/roles-catalog`, admin-gated — call with refresh only from a def_admin
-	 * context, e.g. the User Access page load). Fetch failure keeps the cached copy (assignment
+	 * context, e.g. the Settings page load). Fetch failure keeps the cached copy (assignment
 	 * must not break on a DEF blip). Entries are sanitized on store: slugs to the locked wire
 	 * format, names to plain text.
 	 *

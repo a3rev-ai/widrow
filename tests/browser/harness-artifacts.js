@@ -15,7 +15,7 @@
  * own card — the one a tool result renders in the conversation — over the SHIPPED
  * createToolOutputCard and the same viewer.
  *
- * 32 checks.
+ * 31 checks.
  */
 const { JSDOM } = require('jsdom');
 const extract = require('./extract');
@@ -219,9 +219,6 @@ function check(label, ok, detail) {
 		const noHead = t.frame.artifactDocument('<!DOCTYPE html><html lang="en"><body>b</body></html>');
 		check('a page with a doctype and no head keeps its doctype first (standards mode) and the policy next',
 			noHead.startsWith('<!DOCTYPE html>' + META), noHead.slice(0, 80));
-		check('the console page refuses the frame\'s own navigation at the request: its CSP carries frame-src \'self\'',
-			/Content-Security-Policy: frame-ancestors 'self'; frame-src 'self';/.test(
-				require('fs').readFileSync(require('path').join(extract.REPO, 'includes', 'class-widrow-ai-staff-ai.php'), 'utf8')));
 	}
 
 	// ── Opening an artifact ───────────────────────────────────────────────

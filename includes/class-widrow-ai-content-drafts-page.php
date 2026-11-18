@@ -40,7 +40,7 @@ final class Widrow_AI_Content_Drafts_Page {
 			return;
 		}
 		// Position 1 slots "Content AI" directly after Settings (index 0),
-		// ahead of Open Staff AI and Logs which register earlier and append.
+		// ahead of Logs, which registers earlier and appends.
 		add_submenu_page(
 			'widrow-ai',
 			__( 'Content Drafts', 'widrow-ai' ),

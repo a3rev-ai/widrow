@@ -5,8 +5,6 @@
  * Tests:
  * - C1: JWT audience (aud) claim enforcement
  * - C1b: JWT not-before (nbf) claim enforcement
- * - C2: Content-Disposition header injection prevention
- * - C3: Content-Type reflection XSS prevention
  *
  * @package widrow-ai/tests
  */
@@ -92,7 +90,6 @@ if ( ! function_exists( 'wp_get_current_user' ) ) {
 }
 
 require_once WIDROW_AI_PLUGIN_DIR . 'includes/class-widrow-ai-jwt.php';
-require_once WIDROW_AI_PLUGIN_DIR . 'includes/class-widrow-ai-staff-ai.php';
 
 $pass = 0;
 $fail = 0;
@@ -234,89 +231,6 @@ $past_nbf_token = $signing_input . '.' . $b64url_encode( $signature );
 
 $result = Widrow_AI_JWT::verify_token( $past_nbf_token );
 assert_true( is_array( $result ), 'past nbf accepted' );
-
-// =====================================================================
-// C2: Content-Disposition header injection prevention
-// =====================================================================
-echo "\n[C2] Content-Disposition filename sanitization\n";
-
-// Use reflection to access the private method.
-$ref = new ReflectionMethod( 'Widrow_AI_Staff_AI', 'sanitize_proxy_filename' );
-$ref->setAccessible( true );
-
-// Normal filename → passes through.
-$result = $ref->invoke( null, 'report.pdf' );
-assert_equals( 'report.pdf', $result, 'normal filename preserved' );
-
-// Filename with double quotes → stripped.
-$result = $ref->invoke( null, 'file"name.pdf' );
-assert_true( strpos( $result, '"' ) === false, 'double quotes stripped' );
-
-// Filename with newline (header injection attempt) → stripped.
-$result = $ref->invoke( null, "file\r\nX-Injected: evil\r\n.pdf" );
-assert_true( strpos( $result, "\r" ) === false, 'CR stripped' );
-assert_true( strpos( $result, "\n" ) === false, 'LF stripped' );
-// Note: "X-Injected: evil" text remains but is harmless without CRLF — it's just part of the filename.
-assert_true( strpos( $result, "\r\n" ) === false, 'CRLF sequence fully removed (injection neutralised)' );
-
-// Filename with null byte → stripped.
-$result = $ref->invoke( null, "file\x00.pdf" );
-assert_true( strpos( $result, "\x00" ) === false, 'null byte stripped' );
-
-// Filename with backslash → stripped.
-$result = $ref->invoke( null, 'file\\name.pdf' );
-assert_true( strpos( $result, '\\' ) === false, 'backslash stripped' );
-
-// Filename with path traversal → stripped.
-$result = $ref->invoke( null, '../../../etc/passwd' );
-assert_true( strpos( $result, '/' ) === false, 'path separators stripped' );
-assert_true( strpos( $result, '..' ) === false, 'path traversal dots stripped after separator removal' );
-
-// Empty filename → fallback to 'download'.
-$result = $ref->invoke( null, '' );
-assert_equals( 'download', $result, 'empty filename falls back to download' );
-
-// Only control chars → fallback to 'download'.
-$result = $ref->invoke( null, "\r\n\x00" );
-assert_equals( 'download', $result, 'all-control-chars falls back to download' );
-
-// Unicode filename → preserved.
-$result = $ref->invoke( null, 'résumé.pdf' );
-assert_true( strpos( $result, 'résumé' ) !== false, 'unicode filename preserved' );
-
-// =====================================================================
-// C3: Content-Type reflection XSS prevention
-// =====================================================================
-echo "\n[C3] Content-Type sanitization\n";
-
-$ref_ct = new ReflectionMethod( 'Widrow_AI_Staff_AI', 'sanitize_proxy_content_type' );
-$ref_ct->setAccessible( true );
-
-// Safe types → preserved.
-assert_equals( 'application/pdf', $ref_ct->invoke( null, 'application/pdf' ), 'application/pdf preserved' );
-assert_equals( 'image/png', $ref_ct->invoke( null, 'image/png' ), 'image/png preserved' );
-assert_equals( 'text/csv', $ref_ct->invoke( null, 'text/csv' ), 'text/csv preserved' );
-assert_equals( 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', $ref_ct->invoke( null, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ), 'xlsx type preserved' );
-
-// Dangerous types → forced to application/octet-stream.
-assert_equals( 'application/octet-stream', $ref_ct->invoke( null, 'text/html' ), 'text/html blocked' );
-assert_equals( 'application/octet-stream', $ref_ct->invoke( null, 'text/html; charset=utf-8' ), 'text/html with charset blocked' );
-assert_equals( 'application/octet-stream', $ref_ct->invoke( null, 'TEXT/HTML' ), 'TEXT/HTML (case insensitive) blocked' );
-assert_equals( 'application/octet-stream', $ref_ct->invoke( null, 'application/xhtml+xml' ), 'xhtml+xml blocked' );
-assert_equals( 'application/octet-stream', $ref_ct->invoke( null, 'image/svg+xml' ), 'svg+xml blocked' );
-assert_equals( 'application/octet-stream', $ref_ct->invoke( null, 'application/javascript' ), 'javascript blocked' );
-assert_equals( 'application/octet-stream', $ref_ct->invoke( null, 'text/javascript' ), 'text/javascript blocked' );
-assert_equals( 'application/octet-stream', $ref_ct->invoke( null, 'application/xml' ), 'application/xml blocked' );
-assert_equals( 'application/octet-stream', $ref_ct->invoke( null, 'text/xml' ), 'text/xml blocked' );
-
-// Empty → fallback.
-assert_equals( 'application/octet-stream', $ref_ct->invoke( null, '' ), 'empty type falls back' );
-
-// Garbage → fallback.
-assert_equals( 'application/octet-stream', $ref_ct->invoke( null, 'not-a-mime-type' ), 'garbage type falls back' );
-
-// Charset stripped, base type used.
-assert_equals( 'application/pdf', $ref_ct->invoke( null, 'application/pdf; charset=utf-8' ), 'charset stripped, base type used' );
 
 // ── Summary ─────────────────────────────────────────────────────────────
 echo "\n--- Security Regression Tests: $pass passed, $fail failed ---\n";

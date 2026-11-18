@@ -8,10 +8,9 @@
  * the purple tile on Steve's iPhone.
  *
  * Read off the shipped template and the shipped PHP, so the checks bite by
- * editing those two files. The resolver's own chain and the true-size
- * declaration are the PHP half — tests/test-staff-ai-pwa-icon.php.
+ * editing those two files.
  *
- * 5 checks.
+ * 4 checks.
  */
 const fs = require('fs');
 const path = require('path');
@@ -43,15 +42,10 @@ check(++n, 'the head carries apple-touch-icon, href AND declared size from the s
 	/\$apple_touch_icon\['src'\]/.test(touch[2]),
 	touch ? 'renders: ' + touch[0] : 'no apple-touch-icon link in the head at all');
 
-// iOS ignores an SVG here, so the href must resolve to a raster file. Both ends
-// of the resolver are held to that: the mime guard refuses anything a browser
-// may not read, and the last link, the bundled default, is a .png at its source.
-check(++n, 'the href names no SVG, the resolver admits only PNG/JPEG/WebP, and its default is a PNG',
-	!!touch && !/\.svg/.test(touch[2]) &&
-	/in_array\(\$mime, array\('image\/png', 'image\/jpeg', 'image\/webp'\), true\)/.test(PHP) &&
-	/'assets\/images\/staff-ai-icon-' \. \$px \. '\.png'/.test(PHP),
-	touch && /\.svg/.test(touch[2]) ? 'the href names an SVG'
-		: 'the mime guard or bundled_icon()\'s .png has changed shape');
+// iOS ignores an SVG here, so the href must resolve to a raster file.
+check(++n, 'the href names no SVG',
+	!!touch && !/\.svg/.test(touch[2]),
+	'the href names an SVG');
 
 // ── 3. The name and the standalone hint ─────────────────────────────────────
 //
@@ -62,12 +56,7 @@ check(++n, 'the installed app is named Staff AI, and opens without browser chrom
 	/<meta name="mobile-web-app-capable" content="yes">/.test(HEAD) &&
 	/<meta name="apple-mobile-web-app-capable" content="yes">/.test(HEAD));
 
-// ── 4. Both halves wired, not just the tag ──────────────────────────────────
-check(++n, 'render_shell() fills $apple_touch_icon from the manifest\'s own resolver, at 180',
-	/\$apple_touch_icon = self::app_icon\( 180 \);/.test(PHP) &&
-	/function app_icon\(int \$size\): array/.test(PHP));
-
-// ── 5. The route it replaces is gone ────────────────────────────────────────
+// ── 4. The route it replaces is gone ────────────────────────────────────────
 //
 // /staff-ai/icon.svg served initials on a rounded #6366f1 plate — the fallback
 // iOS was masking. Nothing may be left to answer it.

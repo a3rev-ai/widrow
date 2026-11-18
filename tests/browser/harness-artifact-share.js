@@ -5,17 +5,16 @@
  * (each sliced by marker) inside jsdom, against the page sections cut out of
  * templates/staff-ai-shell.php. Nothing here is a copy of the code or the markup.
  *
- * What is pinned: the list forwards `share`; Share calls the POST and shows the
+ * What is pinned: Share calls the POST and shows the
  * link built from the origin PHP handed the console; Stop sharing calls the
  * DELETE and the page goes back to offering Share; the globe and the lock follow
  * `share` on both lists; DEF's 409 sentence reaches the reader; and neither the
  * token nor a title ever goes in as markup.
  *
- * 28 checks. Bite: `DOCVIEWER=…` a pre-A-3 copy of the viewer block turns 12 of
+ * 26 checks. Bite: `DOCVIEWER=…` a pre-A-3 copy of the viewer block turns 12 of
  * the 24 viewer-side checks red (the override in extract.js returns the file
  * before the `needs` assertion, so the extraction itself still succeeds — it is
- * the checks that bite, not the slicer); dropping the `share` field from either
- * BFF handler fails the first check.
+ * the checks that bite, not the slicer).
  */
 const { JSDOM } = require('jsdom');
 const extract = require('./extract');
@@ -29,8 +28,6 @@ const FRAME = extract.artifactFrame();
 const JS = require('fs').readFileSync(extract.JS_PATH, 'utf8');
 const CSS = require('fs').readFileSync(
 	require('path').join(extract.REPO, 'assets', 'css', 'staff-ai.css'), 'utf8');
-const PHP = require('fs').readFileSync(
-	require('path').join(extract.REPO, 'includes', 'class-widrow-ai-staff-ai.php'), 'utf8');
 const TEMPLATE = extract.templateSource();
 
 // The origin PHP decides and localises; the console never holds a host of its own.
@@ -174,16 +171,8 @@ function check(label, ok, detail) {
 }
 
 (async function () {
-	// ── The wire, read off the shipped PHP, template and script ───────────
+	// ── The wire, read off the shipped template and script ───────────
 	{
-		check('the BFF forwards `share` on the list and on the document page, from one charset-checked reader',
-			/'share'\s*=> self::document_share\( \$doc \)/.test(PHP)
-			&& (PHP.match(/'share'\s*=> self::document_share\( \$doc \)/g) || []).length === 2
-			&& /\^\[A-Za-z0-9_-\]\{22\}\$/.test(PHP));
-		check('both share routes register on the sibling document routes\' permission callback and id pattern',
-			/'\/staff-ai\/documents\/\(\?P<id>\[a-zA-Z0-9-\]\+\)\/share'/.test(PHP)
-			&& /'callback'\s*=> array\(__CLASS__, 'rest_share_document'\)/.test(PHP)
-			&& /'callback'\s*=> array\(__CLASS__, 'rest_unshare_document'\)/.test(PHP));
 		check('the console is handed the origin by PHP — no host is written into the JS',
 			/shareOrigin: <\?php echo wp_json_encode\( Widrow_AI_OAuth::get_defho_url\(\) \); \?>,/.test(TEMPLATE)
 			&& /const shareOrigin = StaffAIConfig\.shareOrigin \|\| '';/.test(JS)

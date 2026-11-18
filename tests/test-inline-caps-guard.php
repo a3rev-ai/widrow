@@ -99,25 +99,8 @@ function scan_inline_caps(): array {
 // ── The baseline — EXPLICITLY UNREVIEWED, measured 2026-08-10 ────────────────
 
 const BASELINE = array(
-	// Door-check for DEF's String(64) timezone column, mirrored from the DEF
-	// route it proxies: REFUSES visibly (400, field named), never truncates;
-	// every real IANA zone name fits. Classified at introduction (S4b card).
-	// Second occurrence (Phase 3, v6.0.0): the task creator's identical
-	// door-check on the identical column type.
-	'includes/class-widrow-ai-staff-ai.php::if ( ! is_string( $timezone ) || \'\' === $timezone || strlen( $timezone ) > 64 ) {' => 2,
-	// Door-check for DEF's String(64) model column (P3-C, v6.2.0), mirrored
-	// from the DEF task route it proxies: REFUSES visibly (400, field named),
-	// never truncates; every registered model id fits, and DEF stays the
-	// authority on which ids exist — this bounds the shape only.
-	'includes/class-widrow-ai-staff-ai.php::if ( ! is_string( $model ) || strlen( $model ) > 64 ) {' => 1,
-	// Door-check for DEF's String(64) triage-binding column (Phase 4a,
-	// v6.3.0), same class as the model/timezone entries: REFUSES visibly,
-	// never truncates; every aggregator account id fits, and OWNERSHIP is
-	// DEF's fail-closed run-time check — this bounds the shape only.
-	'includes/class-widrow-ai-staff-ai.php::if ( ! is_string( $account ) || strlen( $account ) > 64 ) {' => 1,
 	'includes/class-widrow-ai-admin-api.php::$error_msg = sanitize_text_field( substr( $response->get_error_message(), 0, 200 ) );' => 1,
 	'includes/class-widrow-ai-admin.php::$error_msg = sanitize_text_field( substr( $response->get_error_message(), 0, 200 ) );' => 1,
-	'includes/class-widrow-ai-admin.php::if ( count( $results ) >= 10 ) {' => 1,
 	'includes/class-widrow-ai-admin.php::if ( mb_strlen( $value ) > 2048 ) {' => 1,
 	'includes/class-widrow-ai-export.php::$context[\'sql\'] = substr( $query->request, 0, 2000 );' => 1,
 	'includes/class-widrow-ai-knowledge-export.php::if ( is_string( $value ) && strlen( $value ) > 500 ) {' => 1,
@@ -130,17 +113,7 @@ const BASELINE = array(
 	'includes/class-widrow-ai-page-context.php::return substr( $value, 0, 100 );' => 1,
 	'includes/class-widrow-ai-page-context.php::return substr( (string) $value, 0, 16 );' => 1,
 	'includes/class-widrow-ai-site-tools.php::$truncated = array_slice( $data, 0, 10 );' => 1,
-	'includes/class-widrow-ai-staff-ai.php::$error_msg .= \' (HTTP \' . intval( $status_code ) . \': \' . esc_html( substr( $error_body, 0, 200 ) ) . \')\';' => 1,
 	'includes/class-widrow-ai-staff-ai.php::if ( mb_strlen( $notes ) > 2000 ) {' => 1,
-	'includes/class-widrow-ai-staff-ai.php::if (count($events) >= 100) {' => 1,
-	// Roster push (7.0.0): mirrors DEF's _ROSTER_NAME_MAX, which it enforces
-	// ALL-OR-NOTHING — one name over 200 chars 422s the WHOLE roster and DEF
-	// writes nothing, so absent this bound a single long profile nickname
-	// (wp_users.display_name is varchar(250)) permanently kills every push for
-	// the tenant. REPORTS the cut with the user id; the name is evidence, never
-	// an identifier — `sub` is what DEF keys on, and it is never touched.
-	'includes/class-widrow-ai-staff-roster.php::if ( mb_strlen( $display_name ) > 200 ) {' => 1,
-	'includes/class-widrow-ai-staff-roster.php::$display_name = mb_substr( $display_name, 0, 200 );' => 1,
 	'includes/class-widrow-ai-tools.php::&& strlen( $cart_token ) <= 4096' => 1,
 );
 

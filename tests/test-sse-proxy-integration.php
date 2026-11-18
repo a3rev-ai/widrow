@@ -123,17 +123,15 @@ function drive( string $scenario, string $mode = '', ?string &$err = null ): str
 		return '';
 	}
 
-	// The resume mode takes DEF's base URL and builds the path itself.
 	$drv = proc_open(
 		sprintf( '%s %s %s %s', escapeshellarg( PHP_BINARY ), escapeshellarg( $driver ),
-			escapeshellarg( 'resume' === $mode ? "http://127.0.0.1:$port" : "http://127.0.0.1:$port/api/chat/stream" ),
-			escapeshellarg( $mode ) ),
+			escapeshellarg( "http://127.0.0.1:$port/api/chat/stream" ), escapeshellarg( $mode ) ),
 		array( 1 => array( 'pipe', 'w' ), 2 => array( 'pipe', 'w' ) ),
 		$dp
 	);
 	$out = is_resource( $drv ) ? (string) stream_get_contents( $dp[1] ) : '';
 	// The driver's STDERR, read once: its log rows (one JSON line each) for the stream-end
-	// checks in [8], then the resume mode's time-limit trailer (8.7.14).
+	// checks in [8], then the `limit` mode's time-limit trailer for [10].
 	$err = is_resource( $drv ) ? (string) stream_get_contents( $dp[2] ) : '';
 	$GLOBALS['last_log'] = trim( $err );
 
@@ -286,29 +284,11 @@ $evts = frames( $out );
 assert_true( 0 === strpos( (string) ( $evts[0]['request'] ?? '' ), 'POST /api/chat/stream ' ), 'a POST to the chat route (got ' . ( $evts[0]['request'] ?? '' ) . ')' );
 assert_true( 2 === ( $evts[0]['body_bytes'] ?? 0 ), 'the body goes with it' );
 
-// ── 10. The turn resume: a GET, relayed byte-for-byte, ids and all ───────
-// Kills: dropping the GET switch (it POSTs an empty body), a wrong path or `after`.
-echo "\n[10] The Staff AI turn resume is a GET to DEF's resume route, relayed unchanged\n";
+// ── 10. The stream is not cut by PHP's own time limit ────────────────────
+echo "\n[10] stream_proxy lifts PHP's time limit for a long stream\n";
 
-$out = drive( 'echo', 'resume', $err );
-assert_true(
-	$out === "id: 4\ndata: " . json_encode( array(
-		'type'       => 'done',
-		'request'    => 'GET /api/staff-ai/threads/staff-1a2b3c/turns/0f0e9d8c-uuid/stream?after=3 HTTP/1.1',
-		'body_bytes' => 0,
-	) ) . "\n\n",
-	'byte-identical, `id:` line included; GET, the thread, the turn and `after` on DEF\'s route, no body (got ' . $out . ')'
-);
+drive( 'ok', 'limit', $err );
 assert_true( 'limit=0' === substr( $err, -7 ), 'stream_proxy lifted PHP\'s own time limit (got ' . $err . ')' );
-
-// ── 11. A 410 reaches the console as one frame carrying the status ───────
-echo "\n[11] DEF's 410 (the turn is not in its memory) becomes one error frame with status 410\n";
-
-$out  = drive( 'gone', 'resume' );
-$evts = frames( $out );
-assert_true( 1 === count( $evts ) && 410 === ( $evts[0]['status'] ?? 0 ), 'one frame, status 410 (got ' . $out . ')' );
-assert_false( false !== strpos( $out, 'id:' ), 'no `id:` — the console reads that as the proxy speaking, not the turn' );
-assert_false( false !== strpos( $out, 'is_complete' ), 'DEF\'s body is not echoed into the stream' );
 
 echo "\n--- SSE Proxy Integration Tests: $pass passed, $fail failed ---\n";
 exit( $fail > 0 ? 1 : 0 );

@@ -30,7 +30,7 @@ This is not a separate download. It uses your browser's built-in Progressive Web
 ### Google Chrome
 
 **Method 1 — Install button in Staff AI header:**
-1. Navigate to your Staff AI URL (e.g., `https://yoursite.com/staff-ai/`)
+1. Navigate to your Staff AI URL in the Tenant Portal
 2. Log in if prompted
 3. Look for the **Install** button in the Staff AI header bar (between Share and the external link icon)
 4. Click **Install** — Chrome will show a confirmation dialog

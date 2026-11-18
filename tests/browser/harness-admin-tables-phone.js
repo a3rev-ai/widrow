@@ -18,16 +18,12 @@
  *    is a copy of the markup: move the table out of the wrapper and the slice no
  *    longer contains it.
  *
- * The User Access grid on Settings → User Roles has the same disease and is NOT
- * treated here — that table is S3's, and nothing in this PR touches it.
- *
  * Check 7 is the one that outlives this PR. It names no table — it ENUMERATES
  * from the stylesheet every .widrow-ai-*-table given a min-width and insists each
  * one is wrapped somewhere in the shipped markup. The next table floored without
  * a wrapper is the exact bug this PR fixes, and it fails here without anyone
  * remembering to add a case for it. The settings template stays in SOURCES for
- * that reason, so the enumeration holds across both pages and not just this one —
- * which is what will catch S3 if it floors the roles grid and forgets the wrapper.
+ * that reason, so the enumeration holds across both pages and not just this one.
  *
  * Checks 10-11 were re-pointed by S4 (the column collapses to a rail): the close
  * button is no longer hidden above 783px, it is the Collapse control, so the check
@@ -139,8 +135,7 @@ check(++n, 'the Connection Logs table is INSIDE a .widrow-ai-table-scroll in ' +
 // Enumerated from the stylesheet, not listed here: any .widrow-ai-*-table given a
 // floor has to be wrapped somewhere in the shipped markup, or that floor is just
 // a wider page. (A table with no floor is not in scope and is not asked to be
-// wrapped — .widrow-ai-tools-table stacks its cells on a phone instead, and
-// .widrow-ai-roles-table is S3's to deal with.)
+// wrapped — .widrow-ai-tools-table stacks its cells on a phone instead.)
 const floored = [];
 INDEX.rules.forEach(function (r) {
 	if (!/(?:^|;)\s*min-width:/.test(r.body)) return;

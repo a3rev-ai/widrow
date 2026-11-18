@@ -68,7 +68,6 @@ final class Widrow_AI {
 		Widrow_AI_Knowledge_Export::init();
 		Widrow_AI_Knowledge_Exclusion::init();
 		Widrow_AI_Sync_Nudge::init();
-		Widrow_AI_Staff_Roster::init();
 		Widrow_AI_Admin_API::init();
 		Widrow_AI_Site_Tools::init();
 		Widrow_AI_SEO_Meta::init();
@@ -173,9 +172,6 @@ final class Widrow_AI {
 		// Event-driven sync nudge — debounced push to DEF on content change (Phase B).
 		require_once WIDROW_AI_PLUGIN_DIR . 'includes/class-widrow-ai-sync-nudge.php';
 
-		// Staff-AI roster push — User Access ticks → DEF (Usage & Budgets D-U10).
-		require_once WIDROW_AI_PLUGIN_DIR . 'includes/class-widrow-ai-staff-roster.php';
-
 		// Admin REST API (settings, users, connection, chat proxy).
 		require_once WIDROW_AI_PLUGIN_DIR . 'includes/class-widrow-ai-admin-api.php';
 
@@ -238,8 +234,6 @@ final class Widrow_AI {
 		if ( get_option( WIDROW_AI_OPTION_ALLOWED_ORIGINS ) === false ) {
 			add_option( WIDROW_AI_OPTION_ALLOWED_ORIGINS, array(), '', false );
 		}
-		// Flush rewrite rules for Staff AI endpoint.
-		Widrow_AI_Staff_AI::on_activate();
 		// Grant widrow_admin_access to administrators.
 		self::ensure_widrow_admin_capability();
 		// Set button colors from theme if not already configured.
@@ -272,17 +266,24 @@ final class Widrow_AI {
 			update_option( 'widrow_ai_db_version', '2.2.0' );
 		}
 		if ( version_compare( $current, '7.0.0', '<' ) ) {
-			// Usage & Budgets D-U10: backfill the Staff-AI roster once, so an
-			// existing install populates DEF's usage dashboard without waiting
-			// for someone to open User Access and press Save. The option is
-			// advanced regardless of delivery — the push is best-effort and
-			// re-sends full state on the next save, whereas gating the bump on
-			// success would retry on every admin pageview forever.
-			Widrow_AI_Staff_Roster::schedule_push();
 			update_option( 'widrow_ai_db_version', '7.0.0' );
 		}
 		if ( version_compare( $current, '10.0.0', '<' ) ) {
 			update_option( 'widrow_ai_db_version', '10.0.0' );
+		}
+		// 11.0.0: the Staff AI console left the plugin for the Tenant Portal. The
+		// stored /staff-ai rules are flushed away (left in place, WordPress would
+		// serve the home page there), the roster push is unscheduled, and the
+		// console's share-by-email records (recipients' addresses) are deleted.
+		if ( version_compare( $current, '11.0.0', '<' ) ) {
+			global $wpdb;
+			flush_rewrite_rules();
+			delete_option( 'widrow_ai_rewrite_version' );
+			wp_clear_scheduled_hook( 'widrow_ai_staff_roster_push' );
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery
+			$shares = $wpdb->get_col( $wpdb->prepare( "SELECT option_name FROM {$wpdb->options} WHERE option_name LIKE %s", $wpdb->esc_like( 'widrow_ai_share_events_' ) . '%' ) );
+			array_map( 'delete_option', $shares );
+			update_option( 'widrow_ai_db_version', '11.0.0' );
 		}
 	}
 

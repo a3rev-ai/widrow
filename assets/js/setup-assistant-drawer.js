@@ -23,8 +23,7 @@
 	}
 
 	var VALID_TABS = [
-		'connection', 'branding', 'chat-settings', 'escalation',
-		'user-roles'
+		'connection', 'branding', 'chat-settings', 'escalation'
 	];
 
 	var FIELD_MAP = {
@@ -1411,9 +1410,6 @@
 				case 'show_toast':
 					this.handleShowToast(action);
 					break;
-				case 'update_user_row':
-					this.handleUpdateUserRow(action);
-					break;
 				default:
 					if (typeof console !== 'undefined' && console.log) {
 						console.log('[DEF SA] Unknown ui_action:', action.action);
@@ -1549,57 +1545,6 @@
 
 		if (window.DEFAdmin && window.DEFAdmin.showToast) {
 			window.DEFAdmin.showToast(message, type);
-		}
-	};
-
-	SetupAssistantDrawer.prototype.handleUpdateUserRow = function (action) {
-		var userId = action.wp_user_id;
-		var caps = action.capabilities || {};
-		if (!userId) return;
-
-		var tbody = document.getElementById('widrow-ai-roles-tbody');
-		if (!tbody) return;
-
-		var row = tbody.querySelector('tr[data-user-id="' + userId + '"]');
-		if (row) {
-			// Update existing row checkboxes. The inputs are the row's state, but
-			// since S3 they are no longer all visible — the vault roles are chips
-			// and the access level a two-way control drawn over the hidden ones.
-			// Writing .checked fires nothing, so the change is announced: User
-			// Access listens and redraws the row it belongs to.
-			var checkboxes = row.querySelectorAll('input[type="checkbox"]');
-			var written = null;
-			for (var i = 0; i < checkboxes.length; i++) {
-				var cap = checkboxes[i].getAttribute('data-cap');
-				if (cap && caps.hasOwnProperty(cap)) {
-					checkboxes[i].checked = !!caps[cap];
-					written = checkboxes[i];
-				}
-			}
-			// Announced from an input that was actually written, not from
-			// whichever checkbox happens to be first in the row — the listener
-			// on the other side only acts on a .widrow-ai-role-cb.
-			if (written) {
-				written.dispatchEvent(new Event('change', { bubbles: true }));
-			}
-		} else if (window.DEFAdmin && window.DEFAdmin.addUserRow) {
-			// New user — add row via existing admin function.
-			window.DEFAdmin.addUserRow({
-				id: userId,
-				display_name: action.display_name || '',
-				user_email: action.email || '',
-				wp_role: action.wp_role || '',
-				avatar: action.avatar || '',
-				caps: caps,
-			});
-			row = tbody.querySelector('tr[data-user-id="' + userId + '"]');
-		}
-
-		// Flash highlight on the updated row so the change is visible.
-		if (row) {
-			row.classList.remove('widrow-ai-row-flash');
-			void row.offsetWidth; // force reflow to restart animation
-			row.classList.add('widrow-ai-row-flash');
 		}
 	};
 

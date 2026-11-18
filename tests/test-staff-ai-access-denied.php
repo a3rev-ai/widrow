@@ -9,8 +9,8 @@
  * (the 2026-08-09 wpunit probe could not distinguish a rejected gate from an
  * absent backend; the named code is the fix for that class).
  *
- * Also pins what must NOT change: anonymous callers still get bare `false`
- * from the BFF passthrough callbacks (the 401 shape).
+ * Also pins (11.0.0) that the console's BFF passthroughs and the staff
+ * stream-token channel are gone: Staff AI is served by the Tenant Portal.
  *
  * NOT pinned here, deliberately: that administrators PASS the gate. That is
  * map_def_capabilities (map_meta_cap) behaviour, and this harness's
@@ -137,7 +137,7 @@ echo "\n[1] access_denied_message() tells the user who can fix it and where\n";
 as_user( 6, array() );
 $msg = Widrow_AI_Staff_AI::access_denied_message();
 assert_test( strpos( $msg, 'Ask your site administrator' ) !== false, 'the user is told who can fix it' );
-assert_test( strpos( $msg, 'User Roles' ) !== false, 'the copy names the path to relay to their administrator' );
+assert_test( strpos( $msg, 'Setup Assistant' ) !== false, 'the copy names how their administrator grants it' );
 
 // ── [2] The canonical error carries the named code ──────────────────────────
 echo "\n[2] access_denied_error() is a named, stable refusal\n";
@@ -165,39 +165,23 @@ assert_test( true === Widrow_AI_Staff_AI::rest_permission_check(), 'widrow_staff
 as_user( 9, array( 'widrow_management_access' ) );
 assert_test( true === Widrow_AI_Staff_AI::rest_permission_check(), 'widrow_management_access passes' );
 
-// ── [4] The BFF passthrough callbacks: false for anon, named error uncapped ─
-echo "\n[4] BFF passthrough callbacks keep the 401 shape and name the 403\n";
+// ── [4] The console's passthroughs and staff stream token are gone (11.0.0) ─
+echo "\n[4] No Staff AI passthrough or staff stream token; Customer Chat's routes stay\n";
 
 Widrow_AI_Routes::register_rest_routes();
-$ns     = WIDROW_AI_API_NAME_SPACE;
-$stream = $_wp_test_rest_routes[ $ns . '/staff-ai/chat/stream' ]['permission_callback'] ?? null;
-$status = $_wp_test_rest_routes[ $ns . '/staff-ai/status' ]['permission_callback'] ?? null;
-assert_test( is_callable( $stream ), 'chat/stream passthrough captured' );
-assert_test( is_callable( $status ), 'status passthrough captured' );
+$ns = WIDROW_AI_API_NAME_SPACE;
+assert_test( ! isset( $_wp_test_rest_routes[ $ns . '/staff-ai/chat/stream' ] ), 'no /staff-ai/chat/stream passthrough' );
+assert_test( ! isset( $_wp_test_rest_routes[ $ns . '/staff-ai/status' ] ), 'no /staff-ai/status passthrough' );
+
+$token = $_wp_test_rest_routes[ $ns . '/chat/stream-token' ] ?? null;
+assert_test( is_array( $token ) && array( 'customer_chat' ) === ( $token['args']['channel']['enum'] ?? null ), 'chat/stream-token: customer_chat is the only channel' );
+assert_test( is_array( $token ) && '__return_true' === ( $token['permission_callback'] ?? null ), 'chat/stream-token: open to anyone, as /chat/stream is' );
 
 // Customer Chat voice (7.7.8): the widget's open-time read is a public GET proxied to
 // DEF's customer voice status — anonymous visitors included, like /chat/stream.
 $voice = $_wp_test_rest_routes[ $ns . '/chat/voice' ] ?? null;
 assert_test( is_array( $voice ) && 'GET' === ( $voice['methods'] ?? null ) && '__return_true' === ( $voice['permission_callback'] ?? null ), 'chat/voice: a public GET' );
 assert_test( is_array( $voice ) && array( 'Widrow_AI_Tools', 'rest_proxy_chat_voice' ) === ( $voice['callback'] ?? null ), 'chat/voice: proxied by rest_proxy_chat_voice' );
-
-foreach ( array( 'chat/stream' => $stream, 'status' => $status ) as $name => $cb ) {
-	as_user( null, array() );
-	assert_test( false === $cb(), "$name: anonymous still gets bare false (401 shape untouched)" );
-
-	as_user( 11, array() );
-	$refusal = $cb();
-	assert_test( $refusal instanceof WP_Error && 'def_staff_access_required' === $refusal->get_error_code(), "$name: logged-in uncapped gets the named 403, not WP's generic copy" );
-	// Guarded so a regression to bare false FAILS this assertion rather than
-	// fataling on a method call against a bool.
-	assert_test( $refusal instanceof WP_Error && strpos( $refusal->get_error_message(), 'User Roles' ) !== false, "$name: the refusal copy names where access is granted" );
-
-	as_user( 12, array( 'widrow_staff_access' ) );
-	assert_test( true === $cb(), "$name: widrow_staff_access still passes" );
-
-	as_user( 13, array( 'widrow_management_access' ) );
-	assert_test( true === $cb(), "$name: widrow_management_access still passes" );
-}
 
 // ── Summary ─────────────────────────────────────────────────────────────────
 echo "\n$pass passed, $fail failed\n";

@@ -8,8 +8,9 @@
  * buffer so tokens reach the client unbuffered. An in-process ob_start() capture is
  * therefore impossible by design, and trying it silently captures nothing.
  *
- * Usage: php sse-proxy-driver.php <upstream-url>           (stream_proxy, a POST)
- *        php sse-proxy-driver.php <upstream-base> resume  (the Staff AI turn resume, a GET)
+ * Usage: php sse-proxy-driver.php <upstream-url> [limit]
+ *        `limit` appends PHP's time limit after the stream to STDERR, so the caller can
+ *        read back what stream_proxy() set it to.
  *
  * @package widrow-ai/tests
  */
@@ -53,8 +54,7 @@ if ( ! function_exists( '_n' ) ) {
 if ( ! class_exists( 'Widrow_AI' ) ) {
 	class Widrow_AI {
 		public static function get_def_api_url_internal(): string {
-			global $argv;
-			return 'resume' === ( $argv[2] ?? '' ) ? (string) $argv[1] : 'http://127.0.0.1:1';
+			return 'http://127.0.0.1:1';
 		}
 	}
 }
@@ -72,19 +72,11 @@ if ( ! class_exists( 'Widrow_AI_Logger' ) ) {
 
 require_once WIDROW_AI_PLUGIN_DIR . 'includes/class-widrow-ai-tools.php';
 
-if ( 'resume' === ( $argv[2] ?? '' ) ) {
-	// The REST callback itself (8.7.14), its upstream base being argv[1]. A finite PHP limit
-	// going in, so the limit stream_proxy sets is what the caller reads back off the end of
-	// STDERR.
-	set_time_limit( 30 );
-	Widrow_AI_Tools::rest_proxy_staff_ai_turn_resume( new class() {
-		public function get_param( string $key ) {
-			return array( 'id' => 'staff-1a2b3c', 'turn' => '0f0e9d8c-uuid', 'after' => 3 )[ $key ] ?? null;
-		}
-	} );
-	fwrite( STDERR, 'limit=' . ini_get( 'max_execution_time' ) );
-} else {
-	$method = new ReflectionMethod( 'Widrow_AI_Tools', 'stream_proxy' );
-	$method->setAccessible( true );
-	$method->invoke( null, (string) $argv[1], array( 'Content-Type: application/json' ), '{}' );
+$method = new ReflectionMethod( 'Widrow_AI_Tools', 'stream_proxy' );
+$method->setAccessible( true );
+// A finite limit going in, so the limit stream_proxy() sets is the one read back.
+set_time_limit( 30 );
+$method->invoke( null, (string) $argv[1], array( 'Content-Type: application/json' ), '{}' );
+if ( 'limit' === ( $argv[2] ?? '' ) ) {
+	fwrite( STDERR, "\nlimit=" . ini_get( 'max_execution_time' ) );
 }
