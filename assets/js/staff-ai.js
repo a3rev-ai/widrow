@@ -3144,7 +3144,18 @@ function t(key, fallback) {
 
 	// A spoken turn is transcribed while it is spoken (W75), on the token the stream
 	// would go direct on; with none fitting, the recording rides the request as before.
+	// A host with its own live socket (host.live) gives its address (no query string: the
+	// thread is added to it) and the person's current token at each spoken turn; a host
+	// that gives none, or a refused socket, leaves the recording, as above.
 	function liveTranscription() {
+		var host = window.StaffAIConfig && window.StaffAIConfig.host;
+		if (host && typeof host.live === 'function') {
+			var door = null;
+			try { door = host.live(); } catch (e) { /* the recording goes instead */ }
+			return door && door.url
+				? { url: door.url, token: door.token, thread: currentConversationId || '', context: spokenContext() }
+				: null;
+		}
 		return streamTokenLeft() >= 30000
 			? { url: streamToken.live, token: streamToken.token, thread: streamToken.thread, context: spokenContext() }
 			: null;
