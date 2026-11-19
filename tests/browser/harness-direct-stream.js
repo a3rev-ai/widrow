@@ -17,8 +17,12 @@
  * through the site, and logging in drops the token. And (W75, v8.12.0) a spoken turn:
  * the mic gets the live socket only with a fresh token for the conversation it is in,
  * and a turn transcribed while spoken sends its words with via_voice and no audio.
+ * (v11.3.0) A host with host.live gives the mic its own socket address and the token it
+ * holds at each spoken turn, for any conversation; a turn with no transcript still sends
+ * the recording, through the host; a host.live that throws or gives no address, and a host
+ * without host.live, give no live socket.
  *
- * 37 checks.
+ * 43 checks.
  */
 const fs = require('fs');
 const path = require('path');
@@ -165,6 +169,7 @@ const SA_PROXY = SA + '/staff-ai/chat/stream';
 const SA_MINT = SA + '/chat/stream-token';
 const SA_DIRECT = 'https://api.example.test/api/staff-ai/chat/stream';
 const SA_LIVE = 'wss://api.example.test/api/staff_ai/voice/live';
+const DOOR_LIVE = 'wss://door.example.test/api/tenant/acme/staff-ai/voice/live';
 const HEAD = `
 	let nonce = StaffAIConfig.nonce;
 	var messages = [], isLoading = false, isReadOnly = false, conversationOn = false, spokenTurn = false,
@@ -195,7 +200,7 @@ async function bootStaff(opts) {
     { url: 'https://e.test/staff-ai/' });
   const window = dom.window, document = window.document;
   window.DefPersona = { createController: () => ({ handleEvent() {}, formatThinkingLabel: m => m, reset() {} }) };
-  const h = { direct: opts.direct || [], mints: [], directCalls: [], proxyCalls: [], notes: [], life: opts.life || 600, starts: [] };
+  const h = { direct: opts.direct || [], mints: [], directCalls: [], proxyCalls: [], notes: [], life: opts.life || 600, starts: [], hostCalls: [] };
   window.DefVoice = { note: line => h.notes.push(line), supported: () => true, micAllowedBySite: () => true,
     createSpeaker: () => ({ stop() {}, unlock() {}, speak() {}, end() {}, setMode() {}, getMode: () => 'server', whenIdle: () => new Promise(() => {}) }),
     createRecorder: o => { h.recorderOpts = o; return { start: live => { h.starts.push(live); return Promise.resolve(true); },
@@ -229,7 +234,9 @@ async function bootStaff(opts) {
   }
   const deps = {
     window, document, fetch: fakeFetch, Response, ReadableStream, TextDecoder, AbortController,
-    StaffAIConfig: { nonce: 'n0000000', nonceUrl: 'https://e.test/wp-admin/admin-ajax.php?action=rest-nonce', streamTokenUrl: SA_MINT },
+    StaffAIConfig: opts.host
+      ? { streamTokenUrl: '', host: Object.assign({ voice: true, fetch: (url, init) => { h.hostCalls.push(url); return fakeFetch(url, init); } }, opts.host(h)) }
+      : { nonce: 'n0000000', nonceUrl: 'https://e.test/wp-admin/admin-ajax.php?action=rest-nonce', streamTokenUrl: SA_MINT },
     apiBase: SA + '/staff-ai', chatStreamUrl: SA_PROXY, location: { reload() {} }, t: (k, d) => d,
     messagesList: document.getElementById('messagesList'), messagesContainer: document.getElementById('messagesContainer'),
     errorBanner: document.getElementById('errorBanner'), confirmChips: document.getElementById('confirmChips'),
@@ -243,6 +250,7 @@ async function bootStaff(opts) {
     micBtn: document.getElementById('micBtn'), micLabel: document.getElementById('micLabel'), voiceBtn: null,
     showInfo() {}, assistantName: 'Sue', onAssistantName() {}, DefVoice: window.DefVoice, localStorage: window.localStorage
   };
+  window.StaffAIConfig = deps.StaffAIConfig;
   const names = Object.keys(deps);
   h.api = new window.Function(...names, HEAD + PARSER + '\n' + TOOL_LABELS + '\n' + ESCAPE + '\n' + REQUEST + '\n' +
     BANNER + '\n' + RECOVER + '\n' + TOOL_ROWS + '\n' + SEND + (opts.voice ? '\n' + VOICE + '\ninitVoice();' : '') + TAIL)(...names.map(k => deps[k]));
@@ -444,6 +452,46 @@ async function bootStaff(opts) {
   await h.speak();
   check('Staff AI: a just-opened conversation (no token for it yet) → the mic gets no live socket', h.starts.length === 1 && !h.starts[0],
     show(h.starts));
+
+  // A host with its own live socket (the Tenant Portal's door): its address and the current token, each turn.
+  const door = h => ({ live: () => { h.liveCalls = (h.liveCalls || 0) + 1; return { url: DOOR_LIVE, token: h.access }; } });
+  h = await bootStaff({ voice: true, transcript: 'Make it shorter.', host: door });
+  h.access = 'access-1';
+  await h.speak();
+  check('Staff AI with host.live: the mic gets the host\'s socket — its address, its token, the new conversation and no context — and nothing is minted',
+    show(h.starts) === show([{ url: DOOR_LIVE, token: 'access-1', thread: '', context: '' }]) && h.mints.length === 0, show({ starts: h.starts, mints: h.mints }));
+
+  h = await bootStaff({ voice: true, host: door });
+  h.access = 'access-1';
+  await h.send('Draft the email');
+  h.access = 'access-2';   // the host refreshed its token since the console opened
+  await h.speak();
+  check('  … later in a conversation: the token the host holds now, the conversation\'s thread and its last message as context',
+    h.liveCalls === 1 && show(h.starts) === show([{ url: DOOR_LIVE, token: 'access-2', thread: 'th-1', context: 'Draft the email' }]),
+    show({ starts: h.starts, calls: h.liveCalls }));
+
+  h = await bootStaff({ voice: true, host: door });
+  h.access = 'access-1';
+  h.api.open('th-7');
+  await h.speak();
+  const doorClip = h.proxyCalls[0] ? JSON.parse(h.proxyCalls[0].body) : {};
+  check('Staff AI with host.live: a socket that gave no transcript (refused, or failed) sends the recording through the host, as today',
+    show(h.starts) === show([{ url: DOOR_LIVE, token: 'access-1', thread: 'th-7', context: '' }]) &&
+    doorClip.audio_base64 === 'AAAA' && doorClip.thread_id === 'th-7' && doorClip.messages.slice(-1)[0].content === '' &&
+    show(h.hostCalls) === show([SA_PROXY]), show({ starts: h.starts, clip: doorClip, hostCalls: h.hostCalls }));
+
+  for (const [label, live] of [['throws', () => { throw new Error('signed out'); }], ['gives no address', () => null]]) {
+    h = await bootStaff({ voice: true, host: () => ({ live }) });
+    await h.speak();
+    const sent = h.proxyCalls[0] ? JSON.parse(h.proxyCalls[0].body) : {};
+    check('Staff AI: a host.live that ' + label + ' gives the mic no live socket, and the recording is sent through the host',
+      h.starts.length === 1 && !h.starts[0] && sent.audio_base64 === 'AAAA' && h.banner() === '', show({ starts: h.starts, sent, banner: h.banner() }));
+  }
+
+  h = await bootStaff({ voice: true, host: () => ({}) });
+  await h.speak();
+  check('Staff AI with a host but no host.live: the mic gets no live socket, as today',
+    h.starts.length === 1 && !h.starts[0] && h.mints.length === 0, show({ starts: h.starts, mints: h.mints }));
 
   // ── The voice module's log ─────────────────────────────────────────────────
   {

@@ -4,7 +4,7 @@ Tags: ai, chat, digital employee, ai assistant, customer support
 Requires at least: 6.2
 Tested up to: 7.1
 Requires PHP: 8.0
-Stable tag: 11.2.1
+Stable tag: 11.3.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -118,6 +118,9 @@ Chat messages, user display name, session context, and the visitor's IP address 
 4. Admin Settings — Branding, Chat Settings, Escalation, and Connection tabs
 
 == Changelog ==
+
+= 11.3.0 - 2026-11-19 =
+* Feature - Ready for the Tenant Portal update that transcribes Staff AI's spoken turns while you speak, as Customer Chat's voice already does on your site: a host that runs the Staff AI console can now give it its own live transcription address and your sign-in, and the console sends each spoken turn there. If that address refuses or is not available, the recording is sent as before. Nothing changes on your site; Staff AI in the Tenant Portal gets it when the portal updates.
 
 = 11.2.1 - 2026-11-18 =
 * Fix - The update details WordPress shows for this plugin list its changelog by version again, in text that wraps, and no longer warn that the plugin is untested on a patch release of the WordPress version it is tested with. A second updater inside the plugin had been replacing that screen with the latest release's notes.
