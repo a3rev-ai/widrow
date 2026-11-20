@@ -163,7 +163,9 @@ window.DefVoice = (function () {
 	 * start(live), live = {url, token, thread, context} (W75): the recording also streams
 	 * to DEF over one socket as it is spoken, and stop() waits up to LIVE_FINAL_WAIT_MS
 	 * for the transcript, resolving with `transcript` beside the clip when one came. The
-	 * clip is always recorded: any failure of the socket leaves it as the turn.
+	 * clip is always recorded: any failure of the socket leaves it as the turn. The socket
+	 * asks for the provider's end-of-turn signal; when it comes, onSilence fires without
+	 * waiting for the pause.
 	 */
 	function createRecorder(handlers) {
 		handlers = handlers || {};
@@ -206,7 +208,7 @@ window.DefVoice = (function () {
 		// The token rides as a subprotocol (DEF echoes "def-live"), never in the URL. Frames
 		// spoken before the socket opens wait for it, behind the `start` that opens the turn.
 		function openLive(live) {
-			var queued = [JSON.stringify({ type: 'start', context: live.context || '' })];
+			var queued = [JSON.stringify({ type: 'start', context: live.context || '', turn: true })];
 			var open = { transcript: undefined }, settle;
 			open.settled = new Promise(function (resolve) { settle = resolve; });
 			try {
@@ -234,6 +236,13 @@ window.DefVoice = (function () {
 				// A final with no words is no transcript: the clip gets the batch transcriber's look.
 				if (msg && msg.type === 'final' && msg.text) open.transcript = String(msg.text);
 				if (msg && (msg.type === 'final' || msg.type === 'error')) settle();
+				// The provider judges the person has finished: the turn ends as the pause ends it,
+				// once, and only after speech. With no signal the pause still ends it.
+				if (msg && msg.type === 'turn' && spokeAt && meter && handlers.onSilence) {
+					log('live turn');
+					stopTimers();
+					handlers.onSilence();
+				}
 			};
 			ws.onclose = function (e) {
 				if (e.code === 4415) liveUnsupported = true;

@@ -744,7 +744,7 @@ function check(n, label, cond, detail) {
 				t.sockets.length === 1 && ws.url === LIVE.url + '?thread=thr%201' &&
 				JSON.stringify(ws.protocols) === JSON.stringify(['def-live', 'tok-1']) && !ws.url.includes('tok-1') &&
 				tap.connected && beforeOpen === 0 && typeof ws.sent[0] === 'string' &&
-				JSON.stringify(texts) === JSON.stringify([{ type: 'start', context: 'Hi there' }]) &&
+				JSON.stringify(texts) === JSON.stringify([{ type: 'start', context: 'Hi there', turn: true }]) &&
 				frames.length === 2 && frames[0].byteLength === 4096 &&
 				pcm(frames[0]).every(v => v === 16383) && pcm(frames[1]).every(v => v === -16384) &&
 				logged(t, / live open$/),
@@ -870,6 +870,32 @@ function check(n, label, cond, detail) {
 			check(43, 'live — a `final` with no words resolves as an `error` does: the clip, no transcript, live failed',
 				!!done && done.transcript === undefined && !!done.blob && logged(t, / live failed$/),
 				'done=' + JSON.stringify(done && Object.keys(done)) + ' log=' + t.DefVoice.log().join('|'));
+		}
+		// 53. the provider's end-of-turn signal ends the turn while the person is still
+		//     heard, without the pause; once, and never before speech
+		{
+			const t = boot(silentWave);
+			let stops = 0, stopped = null, firedAt = 0;
+			const rec = t.DefVoice.createRecorder({ onSilence: () => { stops += 1; firedAt = Date.now(); stopped = watch(rec.stop()); } });
+			await rec.start(LIVE);
+			const ws = t.sockets[0];
+			ws.open();
+			ws.answer({ type: 'turn' });   // nothing said yet
+			const early = stops;
+			t.say(voicedWave);   // still speaking: the pause never runs
+			await wait(t.window, 500);
+			const at = Date.now();
+			ws.answer({ type: 'turn' });
+			ws.answer({ type: 'turn' });
+			await wait(t.window, 20);
+			const texts = ws.texts();
+			ws.answer({ type: 'final', text: 'Book it for Friday.' });
+			const done = stopped && await stopped;
+			check(53, 'live — a `turn` frame after speech ends the turn at once (onSilence, `end`, then `final` as the transcript); a second is ignored, one before speech too',
+				early === 0 && stops === 1 && firedAt - at < 50 && texts.some(m => m.type === 'end') &&
+				!!done && done.transcript === 'Book it for Friday.' && logged(t, / live turn$/),
+				'early=' + early + ' stops=' + stops + ' ms=' + (firedAt - at) + ' texts=' + JSON.stringify(texts) +
+				' log=' + t.DefVoice.log().join('|'));
 		}
 	}
 
