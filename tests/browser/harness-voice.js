@@ -141,7 +141,8 @@ function boot(wave, bodyHtml) {
 		this.state = 'recording';
 		this.mimeType = 'audio/webm';
 		this.start = () => {};
-		this.stop = () => { this.state = 'inactive'; if (this.onstop) this.onstop(); };
+		// As in a browser: state flips at once, onstop runs a task later.
+		this.stop = () => { this.state = 'inactive'; window.setTimeout(() => { if (this.onstop) this.onstop(); }, 0); };
 	};
 	window.MediaRecorder.isTypeSupported = () => true;
 	window.eval(MODULE);
@@ -744,7 +745,7 @@ function check(n, label, cond, detail) {
 				t.sockets.length === 1 && ws.url === LIVE.url + '?thread=thr%201' &&
 				JSON.stringify(ws.protocols) === JSON.stringify(['def-live', 'tok-1']) && !ws.url.includes('tok-1') &&
 				tap.connected && beforeOpen === 0 && typeof ws.sent[0] === 'string' &&
-				JSON.stringify(texts) === JSON.stringify([{ type: 'start', context: 'Hi there' }]) &&
+				JSON.stringify(texts) === JSON.stringify([{ type: 'start', context: 'Hi there', turn: true }]) &&
 				frames.length === 2 && frames[0].byteLength === 4096 &&
 				pcm(frames[0]).every(v => v === 16383) && pcm(frames[1]).every(v => v === -16384) &&
 				logged(t, / live open$/),
@@ -870,6 +871,79 @@ function check(n, label, cond, detail) {
 			check(43, 'live — a `final` with no words resolves as an `error` does: the clip, no transcript, live failed',
 				!!done && done.transcript === undefined && !!done.blob && logged(t, / live failed$/),
 				'done=' + JSON.stringify(done && Object.keys(done)) + ' log=' + t.DefVoice.log().join('|'));
+		}
+		// 53. the provider's end-of-turn signal ends the turn only once the recorder hears
+		//     quiet: (a) while the person is heard it is ignored and the pause ends the turn;
+		//     (b) after quiet begins it ends the turn at once; (c) a second is ignored; (d) one
+		//     before speech too
+		{
+			// (d), then (a)
+			const t = boot(silentWave);
+			let stops = 0, stopped = null;
+			const rec = t.DefVoice.createRecorder({ onSilence: () => { stops += 1; stopped = rec.stop(); } });
+			await rec.start(LIVE);
+			const ws = t.sockets[0];
+			ws.open();
+			ws.answer({ type: 'turn' });   // nothing said yet
+			const early = stops;
+			t.say(voicedWave);
+			await wait(t.window, 500);
+			ws.answer({ type: 'turn' });   // still heard
+			await wait(t.window, 20);
+			const heard = stops;
+			t.say(silentWave);
+			const quietAt = Date.now();
+			for (let i = 0; i < 40 && !stops; i++) await wait(t.window, 100);   // the pause
+			const pausedMs = Date.now() - quietAt;
+			ws.answer({ type: 'final', text: 'Book it for Friday.' });
+			const done = stopped && await stopped;
+			// (b), (c)
+			const u = boot(voicedWave);
+			let uStops = 0, uStopped = null, firedAt = 0;
+			const uRec = u.DefVoice.createRecorder({ onSilence: () => { uStops += 1; firedAt = Date.now(); uStopped = uRec.stop(); } });
+			await uRec.start(LIVE);
+			const uWs = u.sockets[0];
+			uWs.open();
+			await wait(u.window, 500);
+			u.say(silentWave);
+			await wait(u.window, 300);   // quiet has begun, well inside the pause
+			const at = Date.now();
+			uWs.answer({ type: 'turn' });
+			uWs.answer({ type: 'turn' });
+			await wait(u.window, 20);
+			const texts = uWs.texts();
+			uWs.answer({ type: 'final', text: 'Book it for Friday.' });
+			const uDone = uStopped && await uStopped;
+			check(53, 'live — a `turn` frame ends the turn only once the recorder hears quiet: while the person is heard it is ignored and the pause ends the turn; after quiet begins it ends it at once (`end`, then `final` as the transcript); a second is ignored, one before speech too',
+				early === 0 && heard === 0 && stops === 1 && pausedMs >= 1700 && !logged(t, / live turn$/) &&
+				!!done && done.transcript === 'Book it for Friday.' &&
+				uStops === 1 && firedAt - at < 50 && texts.some(m => m.type === 'end') &&
+				!!uDone && uDone.transcript === 'Book it for Friday.' && logged(u, / live turn$/),
+				'early=' + early + ' heard=' + heard + ' stops=' + stops + ' pausedMs=' + pausedMs +
+				' uStops=' + uStops + ' ms=' + (firedAt - at) + ' texts=' + JSON.stringify(texts) +
+				' log=' + t.DefVoice.log().join('|') + ' || ' + u.DefVoice.log().join('|'));
+		}
+		// 54. a tap, then a `turn` frame before the recorder's onstop: the frame ends nothing
+		//     a second time, and the tap resolves with the transcript
+		{
+			const t = boot(voicedWave);
+			let stops = 0;
+			const rec = t.DefVoice.createRecorder({ onSilence: () => { stops += 1; rec.stop(); } });
+			await rec.start(LIVE);
+			const ws = t.sockets[0];
+			ws.open();
+			await wait(t.window, 500);
+			t.say(silentWave);
+			await wait(t.window, 300);   // quiet has begun, well inside the pause
+			const tapped = rec.stop();
+			ws.answer({ type: 'turn' });   // onstop has not run yet
+			await wait(t.window, 20);
+			ws.answer({ type: 'final', text: 'Book it for Friday.' });
+			const done = await Promise.race([tapped, wait(t.window, 2500).then(() => 'never')]);
+			check(54, 'live — a tap, then a `turn` frame before the recorder stops: the turn is not ended twice, and the tap resolves with the transcript',
+				stops === 0 && !!done && done !== 'never' && done.transcript === 'Book it for Friday.' && !!done.blob,
+				'stops=' + stops + ' done=' + JSON.stringify(done === 'never' ? done : done && Object.keys(done)) +
+				' log=' + t.DefVoice.log().join('|'));
 		}
 	}
 

@@ -4,7 +4,7 @@ Tags: ai, chat, digital employee, ai assistant, customer support
 Requires at least: 6.2
 Tested up to: 7.1
 Requires PHP: 8.0
-Stable tag: 11.3.0
+Stable tag: 11.4.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -118,6 +118,9 @@ Chat messages, user display name, session context, and the visitor's IP address 
 4. Admin Settings — Branding, Chat Settings, Escalation, and Connection tabs
 
 == Changelog ==
+
+= 11.4.0 - 2026-11-20 =
+* Feature - Voice ends your turn as soon as the voice provider judges you have finished speaking, instead of always waiting for a pause, so the reply starts sooner. This works where the voice provider gives that signal; otherwise the turn ends after the pause, as before. Applies to Customer Chat's voice on your site and to Staff AI's voice in the Tenant Portal.
 
 = 11.3.0 - 2026-11-19 =
 * Feature - Ready for the Tenant Portal update that transcribes Staff AI's spoken turns while you speak, as Customer Chat's voice already does on your site. If live transcription is not available, the recording is sent as before. Nothing changes on your site; Staff AI in the Tenant Portal gets it when the portal updates.

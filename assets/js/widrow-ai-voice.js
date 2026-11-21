@@ -206,7 +206,7 @@ window.DefVoice = (function () {
 		// The token rides as a subprotocol (DEF echoes "def-live"), never in the URL. Frames
 		// spoken before the socket opens wait for it, behind the `start` that opens the turn.
 		function openLive(live) {
-			var queued = [JSON.stringify({ type: 'start', context: live.context || '' })];
+			var queued = [JSON.stringify({ type: 'start', context: live.context || '', turn: true })];
 			var open = { transcript: undefined }, settle;
 			open.settled = new Promise(function (resolve) { settle = resolve; });
 			try {
@@ -234,6 +234,14 @@ window.DefVoice = (function () {
 				// A final with no words is no transcript: the clip gets the batch transcriber's look.
 				if (msg && msg.type === 'final' && msg.text) open.transcript = String(msg.text);
 				if (msg && (msg.type === 'final' || msg.type === 'error')) settle();
+				// The provider judges the person has finished: the turn ends as the pause ends it,
+				// once, and only after speech. With no signal the pause still ends it.
+				// Only while the recorder hears quiet: the frame lags, and a person speaking again is not cut off.
+				if (msg && msg.type === 'turn' && spokeAt && quietSince && meter && handlers.onSilence) {
+					log('live turn');
+					stopTimers();
+					handlers.onSilence();
+				}
 			};
 			ws.onclose = function (e) {
 				if (e.code === 4415) liveUnsupported = true;
@@ -394,6 +402,7 @@ window.DefVoice = (function () {
 		function stop() {
 			return new Promise(function (resolve) {
 				if (!recorder || recorder.state === 'inactive') { release(); resolve(null); return; }
+				stopTimers();   // no pause or turn signal ends the turn a second time
 				pending = resolve;
 				recorder.stop();
 			});
