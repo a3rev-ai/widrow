@@ -4,7 +4,7 @@ Tags: ai, chat, digital employee, ai assistant, customer support
 Requires at least: 6.2
 Tested up to: 7.1
 Requires PHP: 8.0
-Stable tag: 11.4.0
+Stable tag: 11.5.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -119,7 +119,7 @@ Chat messages, user display name, session context, and the visitor's IP address 
 
 == Changelog ==
 
-= Unreleased =
+= 11.5.0 - 2026-11-23 =
 * Feature - Ready for the platform update that turns on conversation mode: in Customer Chat, a tap on the microphone starts a conversation that stays on, the visitor can talk over the employee, an orb shows whose turn it is, and typing still works. Where it is off or the browser cannot do it, the microphone works as before.
 * Fix - In Customer Chat, closing the chat panel, or a site removing the widget, now ends hands-free voice as a tap on the microphone does; before, the microphone could go on listening with no way to stop it.
 
