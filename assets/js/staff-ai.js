@@ -1307,7 +1307,10 @@ function t(key, fallback) {
 		else delete sendBtn.dataset.voice;
 		if (voice) sendBtn.title = name;
 		else sendBtn.removeAttribute('title');
-		if (micBtn && speaker) micBtn.hidden = !!role;
+		if (micBtn && speaker) {
+			if (role && document.activeElement === micBtn) sendBtn.focus();   // focus is not dropped to the page
+			micBtn.hidden = !!role;
+		}
 	}
 
 	async function requestStop() {
@@ -3042,7 +3045,7 @@ function t(key, fallback) {
 			},
 			onAutoStop: finishRecording,
 			onSilence: finishRecording,
-			onIdle: function () { endConversation(t('micClosedIdle', 'The mic closed — tap it to speak again.')); }
+			onIdle: function () { endConversation(tapLine('micClosedIdle', 'The mic closed — tap it to speak again.', 'The mic closed. Tap the button to speak again.')); }
 		});
 		micBtn.addEventListener('click', micTap);
 	}
@@ -3081,7 +3084,7 @@ function t(key, fallback) {
 			// Say what the browser said, not one line for every failure (7.7.6). The
 			// module's own "context won't wake" error (a plain Error) is the quiet hint.
 			var name = (e && e.name) || '';
-			if (!fromTap || name === 'Error') { showInfo(t('tapToSpeakAgain', 'Tap the mic to speak again.')); return; }
+			if (!fromTap || name === 'Error') { showInfo(tapLine('tapToSpeakAgain', 'Tap the mic to speak again.', 'Tap the button to speak again.')); return; }
 			if (name === 'NotAllowedError' || name === 'SecurityError') {
 				showError(t('micDenied', 'The microphone is blocked for this site in your browser. Allow it in the site permissions (the icon beside the address bar) and try again.'));
 			} else if (name === 'NotFoundError' || name === 'OverconstrainedError') {
@@ -3352,8 +3355,15 @@ function t(key, fallback) {
 		if (!speaker) return '';
 		var talking = micBtn.dataset.state === 'conversation';
 		if (!talking && (!canTalk() || talkSkip || conversationOn)) return '';
-		var typed = composerInput.value.trim() && !composerInput.classList.contains('staff-ai-suggestion-text');
-		return typed || stagedFiles.length || (stopTurn && !talking) ? 'send' : talking ? 'end' : 'start';
+		if (stopTurn) return talking ? '' : 'send';   // a reply streaming: Stop, and in a conversation the mic ends it
+		var typed = composerInput.value.trim();   // a suggestion too: Send sends it
+		if (!typed && stagedFiles.some(function (f) { return f.status === 'failed' || f.status === 'uploading'; })) return '';
+		return typed || stagedFiles.length ? 'send' : talking ? 'end' : 'start';
+	}
+
+	// A line that says what to tap: the button where it is what shows once voice stops.
+	function tapLine(key, fallback, buttonFallback) {
+		return speaker && canTalk() && !talkSkip ? t(key + 'Button', buttonFallback) : t(key, fallback);
 	}
 
 	// Inside the mic tap, before any await: the host unlocks the phone's audio there.

@@ -2153,6 +2153,12 @@ html {
 	flex-shrink: 0;
 }
 
+/* `hidden` loses to the buttons' own display:flex. */
+.composer-toolbar .mic-btn[hidden],
+.composer-toolbar .voice-btn[hidden] {
+	display: none;
+}
+
 .upload-btn:hover,
 .mic-btn:hover,
 .voice-btn:hover {
@@ -2285,12 +2291,6 @@ html {
 	.composer-toolbar .send-btn svg {
 		width: 24px;
 		height: 24px;
-	}
-
-	/* `hidden` loses to the buttons' own display:flex. */
-	.composer-toolbar .mic-btn[hidden],
-	.composer-toolbar .voice-btn[hidden] {
-		display: none;
 	}
 
 	.composer-toolbar .model-picker {

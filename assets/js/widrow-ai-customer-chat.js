@@ -22,6 +22,8 @@
 		micFailed: "The microphone couldn't start (%e).",
 		tapToSpeakAgain: 'Tap the mic to speak again.',
 		micClosedIdle: 'The mic closed \u2014 tap it to speak again.',
+		tapToSpeakAgainButton: 'Tap the button to speak again.',
+		micClosedIdleButton: 'The mic closed. Tap the button to speak again.',
 		voiceStopPhrases: "stop, that's all, thanks that's all",
 		voiceStopped: 'Conversation ended.',
 		nothingHeard: 'Nothing was heard. Try again a little closer to the microphone.',
@@ -1920,6 +1922,7 @@
 				// visitor's text in the input.
 				els.input.value = '';
 				autoResizeInput();
+				if (talkMode) updateSendButton();   // in a conversation: End voice while the reply comes
 
 				// Track first message for escalation subject.
 				if (!currentEscalationSubject && text) {
@@ -2058,7 +2061,7 @@
 		voiceRecorder = window.DefVoice.createRecorder({
 			onAutoStop: finishRecording,
 			onSilence: finishRecording,
-			onIdle: function () { endConversation(t('micClosedIdle')); },
+			onIdle: function () { endConversation(tapLine('micClosedIdle')); },
 		});
 		if (els.micBtn) {
 			bindVoiceLog(els.micBtn);
@@ -2147,7 +2150,7 @@
 			// plain Error) is the quiet hint.
 			var name = (e && e.name) || '';
 			var msg;
-			if (!fromTap || name === 'Error') msg = t('tapToSpeakAgain');
+			if (!fromTap || name === 'Error') msg = tapLine('tapToSpeakAgain');
 			else if (name === 'NotAllowedError' || name === 'SecurityError') msg = t('micDenied');
 			else if (name === 'NotFoundError' || name === 'OverconstrainedError') msg = t('micNotFound');
 			else msg = t('micFailed').replace('%e', (name && name !== 'Error' ? name : (e && e.message)) || 'unknown');
@@ -2389,8 +2392,14 @@
 		if (!voiceRecorder || !els.micBtn) return '';
 		var talking = els.micBtn.dataset.state === 'conversation';
 		if (!talking && (!talkOn() || conversationOn)) return '';
-		var typed = els.input.value.trim() && !els.input.classList.contains('def-cc-suggestion-text');
+		var typed = els.input.value.trim();   // a suggestion too: Send sends it
+		if (!typed && stagedFiles.some(function (f) { return f.status === 'failed' || f.status === 'uploading'; })) return '';
 		return typed || stagedFiles.length ? 'send' : talking ? 'end' : 'start';
+	}
+
+	// A line that says what to tap: the button where it is what shows once voice stops.
+	function tapLine(key) {
+		return t(talkOn() ? key + 'Button' : key);
 	}
 
 	// A room that made a new chat is read, and typed into, on a token for that chat.
@@ -5223,6 +5232,7 @@
 		var role = talkButton();
 		var voice = role === 'start' || role === 'end';
 		els.sendBtn.disabled = voice ? role === 'start' && isComposerDisabled : isComposerDisabled || (!hasText && !hasFiles);
+		if (role && root && root.activeElement === els.micBtn) els.sendBtn.focus();   // focus is not dropped to the page
 		if (voiceRecorder) els.micBtn.style.display = role ? 'none' : '';
 		setState(els.sendBtn, 'def-cc-composer-send--talk', !!role);
 		setState(els.sendBtn, 'def-cc-composer-send--start', role === 'start');

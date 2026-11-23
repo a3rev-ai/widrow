@@ -102,7 +102,6 @@ check('floor: beside an enabled Send the mic stays at least 44 by 44', (function
 
 // ── Without :has() a browser drops the whole rule a :has() selector sits in ─
 const NO_HAS = Object.keys(FLOOR).filter(s => s !== '.composer-hint').concat([
-	'.composer-toolbar .mic-btn[hidden]', '.composer-toolbar .voice-btn[hidden]',
 	'.model-select[hidden] + .model-chip', '.model-select:focus-visible + .model-chip', '.composer-hint']);
 (function () {
 	const bad = RULES.filter(r => r.media === PHONE && r.selectors.some(s => NO_HAS.includes(s))
@@ -131,9 +130,9 @@ function spec(sel) {
 function cmp(a, b) { return a[0] - b[0] || a[1] - b[1] || a[2] - b[2]; }
 const CASCADE = RULES.filter(r => r.media === null || r.media === PHONE);
 function matches(el, sel) { try { return el.matches(sel); } catch (e) { return false; } }
-function computed(el, prop) {
+function computed(el, prop, cascade) {
 	let best = null, bestSpec = null;
-	CASCADE.forEach(r => {
+	(cascade || CASCADE).forEach(r => {
 		if (!(prop in r.decls)) return;
 		r.selectors.forEach(sel => {
 			if (!matches(el, sel)) return;
@@ -224,6 +223,17 @@ MATRIX.forEach(function (m) {
 check('desktop: with conversation mode on the button is 40 by 40, larger than the 32 mic; round',
 	decl(null, '.send-btn[data-voice]').width === '40px' && decl(null, '.send-btn[data-voice]').height === '40px' &&
 	decl(null, '.mic-btn').width === '32px' && decl(null, '.send-btn')['border-radius'] === '50%');
+
+// What is DRAWN at desktop width (no phone query): a hidden mic is not drawn beside the role button.
+(function () {
+	const d = new JSDOM('<!doctype html><div id="staff-ai-app"><main class="chat-container">' + COMPOSER + '</main></div>').window.document;
+	const mic = d.getElementById('micBtn'), send = d.getElementById('sendBtn');
+	mic.hidden = true;
+	send.dataset.voice = 'start';
+	const desktop = RULES.filter(r => r.media === null);
+	check('desktop: with the role button shown, the hidden mic is not drawn (display none, not the hidden property alone)',
+		computed(mic, 'display', desktop) === 'none' && computed(send, 'display', desktop) === 'flex', computed(mic, 'display', desktop));
+})();
 
 // ── Desktop: the wrapper is no box, the chip is not drawn ────────────────
 check('desktop: the wrapper is no box and the chip is not drawn',

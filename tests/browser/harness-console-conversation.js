@@ -91,7 +91,7 @@ function boot(opts) {
 		isStopPhrase: () => false,
 		createSpeaker: () => speaker,
 		// A phone that hands the mic over only inside a tap refuses a start outside one.
-		createRecorder: () => ({ isRecording: () => false, release() {}, stop: () => Promise.resolve(null),
+		createRecorder: o => (rec.opts = o, { isRecording: () => false, release() {}, stop: () => Promise.resolve(null),
 			start: () => { rec.starts++; return opts.tapOnly && !inTap ? Promise.reject(new Error('needs a tap')) : Promise.resolve(true); } }),
 	};
 
@@ -153,7 +153,7 @@ function boot(opts) {
 		VOICE + '\n' + SEND + TAIL)(...names.map(k => deps[k]));
 	const orb = () => document.querySelector('.talk-orb');
 	return {
-		window, document, api, calls, talks, rec, said, order, logs, prepares: () => prepares,
+		window, document, api, calls, talks, rec, said, order, logs, prepares: () => prepares, staged: deps.stagedFiles,
 		last: () => talks[talks.length - 1],
 		// The tap, and whether the mint and the conversation happened inside it, before any await.
 		tap: () => { inTap = true; $('micBtn').click(); inTap = false; },
@@ -645,6 +645,95 @@ async function run(label, fn) {
 		t.last().finish('busy', true);
 		await settle();
 		check('busy where today\'s voice wants a tap: today\'s mic for that next tap', t.shows().role === 'today' && t.shows().mic, J(t.shows()));
+	});
+
+	// A typed reply held open, its frames pushed by the check.
+	const held = () => {
+		const enc = new TextEncoder();
+		let ctrl;
+		const route = url => url === DOOR + '/chat/stream' ? new Response(new ReadableStream({ start(c) { ctrl = c; } }),
+			{ status: 200, headers: { 'content-type': 'text/event-stream' } }) : null;
+		return { route, push: f => ctrl.enqueue(enc.encode(f)), close: () => ctrl.close() };
+	};
+	await run('stop in a conversation', async () => {
+		const live = held();
+		const t = boot({ thread: 'th-1', route: live.route });
+		await settle();
+		t.press();
+		await settle();
+		t.type('What else?');
+		t.press();
+		await settle();
+		live.push(frame(1, { type: 'text_delta', text: 'Here', step: 1 }));
+		await settle();
+		check('a typed reply streaming in a conversation: the button is Stop, and the mic shows as today\'s end control',
+			J(t.shows()) === J({ role: 'today', name: 'Stop', title: null, enabled: true, mic: true }), J(t.shows()));
+		t.press();
+		await settle();
+		check('…Stop stops the reply and keeps the conversation on', t.calls.some(c => /\/turns\/msg-1\/stop$/.test(c.url)) && t.last().ended === 0,
+			J(t.calls.map(c => c.url)));
+		live.push(frame(2, { type: 'done', choices: [{ message: { content: 'Here' } }] }));
+		live.close();
+		await settle();
+		check('…and the reply over, End voice is back and the mic hidden', J(t.shows()) === J({ role: 'end', name: 'End voice', title: 'End voice', enabled: true, mic: false }), J(t.shows()));
+	});
+	await run('mic ends while a typed reply streams', async () => {
+		const live = held();
+		const t = boot({ thread: 'th-1', route: live.route });
+		await settle();
+		t.press();
+		await settle();
+		t.type('What else?');
+		t.press();
+		await settle();
+		live.push(frame(1, { type: 'text_delta', text: 'Here', step: 1 }));
+		await settle();
+		t.tap();
+		await settle();
+		check('…the mic ends the conversation then', t.last().ended === 1, 'ended ' + t.last().ended);
+		live.close();
+		await settle();
+	});
+	await run('file chips', async () => {
+		const t = boot({ thread: 'th-1' });
+		await settle();
+		for (const status of ['failed', 'uploading']) {
+			t.staged.length = 0;
+			t.staged.push({ status });
+			t.type('');
+			check('a ' + status + ' file chip with the box empty: today\'s Send and mic', t.shows().role === 'today' && t.shows().name === 'Send message' && t.shows().mic, J(t.shows()));
+		}
+		t.staged.length = 0;
+		t.staged.push({ status: 'uploaded' });
+		t.type('');
+		check('an uploaded file chip with the box empty: Send', t.shows().role === 'send', J(t.shows()));
+	});
+	await run('suggestion', async () => {
+		const t = boot({ thread: 'th-1' });
+		await settle();
+		t.document.getElementById('composerInput').classList.add('staff-ai-suggestion-text');
+		t.type('Tell me more');
+		check('a suggestion in the box: Send, enabled, as today', J(t.shows()) === J({ role: 'send', name: 'Send message', title: null, enabled: true, mic: false }), J(t.shows()));
+	});
+	await run('fallback lines and focus', async () => {
+		const t = boot({ thread: 'th-1' });
+		await settle();
+		t.press();
+		t.last().finish('busy', true);
+		await settle();
+		t.document.getElementById('micBtn').focus();
+		t.rec.opts.onIdle();
+		await settle();
+		check('the busy fallback closes quietly: the line names the button', t.info() === 'The mic closed. Tap the button to speak again.', t.info());
+		check('the focused mic hidden as Start voice takes over: focus moves to the button',
+			t.document.activeElement === t.document.getElementById('sendBtn') && t.shows().role === 'start', String(t.document.activeElement && t.document.activeElement.id));
+		const off = boot({ status: false });
+		await settle();
+		off.tap();
+		await settle();
+		off.rec.opts.onIdle();
+		await settle();
+		check('mode off: today\'s line, naming the mic', off.info() === 'The mic closed — tap it to speak again.', off.info());
 	});
 
 	console.log('Console conversation mode (harness-console-conversation.js)');

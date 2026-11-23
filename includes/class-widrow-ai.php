@@ -1183,6 +1183,8 @@ final class Widrow_AI {
 			'talkBusy'             => __( 'Conversations are busy right now, so the microphone works as usual.', 'widrow-ai' ),
 			// The button at the message box's end, where conversation mode is on.
 			'startVoice'           => __( 'Start voice', 'widrow-ai' ),
+			'tapToSpeakAgainButton' => __( 'Tap the button to speak again.', 'widrow-ai' ),
+			'micClosedIdleButton'  => __( 'The mic closed. Tap the button to speak again.', 'widrow-ai' ),
 			'endVoice'             => __( 'End voice', 'widrow-ai' ),
 		);
 
