@@ -612,6 +612,7 @@ final class Widrow_AI {
 			// Voice (7.7.8) — the module Staff AI shares; loaded before the chat module.
 			'voiceModuleUrl'  => WIDROW_AI_PLUGIN_URL . 'assets/js/widrow-ai-voice.js?ver=' . WIDROW_AI_VERSION,
 			// Conversation mode: LiveKit's client, loaded by the chat only when the voice status says the mode is on.
+			// It runs in the site's own page and can read what the page can: see its folder's README.md.
 			'liveKitUrl'      => WIDROW_AI_PLUGIN_URL . 'assets/js/vendor/livekit-client-2.21.0/livekit-client.umd.js?ver=' . WIDROW_AI_VERSION,
 			'chatStyleUrl'    => WIDROW_AI_PLUGIN_URL . 'assets/css/widrow-ai-customer-chat.css?ver=' . WIDROW_AI_VERSION,
 			'markedUrl'       => WIDROW_AI_PLUGIN_URL . 'assets/js/vendor/marked.min.js?ver=' . WIDROW_AI_VERSION,
@@ -619,6 +620,10 @@ final class Widrow_AI {
 			// V1.2 Result Cards renderer — loaded after purify, before chat module.
 			'productCardsScriptUrl' => WIDROW_AI_PLUGIN_URL . 'assets/js/widrow-ai-product-cards.js?ver=' . WIDROW_AI_VERSION,
 			'productCardsStyleUrl'  => WIDROW_AI_PLUGIN_URL . 'assets/css/widrow-ai-product-cards.css?ver=' . WIDROW_AI_VERSION,
+			// Conversation mode: what every visitor is told at their first conversation. Kept out of
+			// the filterable strings below, so a site cannot reword or remove it.
+			/* translators: %s: the employee's display name. Shown to every visitor at their first voice conversation; a site cannot change or remove it. */
+			'talkLine'        => __( 'Your voice is turned into text as %s answers you. No audio recording is kept.', 'widrow-ai' ),
 			// i18n strings.
 			'strings'         => $this->get_chat_strings(),
 		);
@@ -1173,8 +1178,6 @@ final class Widrow_AI {
 			'voiceLogEmpty'        => __( 'No voice events yet.', 'widrow-ai' ),
 			// Conversation mode: the mic opens a conversation that stays on.
 			'talking'              => __( 'Speak, or type — tap the mic to end', 'widrow-ai' ),
-			/* translators: %s: the employee's display name. Shown to every visitor at their first conversation; it cannot be switched off. */
-			'talkLine'             => __( 'Your voice is turned into text as %s answers you. No audio recording is kept.', 'widrow-ai' ),
 			'talkNotUnderstood'    => __( "I couldn't make that out. You can type your message below instead.", 'widrow-ai' ),
 			'talkLost'             => __( 'The conversation was cut off. Tap the mic to talk again.', 'widrow-ai' ),
 		);

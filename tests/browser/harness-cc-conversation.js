@@ -51,7 +51,7 @@ const DIRECT = 'https://api.example.test/api/chat/stream';
 const ROOM = 'https://api.example.test/api/customer/voice/room';
 const CART = 'https://shop.test/wp-json/wc/store/v1/cart/add-item';
 const NONE = { dataset: {}, style: {}, textContent: '' };   // an element the widget did not draw
-const CARD_REPLY = { ended: false, reply: { content: 'The **drill** is in stock.', tool_outputs: [
+const CARD_REPLY = { ended: false, reply: { id: 'reply-1', content: 'The **drill** is in stock.', tool_outputs: [
   { type: 'wp_rest_call', endpoint: 'wc/store/v1/cart/add-item', method: 'POST', tool_name: 'add_to_cart',
     tool_call_id: 'call-1', body: { id: 5, quantity: 1 }, success_message: 'Added.' },
   { result_type: 'wp_product', section_heading: 'Drills',
@@ -67,6 +67,7 @@ function fakeLiveKit(w, h) {
     h.order.push('room');
     Object.assign(r, { handlers: {}, text: {}, state: 'disconnected', mic: [] });
     r.localParticipant = { identity: 'visitor', isSpeaking: false, audioLevel: 0,
+      getTrackPublication: source => (source === 'microphone' && r.mic.length ? { track: { stop() { h.micStops++; } } } : undefined),
       setMicrophoneEnabled: (on, opts) => {
         r.mic.push(opts ? { on, opts } : on);
         return h.micFails ? Promise.reject(Object.assign(new Error('no'), { name: 'NotAllowedError' })) : Promise.resolve();
@@ -80,8 +81,7 @@ function fakeLiveKit(w, h) {
     r.connect = (url, token) => {
       r.connectedWith = { url, token };
       if (h.connectFails) return Promise.reject(Object.assign(new Error('could not establish signal connection'), { name: 'ConnectionError' }));
-      r.state = 'connected';
-      return Promise.resolve();
+      return (h.connectGate || Promise.resolve()).then(() => { r.state = 'connected'; });
     };
     r.disconnect = () => {
       if (r.state === 'disconnected' && r.closed) return Promise.resolve();
@@ -104,7 +104,7 @@ function fakeLiveKit(w, h) {
   }
   return { Room, RoomEvent: { TrackSubscribed: 'trackSubscribed', TrackUnsubscribed: 'trackUnsubscribed',
     DataReceived: 'dataReceived', Disconnected: 'disconnected' },
-    Track: { Kind: { Audio: 'audio' } }, ConnectionState: { Disconnected: 'disconnected' }, DisconnectReason };
+    Track: { Kind: { Audio: 'audio' }, Source: { Microphone: 'microphone' } }, ConnectionState: { Disconnected: 'disconnected' }, DisconnectReason };
 }
 
 async function boot(opts) {
@@ -120,7 +120,7 @@ async function boot(opts) {
   for (const k of Object.keys(opts.storage || {})) w.localStorage.setItem(k, opts.storage[k]);
   w.WidrowAiPageContextHelper = { build: thread => ({ canonical_path: '/', for: thread }), markShipped() {} };
   const h = { w, order: [], rooms: [], mints: [], roomMints: [], reads: [], typed: [], carts: [], starts: [], spoken: [],
-    notes: [], disconnects: 0, readReply: opts.readReply || CARD_REPLY, roomStatus: 200, typedEvents: null };
+    notes: [], disconnects: 0, micStops: 0, wakeReleases: 0, busy: null, readReply: opts.readReply || CARD_REPLY, roomStatus: 200, typedEvents: null };
   if (opts.webrtc !== false) w.RTCPeerConnection = function () {};
   w.AudioContext = function () {
     h.order.push('unlock');
@@ -131,7 +131,13 @@ async function boot(opts) {
   };
   w.HTMLMediaElement.prototype.play = function () { h.order.push('prime'); return Promise.resolve(); };
   Object.defineProperty(w.navigator, 'wakeLock', { configurable: true,
-    value: { request: () => { h.order.push('wakeLock'); return Promise.resolve({ release() { h.wakeReleased = true; } }); } } });
+    value: { request: () => { h.order.push('wakeLock'); return Promise.resolve({ release() { h.wakeReleased = true; h.wakeReleases++; } }); } } });
+  Object.defineProperty(w.navigator, 'language', { configurable: true, value: opts.language === undefined ? 'vi' : opts.language });
+  if (opts.lineBlocked) {
+    const set = w.Storage.prototype.setItem, get = w.Storage.prototype.getItem;
+    w.Storage.prototype.setItem = function (k, v) { if (k === 'def:talk_line_shown') throw new Error('blocked'); return set.call(this, k, v); };
+    w.Storage.prototype.getItem = function (k) { if (k === 'def:talk_line_shown') throw new Error('blocked'); return get.call(this, k); };
+  }
   const res = (body, status) => Promise.resolve({ ok: status >= 200 && status < 300, status,
     headers: { get: () => null }, json: () => Promise.resolve(body), text: () => Promise.resolve(JSON.stringify(body)) });
   function sse(events) {
@@ -151,6 +157,7 @@ async function boot(opts) {
       h.order.push('mint');
       h.roomMints.push({ body: JSON.parse(init.body), auth: init.headers.Authorization, credentials: init.credentials });
       if (h.roomStatus !== 200) return res({ error: 'rooms_full' }, h.roomStatus);
+      if (h.mintReply) return res(h.mintReply, 200);
       const body = JSON.parse(init.body);
       return res({ url: 'wss://media.test', token: 'room-tok', room: 'r' + h.roomMints.length,
         thread_id: body.thread_id || 'thr-new' }, 200);
@@ -171,7 +178,9 @@ async function boot(opts) {
   w.DefVoice = {
     supported: () => true, micAllowedBySite: () => opts.micAllowed !== false, isStopPhrase: () => false,
     createSpeaker: () => ({ stop() {}, unlock() { h.order.push('speakerUnlock'); }, end() {},
-      speak: text => h.spoken.push(text), discard() {}, whenIdle: () => Promise.resolve() }),
+      speak: text => h.spoken.push(text), discard() {},
+      // A check holds the player busy (h.busy = a promise) to keep a reply sounding.
+      whenIdle: () => h.busy || Promise.resolve() }),
     createRecorder: o => ({ start: live => { h.starts.push(live); return Promise.resolve(true); }, isRecording: () => false,
       release() {}, stop: () => new Promise(() => {}) }),
     toBase64: () => Promise.resolve('AAAA'), log: () => h.notes.slice(), note: line => h.notes.push(line),
@@ -239,12 +248,15 @@ async function boot(opts) {
     show(inTap.filter(s => s !== 'speakerUnlock')) === show(['unlock', 'silence', 'prime', 'prime', 'wakeLock', 'room', 'startAudio']),
     show(inTap));
   check('the orb shows grey (connecting) from the tap', h.orb().dataset.state === 'connecting' && h.orbRow().style.display === '');
+  check('the line-shown flag is not written at the tap', h.w.localStorage.getItem('def:talk_line_shown') === null);
+  check('the visitor\'s line has no part a theme could reach', h.line().hasAttribute && !h.line().hasAttribute('part'));
   await sleep(40);
   const mint = h.roomMints[0];
   check('the mint: POST beside the stream route, on the stream token, credentials omitted',
     !!mint && mint.auth === 'Bearer tok-1' && mint.credentials === 'omit', show(mint));
-  check('the mint body: the token\'s chat, the time zone, the page context and the cart token, as a typed turn has them',
-    !!mint && show(Object.keys(mint.body).sort()) === show(['cart_token', 'page_context', 'thread_id', 'timezone']) &&
+  check('the mint body: the token\'s chat, the time zone, the browser\'s language, the page context and the cart token',
+    !!mint && show(Object.keys(mint.body).sort()) === show(['cart_token', 'language', 'page_context', 'thread_id', 'timezone']) &&
+      mint.body.language === 'vi' &&
       mint.body.thread_id === '' && mint.body.cart_token === 'cart-123' && typeof mint.body.timezone === 'string' &&
       show(mint.body.page_context) === show({ canonical_path: '/', for: null }),
     show(mint && mint.body));
@@ -256,7 +268,8 @@ async function boot(opts) {
     h.root.innerHTML.indexOf('room-tok') === -1 && h.notes.join(' ').indexOf('room-tok') === -1);
 
   // ── The orb ──
-  check('blue from the moment it listens', ['listening', 'idle'].indexOf(h.orb().dataset.state) !== -1, h.orb().dataset.state);
+  check('blue from the moment it listens', h.orb().dataset.state === 'listening', h.orb().dataset.state);
+  check('the line-shown flag is written once it listens', h.w.localStorage.getItem('def:talk_line_shown') === '1');
   h.room().localParticipant.isSpeaking = true; h.room().localParticipant.audioLevel = 0.5;
   await sleep(40);
   check('the visitor speaks: listening, moving with their voice', h.orb().dataset.state === 'listening' && /scale\(1\.3/.test(h.orb().style.transform),
@@ -268,7 +281,7 @@ async function boot(opts) {
     h.orb().dataset.state + ' ' + h.orb().style.transform);
   h.room().her.isSpeaking = false;
   await sleep(500);
-  check('nobody speaks: still (idle, no scale)', h.orb().dataset.state === 'idle' && h.orb().style.transform === '',
+  check('nobody speaks: still listening (blue, no movement); idle is only for the end', h.orb().dataset.state === 'listening' && h.orb().style.transform === '',
     h.orb().dataset.state + ' ' + h.orb().style.transform);
 
   // ── The visitor's line ──
@@ -294,6 +307,8 @@ async function boot(opts) {
   check('a second segment before she answers joins the same message; a tag in it is text',
     show(userBubble()) === show(['Do you have the <b onclick="window.pwned=1">drill</b>? A cordless one.']) &&
       !h.root.querySelector('.def-cc-message--user b'), show(userBubble()));
+  const announced = () => Array.from(h.root.querySelectorAll('.def-cc-announcer > *')).map(n => n.textContent);
+  check('the visitor\'s spoken message is not said while it arrives', announced().filter(l => l.indexOf('A cordless one.') !== -1).length === 0, show(announced()));
   const words = h.room().words();
   words.say('The drill ');
   await sleep(10);
@@ -303,6 +318,7 @@ async function boot(opts) {
   check('her words appear as she says them, as text: a tag in them is not markup',
     !!spoken && spoken.textContent.trim() === 'The drill <img src=x onerror="window.pwned=1">is in stock.' &&
       !spoken.querySelector('img') && !h.w.pwned, spoken && spoken.innerHTML);
+  check('she starts answering: the visitor\'s message is said once, whole', announced().filter(l => l.indexOf('A cordless one.') !== -1).length === 1, show(announced()));
   check('her captions are not the visitor\'s: one spoken bubble, the visitor\'s message unchanged',
     h.spokenBubbles().length === 1 && userBubble().length === 1, show(userBubble()));
   words.close();
@@ -348,8 +364,8 @@ async function boot(opts) {
   h.room().data('def.ended', { type: 'ended', reason: 'goodbye' });
   h.room().close();
   await sleep(10);
-  check('her goodbye ends it: the orb goes, the mic rests, nothing said as a fault',
-    h.orbRow().style.display === 'none' && h.mic().dataset.state === 'idle' && h.bubbles().indexOf('The conversation was cut off. Tap the mic to talk again.') === -1);
+  check('her goodbye ends it: idle, the orb goes, the mic rests, nothing said as a fault',
+    h.orb().dataset.state === 'idle' && h.orbRow().style.display === 'none' && h.mic().dataset.state === 'idle' && h.bubbles().indexOf('The conversation was cut off. Tap the mic to talk again.') === -1);
 
   // ── A second conversation: the line once; a tap ends it ──
   await h.start();
@@ -424,6 +440,154 @@ async function boot(opts) {
   await h.start();
   check('the microphone refused: the room left and the tap goes on as today\'s voice (its own message on a refusal)',
     h.disconnects === 1 && h.starts.length === 1);
+
+  // ── One reply, two segments: read once, drawn once, one add to cart ──
+  h = await boot();
+  await h.start();
+  const userWords = h.room().words('visitor');
+  userWords.say('Add the drill.'); userWords.close();
+  await sleep(10);
+  h.room().her.isSpeaking = true;
+  await sleep(20);
+  const part1 = h.room().words();
+  part1.say('Let me check.'); part1.close();
+  await sleep(20);
+  const part2 = h.room().words();
+  part2.say('The drill is in stock.'); part2.close();
+  await sleep(20);
+  check('no read while she is still speaking', h.reads.length === 0, show(h.reads));
+  h.room().her.isSpeaking = false;
+  await sleep(600);
+  check('a reply in two segments is read once, drawn once and adds to the cart once',
+    h.reads.length === 1 && h.spokenBubbles().length === 0 && h.bubbles().filter(b => b === 'The drill is in stock.').length === 1 &&
+      h.carts.length === 1, 'reads=' + h.reads.length + ' carts=' + h.carts.length + ' ' + show(h.bubbles()));
+  const again = h.room().words();
+  again.say('Anything else?'); again.close();
+  await sleep(600);
+  check('a read that hands back a reply already drawn (the same id) draws nothing and adds nothing',
+    h.reads.length === 2 && h.bubbles().filter(b => b === 'The drill is in stock.').length === 1 && h.carts.length === 1 &&
+      h.spokenBubbles().length === 1, 'reads=' + h.reads.length + ' carts=' + h.carts.length);
+
+  // ── In place, after a talk-over ──
+  h = await boot({ readReply: { ended: false, reply: { id: 'r-a', content: 'Written answer.', tool_outputs: [] } } });
+  await h.start();
+  const sheSays = h.room().words();
+  sheSays.say('Spoken answer'); sheSays.close();
+  const over = h.room().words('visitor');
+  over.say('Wait, one more thing'); over.close();
+  await sleep(600);
+  const order = Array.from(h.root.querySelectorAll('.def-cc-message')).map(m => m.textContent.trim()).filter(Boolean);
+  check('the written reply takes her spoken words\' place: the visitor\'s newer words stay below it',
+    order.indexOf('Written answer.') !== -1 && order.indexOf('Written answer.') < order.indexOf('Wait, one more thing'), show(order));
+
+  // ── `ended` from the read ──
+  h = await boot({ readReply: { ended: true, reason: 'goodbye', reply: { id: 'r-b', content: 'Goodbye.', tool_outputs: [] } } });
+  await h.start();
+  const bye = h.room().words();
+  bye.say('Goodbye.'); bye.close();
+  await sleep(600);
+  check('the read says it has ended (her room message lost): the conversation ends', h.disconnects === 1 && h.orbRow().style.display === 'none');
+
+  // ── A typed stream that errors still opens the microphone again ──
+  h = await boot();
+  await h.start();
+  h.typedEvents = [{ type: 'speech', text: 'Partly.', audio_base64: 'AAAA', mime: 'audio/mpeg', seq: 0 },
+    { type: 'error', message: 'Something went wrong.' }];
+  await h.send('Is it cordless?');
+  await sleep(40);
+  check('a typed stream that errors: its speech played, the room\'s microphone open again',
+    h.room().mic.indexOf(false) !== -1 && h.room().mic[h.room().mic.length - 1] === true && h.disconnects === 0, show(h.room().mic));
+
+  // ── A second typed message while the first reply still plays ──
+  let release;
+  h.busy = new Promise(r => { release = r; });
+  h.typedEvents = [{ type: 'speech', text: 'One.', audio_base64: 'AAAA', mime: 'audio/mpeg', seq: 0 },
+    { type: 'done', thread_id: 'thr-new', choices: [{ message: { content: 'One.' } }] }];
+  const micBefore = h.room().mic.length;
+  await h.send('First?');
+  h.typedEvents = [{ type: 'speech', text: 'Two.', audio_base64: 'AAAA', mime: 'audio/mpeg', seq: 0 },
+    { type: 'done', thread_id: 'thr-new', choices: [{ message: { content: 'Two.' } }] }];
+  await h.send('Second?');
+  const whilePlaying = h.room().mic.slice(micBefore);
+  check('a second typed message while a reply plays: the microphone stays muted throughout', show(whilePlaying) === show([false]), show(whilePlaying));
+  h.busy = null; release();
+  await sleep(20);
+  check('…and opens once, when both have played', show(h.room().mic.slice(micBefore)) === show([false, true]), show(h.room().mic.slice(micBefore)));
+
+  // ── A mute while connecting ──
+  h = await boot();
+  let open;
+  h.connectGate = new Promise(r => { open = r; });
+  h.tap();
+  await sleep(20);
+  h.typedEvents = [{ type: 'speech', text: 'Early.', audio_base64: 'AAAA', mime: 'audio/mpeg', seq: 0 },
+    { type: 'done', thread_id: 'thr-new', choices: [{ message: { content: 'Early.' } }] }];
+  h.busy = new Promise(() => {});   // still playing when the room comes up
+  await h.send('Hello?');
+  open();
+  await sleep(40);
+  check('a mute asked while connecting holds: the microphone is published, then muted', h.room().mic.length === 2 &&
+    h.room().mic[0].on === true && h.room().mic[1] === false, show(h.room().mic));
+
+  // ── Exactly one release on each ending ──
+  const endings = {
+    goodbye: async x => { x.room().data('def.ended', { type: 'ended', reason: 'goodbye' }); x.room().close(); },
+    tap: async x => { x.tap(); },
+    dropped: async x => { x.room().close(); },
+    hidden: async x => {
+      Object.defineProperty(x.w.document, 'visibilityState', { value: 'hidden', configurable: true });
+      x.w.document.dispatchEvent(new x.w.Event('visibilitychange'));
+    },
+    'closed panel': async x => { if (x.w.DEFCustomerChat.panelClosed) x.w.DEFCustomerChat.panelClosed(); },
+  };
+  for (const name of Object.keys(endings)) {
+    h = await boot();
+    await h.start();
+    await endings[name](h);
+    await sleep(20);
+    h.room().close();   // a late close from the server changes nothing
+    await sleep(20);
+    check('one release on ' + name + ': the microphone, the audio, the wake lock, once each; the orb gone',
+      h.micStops === 1 && h.closed === 1 && h.wakeReleases === 1 && h.orbRow().style.display === 'none' &&
+        h.w.document.body.querySelectorAll('audio').length === 0,
+      'mic=' + h.micStops + ' audio=' + h.closed + ' wake=' + h.wakeReleases);
+  }
+  check('the loader tells the chat when it closes the panel',
+    /function closePanel\(\)[\s\S]*?DEFCustomerChat\.panelClosed\(\)[\s\S]*?\n\t}\n/.test(extract.customerChatLoader()));
+
+  // ── The visitor's line ──
+  h = await boot({ lineBlocked: true });
+  await h.start();
+  h.tap(); await sleep(10);
+  await h.start();
+  check('storage blocked: the line shows at every conversation', h.line().style.display === '' && /answers you/.test(h.line().textContent));
+  h = await boot({ config: { strings: { talkLine: 'Rewritten %s.' }, talkLine: 'Translated: %s answers.' } });
+  h.roomStatus = 503;
+  await h.start();
+  check('the line comes from its own field, not the site\'s filterable strings', h.line().textContent === 'Translated: Joe answers.', h.line().textContent);
+  check('a conversation that never listened leaves the line to show next time', h.w.localStorage.getItem('def:talk_line_shown') === null);
+
+  // ── The mint's own refusals ──
+  h = await boot();
+  h.mintReply = { room: 'r9' };
+  await h.start();
+  check('a mint with no address or token ends as a refused mint: today\'s voice this tap', h.starts.length === 1 &&
+    h.notes.some(n => /^conversation mint failed/.test(n)), show(h.notes));
+  h.mintReply = null;
+  h.tap(); await sleep(10);
+  await h.start();
+  check('…and the mode stays on for the next tap', h.rooms.length === 2 && h.roomMints.length === 2);
+  h = await boot();
+  h.mintReply = { url: 'ws://media.test', token: 'room-tok', room: 'r9' };
+  await h.start();
+  h.mintReply = null;
+  h.tap(); await sleep(10);
+  await h.start();
+  check('an address that is not wss: ends as connect, the room never joined, today\'s voice for the page\'s life',
+    h.rooms.length === 1 && !(h.rooms[0].connectedWith || {}).url && h.starts.length === 2, 'rooms=' + h.rooms.length);
+  h = await boot({ language: '' });
+  await h.start();
+  check('an empty browser language sends no language field', !!h.roomMints[0] && !('language' in h.roomMints[0].body), show(h.roomMints[0]));
 
   console.log('harness-cc-conversation: ' + pass + ' passed, ' + fail + ' failed');
   console.log(results.join('\n'));

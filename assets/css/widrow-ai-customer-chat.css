@@ -939,10 +939,20 @@
 	background: #f97316;
 }
 
+/* The visitor's line: fixed colours on its own background, no theme token and no part,
+   so it reads the same on the panel's light and dark looks and a site cannot hide it. */
 .def-cc-orb-line {
+	display: block;
+	margin: 0;
+	padding: 6px 10px;
+	border-radius: 8px;
+	background: #f3f4f6;
+	color: #1f2937;
 	font-size: 12px;
-	color: var(--def-cc-text-light);
+	line-height: 1.4;
 	text-align: center;
+	opacity: 1;
+	visibility: visible;
 }
 
 .def-cc-message--transcribing .def-cc-message-content {
