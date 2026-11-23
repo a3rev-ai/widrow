@@ -2140,7 +2140,8 @@ html {
    answer; the Voice button cycles the readback (assistant / device / off). */
 .mic-btn[data-state="listening"],
 .mic-btn[data-state="transcribing"],
-.mic-btn[data-state="answering"] {
+.mic-btn[data-state="answering"],
+.mic-btn[data-state="conversation"] {
 	width: auto;
 	padding: 0 10px 0 8px;
 	border-radius: 16px;
@@ -2159,6 +2160,44 @@ html {
 .mic-btn[data-state="listening"]:hover {
 	color: #fff;
 	background: #b32d2e;
+}
+
+/* Conversation mode: the mic ends it; the orb under the chat says whose turn it is.
+   Grey while it connects, blue while it listens (moving with the person's voice),
+   orange while she speaks (moving with hers), still when nobody speaks. */
+.mic-btn[data-state="conversation"] {
+	color: #fff;
+	background: #d63638;
+}
+
+.talk-orb {
+	flex-shrink: 0;
+	width: 40px;
+	height: 40px;
+	margin: 8px auto 4px;
+	border-radius: 50%;
+	background: #2563eb;
+	transition: transform 0.08s linear, background 0.2s ease;
+}
+
+.talk-orb[hidden] {
+	display: none;
+}
+
+.talk-orb[data-state="connecting"] {
+	background: #9ca3af;
+}
+
+.talk-orb[data-state="speaking"] {
+	background: #f97316;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	/* The orb keeps its colours; it does not move. */
+	.talk-orb {
+		transform: none !important;
+		transition: none;
+	}
 }
 
 .mic-btn[data-state="transcribing"],

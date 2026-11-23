@@ -32,7 +32,7 @@ const HTML = `<!doctype html><html><body>
 const HEAD = `
 	var sessionStorage = window.sessionStorage;   // the window's own, kept across a "reload"
 	var composerInput = document.getElementById('composerInput');
-	var _isStreaming = false, isLoading = false, conversationOn = false, spokenTurn = false, staged = false;
+	var _isStreaming = false, isLoading = false, conversationOn = false, spokenTurn = false, staged = false, talk = null;
 	var _streamAbort = null, _eventsSeen = 0, RESUME_GRACE_MS = 0;
 	var location = { reload: function () { reloads.push(1); } };
 	function hasActiveFiles() { return staged; }

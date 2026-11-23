@@ -424,6 +424,7 @@ function t(key, fallback) {
 				.then(function (data) {
 					if (!data) return;
 					if (handOverToPortal(data)) return;
+					prepareTalk(data);
 					if (data.assistant_name && typeof data.assistant_name === 'string') {
 						assistantName = data.assistant_name;
 						assistantNameSubscribers.forEach(function (relabel) { relabel(); });
@@ -904,6 +905,7 @@ function t(key, fallback) {
 	// Load a specific conversation
 	async function loadConversation(id, shared) {
 		if (conversationOn) endConversation();   // a spoken turn never lands in a thread she just opened
+		if (talk) talk.end();
 		currentConversationId = id;
 		rememberConversation(id);
 		// After the id: an opened chat shows no chip, and the chip reads the id (P-E2).
@@ -1239,6 +1241,7 @@ function t(key, fallback) {
 		// new chat, and the send's own finally frees the composer. DEF lands it on its thread.
 		if (_streamAbort) { turnReleased = true; _streamAbort.abort(); }
 		if (conversationOn || spokenTurn) endConversation();   // a reply being read aloud goes quiet too
+		if (talk) talk.end();
 		// Every path to a fresh chat leaves the open page — the sidebar button,
 		// a project row's "New chat", every Ask button.
 		showChat({ focus: false });
@@ -1529,7 +1532,7 @@ function t(key, fallback) {
 		// text, and it carries the class every composer handler clears on first touch.
 		var typed = composerInput && composerInput.value.trim() &&
 			!composerInput.classList.contains('staff-ai-suggestion-text');
-		return !_isStreaming && !isLoading && !conversationOn && !hasActiveFiles() && !typed;
+		return !_isStreaming && !isLoading && !conversationOn && !talk && !hasActiveFiles() && !typed;
 	}
 
 	function takeUpdateWhenQuiet() {
@@ -1599,6 +1602,8 @@ function t(key, fallback) {
 		// Hands-free is a foreground interaction: a pocketed phone must not keep
 		// listening (7.7.1) — the mic is released the moment the page hides.
 		if (document.visibilityState === 'hidden' && (conversationOn || spokenTurn)) endConversation();
+		// A conversation too, on a phone; on a laptop another tab leaves it on.
+		if (document.visibilityState === 'hidden' && talk && window.matchMedia('(pointer: coarse)').matches) talk.end();
 		if (document.visibilityState === 'visible') {
 			// Coming back is the moment a stale app is most likely to be stale, and the
 			// moment it is most likely to be quiet.
@@ -1686,7 +1691,7 @@ function t(key, fallback) {
 				content.appendChild(indicator);
 			} else {
 				// Render markdown for assistant messages, plain text for user messages.
-				if (msg.role === 'assistant') {
+				if (msg.role === 'assistant' && !msg.talk) {   // her spoken words are text, never markup
 					content.innerHTML = renderMarkdown(msg.content);
 					// Inline web-citation pills from [src_N] markers (see done handler).
 					applyCitations(content, buildCitationMap(msg.tool_outputs));
@@ -3023,6 +3028,7 @@ function t(key, fallback) {
 			onIdle: function () { endConversation(t('micClosedIdle', 'The mic closed — tap it to speak again.')); }
 		});
 		micBtn.addEventListener('click', function () {
+			if (talk) { talk.end(); return; }
 			if (voiceRecorder.isRecording()) { finishRecording(); return; }
 			if (conversationOn) { endConversation(); return; }   // she is answering or speaking
 			if (isLoading || isReadOnly) return;
@@ -3032,6 +3038,7 @@ function t(key, fallback) {
 				showError(t('micBlockedBySite', "This site's security settings block the microphone for every visitor (Permissions-Policy). The site admin needs to allow it for this site."));
 				return;
 			}
+			if (canTalk()) { startTalk(); return; }
 			speaker.stop();
 			speaker.unlock();   // inside the tap: iOS lets audio start only from a gesture
 			conversationOn = true;
@@ -3222,6 +3229,16 @@ function t(key, fallback) {
 		if (speaker) speaker.end();   // a line whose closing frame the stream never brought
 		spokenTurn = false;
 		openingSpoken = null;
+		if (talkTyped) {
+			// Unmuted once her reply's speech is over, however the turn ended.
+			talkTyped = false;
+			var epoch = talkEpoch;
+			speaker.whenIdle().then(function () {
+				if (epoch === talkEpoch && talkMuted) { talkMuted = false; talk.mute(false); }
+			});
+		}
+		if (talkReloadDue) { talkReloadDue = false; reloadTalkChat(); }
+		if (talk) return;   // the mic stays the conversation's
 		if (!micBtn || !speaker) return;
 		if (!conversationOn) {
 			voiceRecorder.release();   // whatever the turn left open, the mic is off now
@@ -3273,7 +3290,174 @@ function t(key, fallback) {
 		readBackSoFar(true);
 	}
 
-	// ── The line an attachment sends on its own (8.1.2) ─────────────────────────
+	// ── Conversation mode ──────────────────────────────────────────────────────
+	// Where the status says voice_conversation, the host holds conversations
+	// (host.conversation), the browser has WebRTC and the Voice button is on her voice, a
+	// tap on the mic opens a conversation that stays on: the person speaks, she answers
+	// aloud, they can talk over her or type at any time. The orb says whose turn it is; her
+	// words show as she says them, then give way to the written reply read from the chat.
+	// Otherwise the mic is the voice above. Every callback's text is shown as text.
+	var talkMode = false;       // the status and the host allow it
+	var talkFailed = false;     // a room could not load or connect: the voice above for the page's life
+	var talk = null;            // the open conversation: { end, mute }
+	var talkEpoch = 0;          // a callback from an ended conversation is ignored
+	var talkRoom = '';
+	var talkState = '';
+	var heardMsg = null;        // the person's words, one message until she answers
+	var heardDone = '';         // its finished segments
+	var captionMsg = null;      // her words as she says them
+	var talkTyped = false;      // the reply to a typed message is spoken
+	var talkMuted = false;
+	var talkReloadDue = false;  // a reply ended while a typed one streamed: the chat is read after it
+	var talkOrb = null;
+
+	function prepareTalk(data) {
+		var host = window.StaffAIConfig && window.StaffAIConfig.host;
+		if (talkMode || data.voice_conversation !== true || !host || typeof host.conversation !== 'function') return;
+		talkMode = true;
+		host.conversation.prepare();   // loads the client before the tap
+	}
+
+	function canTalk() {
+		return talkMode && !talkFailed && !!window.RTCPeerConnection && speaker.getMode() === 'server';
+	}
+
+	// Inside the mic tap, before any await: the host unlocks the phone's audio there.
+	function startTalk() {
+		speaker.stop();
+		speaker.unlock();   // a typed message's reply is spoken too
+		var epoch = ++talkEpoch;
+		var mine = function (fn) {
+			return function (a, b) { if (epoch === talkEpoch) fn(a, b); };
+		};
+		var minted = apiRequest('/voice/room', {
+			method: 'POST',
+			body: JSON.stringify({ thread_id: currentConversationId || '', model_id: selectedModel || null, language: navigator.language })
+		}).then(function (m) {
+			if (epoch === talkEpoch) {
+				talkRoom = String(m.room || '');
+				if (m.thread_id && m.thread_id !== currentConversationId) {   // the room made a new chat
+					currentConversationId = String(m.thread_id);
+					rememberConversation(currentConversationId);
+					updateReadOnlyState();
+				}
+			}
+			return m;
+		});
+		if (!talkOrb) {
+			talkOrb = document.createElement('div');
+			talkOrb.className = 'talk-orb';
+			talkOrb.setAttribute('aria-hidden', 'true');
+			messagesContainer.parentNode.insertBefore(talkOrb, messagesContainer.nextSibling);
+		}
+		talkOrb.hidden = false;
+		hideInfo();
+		setMicState('conversation', t('talking', 'Speak, or type — tap the mic to end'));
+		talk = window.StaffAIConfig.host.conversation(minted, {
+			onState: mine(function (state) {
+				talkState = talkOrb.dataset.state = state;
+				talkOrb.style.transform = '';
+			}),
+			onLevel: mine(function (heard, spoken) {
+				var level = talkState === 'speaking' ? spoken : talkState === 'listening' ? heard : 0;
+				talkOrb.style.transform = level ? 'scale(' + (1 + 0.6 * Math.min(level, 1)) + ')' : '';
+			}),
+			onHeard: mine(function (text, final) {
+				if (!heardMsg) { heardMsg = { role: 'user', content: '', via_voice: true, talk: true }; messages.push(heardMsg); }
+				heardMsg.content = (heardDone ? heardDone + ' ' : '') + text;
+				if (final) heardDone = heardMsg.content;
+				renderTalk();
+			}),
+			onCaption: mine(function (text, final) {
+				if (!captionMsg) {
+					heardMsg = null;   // she answers: the person's message is whole
+					heardDone = '';
+					captionMsg = { role: 'assistant', content: '', talk: true };
+					messages.push(captionMsg);
+				}
+				captionMsg.content = text;
+				if (final) captionMsg = null;
+				renderTalk();
+			}),
+			onReply: mine(function () { readTalk(); }),
+			onNotice: mine(function (kind) {
+				if (kind === 'not_understood') showInfo(t('talkNotUnderstood', "I couldn't make that out. You can type your message below instead."));
+			}),
+			onEnded: mine(talkOver),
+			onError: mine(talkOver)
+		});
+	}
+
+	// Never over a typed reply streaming into its bubble: a re-render would detach it.
+	function renderTalk() {
+		if (!_isStreaming) renderMessages();
+	}
+
+	// After each reply, and once when it ends: the confirmations waiting (each handed out
+	// once, a tap on one is a typed message), then the chat as the server holds it, so her
+	// spoken words give way to the written reply with its sources and cards.
+	async function readTalk() {
+		var room = talkRoom;
+		if (!room) return;
+		try {
+			var data = await apiRequest('/voice/room/' + encodeURIComponent(room));
+			(data.confirmations || []).forEach(function (text) { showConfirmChip(String(text)); });
+		} catch (e) { /* the chat is still read */ }
+		reloadTalkChat();
+	}
+
+	async function reloadTalkChat() {
+		var id = currentConversationId;
+		if (isLoading) { talkReloadDue = true; return; }
+		if (!id) return;
+		try {
+			var result = await apiRequest('/conversations/' + encodeURIComponent(id));
+			if (id !== currentConversationId) return;
+			if (isLoading) { talkReloadDue = true; return; }
+			messages = result.messages || [];
+			captionMsg = null;
+			if (heardMsg) messages.push(heardMsg);   // talking over her: their words stay below
+			renderMessages();
+			loadConversations();
+		} catch (e) { /* her words stay as she said them */ }
+	}
+
+	// The conversation is over (onEnded or onError, exactly one): the last read, and why.
+	function talkOver(kind) {
+		readTalk();
+		talkEpoch++;
+		talk = null;
+		talkRoom = talkState = heardDone = '';
+		heardMsg = captionMsg = null;
+		talkTyped = talkMuted = false;
+		talkOrb.hidden = true;
+		setMicState('idle');
+		if (kind === 'goodbye' || kind === 'stop_phrase' || kind === 'end') {
+			showInfo(t('voiceStopped', 'Conversation ended.'));
+		} else if (kind === 'time_limit') {
+			showInfo(t('talkTimeLimit', 'The conversation reached its time limit. Tap the mic to start a new one.'));
+		} else if (kind === 'connect' || kind === 'load') {
+			talkFailed = true;
+			showInfo(t('talkUnavailable', 'Voice conversation is unavailable right now. Tap the mic to talk.'));
+		} else if (kind === 'busy') {
+			// This tap goes on as the voice above; the next tries a conversation again.
+			conversationOn = true;
+			listen().then(function () {
+				if (conversationOn) showInfo(t('talkBusy', 'Voice conversation is busy right now, so the microphone works as usual.'));
+			});
+		} else {
+			showInfo(t('talkStopped', 'Voice stopped unexpectedly. Tap the mic to start again.'));
+		}
+	}
+
+	// A typed message's reply plays with the room's microphone muted, so the room does not
+	// hear her from the loudspeaker as the person.
+	function muteTalkForSpeech() {
+		if (talkTyped && talk && !talkMuted) { talkMuted = true; talk.mute(true); }
+	}
+	// ── end conversation mode
+
+	// ── The line an attachment sends on its own (8.1.2)─────────────────────────
 	// A message with no words still has to say what it carries. Every one of them
 	// sent the same "Please analyze the attached file(s)", so a second picture
 	// arrived with nothing to tell it from the first and was read in the first
@@ -3410,6 +3594,7 @@ function t(key, fallback) {
 		// Feature detection: streaming vs sync fallback (V1.1)
 		if (chatStreamUrl && typeof ReadableStream !== 'undefined') {
 			console.info('[Staff AI] Using streaming path');
+			talkTyped = !!talk;   // typing keeps a conversation on, and her reply is spoken
 			await sendMessageStreaming(text, fileIds, pendingOutcome, pendingScore, null);
 		} else {
 			console.info('[Staff AI] Using sync fallback' +
@@ -3489,7 +3674,7 @@ function t(key, fallback) {
 			var reqMessages = [];
 			for (var i = 0; i < messages.length; i++) {
 				var m = messages[i];
-				if (m.isTyping) continue;
+				if (m.isTyping || m.talk) continue;   // a conversation's words are the room's to keep
 				if (m.role !== 'user' && m.role !== 'assistant') continue;
 				var msgObj = { role: m.role, content: m.content };
 				// Attach file references on the latest user message
@@ -3514,6 +3699,7 @@ function t(key, fallback) {
 				requestBody.via_voice = true;
 				requestBody.speech_out = !!voice.speech_out;
 			}
+			if (talkTyped) requestBody.speech_out = true;
 			if (voice && voice.transcript === undefined) {
 				requestBody.audio_base64 = voice.audio_base64;
 				requestBody.audio_mime = voice.audio_mime;
@@ -3954,7 +4140,8 @@ function t(key, fallback) {
 						// A streamed line comes as parts of one seq, its closing part with no audio.
 						// It goes to the speaker as it arrives, never through the paced queue: a
 						// part held there behind a tool row's pause is heard as a gap (8.8.2).
-						if (spokenTurn) {
+						if (spokenTurn || talkTyped) {
+							muteTalkForSpeech();
 							speaker.speak(evt.text || '', evt.audio_base64 || evt.part > 0
 								? { base64: evt.audio_base64 || '', mime: evt.mime, seq: evt.seq, part: evt.part, last: evt.last }
 								: null, evt.step);
@@ -3963,7 +4150,7 @@ function t(key, fallback) {
 					}
 					// A round the employee moved on from: its speech not yet begun is dropped now,
 					// ahead of the paced queue, as its speech arrived; its text moves there.
-					if (evt.type === 'step_superseded' && spokenTurn) speaker.discard(evt.step);
+					if (evt.type === 'step_superseded' && (spokenTurn || talkTyped)) speaker.discard(evt.step);
 					eventQueue.push(evt);
 				}
 			}
