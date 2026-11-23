@@ -391,7 +391,7 @@ async function run(label, fn) {
 
 	const ENDINGS = [['goodbye', false, 'Conversation ended.'], ['stop_phrase', false, 'Conversation ended.'], ['end', false, 'Conversation ended.'],
 		['time_limit', false, 'The conversation reached its time limit. Tap the button to start a new one.'],
-		['silence', false, 'Voice stopped unexpectedly. Tap the button to start again.'], ['refused', false, 'Voice stopped unexpectedly. Tap the button to start again.'],
+		['silence', false, 'Conversation ended.'], ['refused', false, 'Voice stopped unexpectedly. Tap the button to start again.'],
 		['unknown', false, 'Voice stopped unexpectedly. Tap the button to start again.'], ['mint', true, 'Voice stopped unexpectedly. Tap the button to start again.'],
 		['microphone', true, 'The microphone is blocked for this site in your browser. Allow it in the site permissions (the icon beside the address bar) and try again.'],
 		['dropped', true, 'Voice stopped unexpectedly. Tap the button to start again.']];

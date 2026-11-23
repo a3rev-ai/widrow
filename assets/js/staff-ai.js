@@ -3496,7 +3496,7 @@ function t(key, fallback) {
 		talkTyped = talkMuted = false;
 		talkOrb.hidden = true;
 		setMicState('idle');
-		if (kind === 'goodbye' || kind === 'stop_phrase' || kind === 'end') {
+		if (kind === 'goodbye' || kind === 'stop_phrase' || kind === 'end' || kind === 'silence') {
 			showInfo(t('voiceStopped', 'Conversation ended.'));
 		} else if (kind === 'time_limit') {
 			showInfo(t('talkTimeLimit', 'The conversation reached its time limit. Tap the button to start a new one.'));
