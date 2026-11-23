@@ -905,7 +905,7 @@ function t(key, fallback) {
 	// Load a specific conversation
 	async function loadConversation(id, shared) {
 		if (conversationOn) endConversation();   // a spoken turn never lands in a thread she just opened
-		if (talk) talk.end();
+		if (talk) endTalk();
 		currentConversationId = id;
 		rememberConversation(id);
 		// After the id: an opened chat shows no chip, and the chip reads the id (P-E2).
@@ -1092,6 +1092,7 @@ function t(key, fallback) {
 			if (other.onLeave) other.onLeave();
 		});
 
+		if (talk) endTalk();   // a page has no mic to end it with
 		// The chat is HIDDEN, never reset (D-C5): a streaming reply keeps
 		// streaming and a half-typed message is still in the composer on return.
 		messagesContainer.style.display = 'none';
@@ -1241,7 +1242,7 @@ function t(key, fallback) {
 		// new chat, and the send's own finally frees the composer. DEF lands it on its thread.
 		if (_streamAbort) { turnReleased = true; _streamAbort.abort(); }
 		if (conversationOn || spokenTurn) endConversation();   // a reply being read aloud goes quiet too
-		if (talk) talk.end();
+		if (talk) endTalk();
 		// Every path to a fresh chat leaves the open page — the sidebar button,
 		// a project row's "New chat", every Ask button.
 		showChat({ focus: false });
@@ -1603,7 +1604,7 @@ function t(key, fallback) {
 		// listening (7.7.1) — the mic is released the moment the page hides.
 		if (document.visibilityState === 'hidden' && (conversationOn || spokenTurn)) endConversation();
 		// A conversation too, on a phone; on a laptop another tab leaves it on.
-		if (document.visibilityState === 'hidden' && talk && window.matchMedia('(pointer: coarse)').matches) talk.end();
+		if (document.visibilityState === 'hidden' && talk && window.matchMedia('(pointer: coarse)').matches) endTalk();
 		if (document.visibilityState === 'visible') {
 			// Coming back is the moment a stale app is most likely to be stale, and the
 			// moment it is most likely to be quiet.
@@ -3028,7 +3029,7 @@ function t(key, fallback) {
 			onIdle: function () { endConversation(t('micClosedIdle', 'The mic closed — tap it to speak again.')); }
 		});
 		micBtn.addEventListener('click', function () {
-			if (talk) { talk.end(); return; }
+			if (talk) { endTalk(); return; }
 			if (voiceRecorder.isRecording()) { finishRecording(); return; }
 			if (conversationOn) { endConversation(); return; }   // she is answering or speaking
 			if (isLoading || isReadOnly) return;
@@ -3038,7 +3039,8 @@ function t(key, fallback) {
 				showError(t('micBlockedBySite', "This site's security settings block the microphone for every visitor (Permissions-Policy). The site admin needs to allow it for this site."));
 				return;
 			}
-			if (canTalk()) { startTalk(); return; }
+			if (talkSkip) talkSkip = false;
+			else if (canTalk()) { startTalk(); return; }
 			speaker.stop();
 			speaker.unlock();   // inside the tap: iOS lets audio start only from a gesture
 			conversationOn = true;
@@ -3299,6 +3301,7 @@ function t(key, fallback) {
 	// Otherwise the mic is the voice above. Every callback's text is shown as text.
 	var talkMode = false;       // the status and the host allow it
 	var talkFailed = false;     // a room could not load or connect: the voice above for the page's life
+	var talkSkip = false;       // busy, and the voice above wanted a tap: the next tap is that voice
 	var talk = null;            // the open conversation: { end, mute }
 	var talkEpoch = 0;          // a callback from an ended conversation is ignored
 	var talkRoom = '';
@@ -3315,7 +3318,7 @@ function t(key, fallback) {
 		var host = window.StaffAIConfig && window.StaffAIConfig.host;
 		if (talkMode || data.voice_conversation !== true || !host || typeof host.conversation !== 'function') return;
 		talkMode = true;
-		host.conversation.prepare();   // loads the client before the tap
+		if (typeof host.conversation.prepare === 'function') host.conversation.prepare();   // loads the client before the tap
 	}
 
 	function canTalk() {
@@ -3353,7 +3356,7 @@ function t(key, fallback) {
 		talkOrb.hidden = false;
 		hideInfo();
 		setMicState('conversation', t('talking', 'Speak, or type — tap the mic to end'));
-		talk = window.StaffAIConfig.host.conversation(minted, {
+		var c = window.StaffAIConfig.host.conversation(minted, {
 			onState: mine(function (state) {
 				talkState = talkOrb.dataset.state = state;
 				talkOrb.style.transform = '';
@@ -3386,7 +3389,18 @@ function t(key, fallback) {
 			onEnded: mine(talkOver),
 			onError: mine(talkOver)
 		});
+		if (epoch === talkEpoch) talk = c;   // a host that failed at once has already ended it
 	}
+
+	// Every way out: the console's clean-up first, then the host is told. A host that calls
+	// back late, twice or never changes nothing: its callbacks belong to an ended epoch.
+	function endTalk() {
+		var c = talk;
+		talkOver('end');
+		c.end();
+	}
+	// Leaving the page (signing out, a session gone) leaves no mic live behind it.
+	window.addEventListener('pagehide', function () { if (talk) endTalk(); });
 
 	// Never over a typed reply streaming into its bubble: a re-render would detach it.
 	function renderTalk() {
@@ -3397,10 +3411,11 @@ function t(key, fallback) {
 	// once, a tap on one is a typed message), then the chat as the server holds it, so her
 	// spoken words give way to the written reply with its sources and cards.
 	async function readTalk() {
-		var room = talkRoom;
+		var room = talkRoom, id = currentConversationId, epoch = chipEpoch;
 		if (!room) return;
 		try {
 			var data = await apiRequest('/voice/room/' + encodeURIComponent(room));
+			if (epoch !== chipEpoch || id !== currentConversationId) return;   // another chat is open
 			(data.confirmations || []).forEach(function (text) { showConfirmChip(String(text)); });
 		} catch (e) { /* the chat is still read */ }
 		reloadTalkChat();
@@ -3422,7 +3437,8 @@ function t(key, fallback) {
 		} catch (e) { /* her words stay as she said them */ }
 	}
 
-	// The conversation is over (onEnded or onError, exactly one): the last read, and why.
+	// The conversation is over (the console's own end, or the host's onEnded or onError, the
+	// first of them): the last read, and why.
 	function talkOver(kind) {
 		readTalk();
 		talkEpoch++;
@@ -3439,11 +3455,15 @@ function t(key, fallback) {
 		} else if (kind === 'connect' || kind === 'load') {
 			talkFailed = true;
 			showInfo(t('talkUnavailable', 'Voice conversation is unavailable right now. Tap the mic to talk.'));
+		} else if (kind === 'microphone') {
+			showError(t('micDenied', 'The microphone is blocked for this site in your browser. Allow it in the site permissions (the icon beside the address bar) and try again.'));
 		} else if (kind === 'busy') {
-			// This tap goes on as the voice above; the next tries a conversation again.
+			// This tap goes on as the voice above; if the phone wants a tap for it, the next tap
+			// is that voice, once. The tap after tries a conversation again.
 			conversationOn = true;
 			listen().then(function () {
-				if (conversationOn) showInfo(t('talkBusy', 'Voice conversation is busy right now, so the microphone works as usual.'));
+				if (!conversationOn) talkSkip = true;
+				showInfo(t('talkBusy', 'Voice conversation is busy right now, so the microphone works as usual.'));
 			});
 		} else {
 			showInfo(t('talkStopped', 'Voice stopped unexpectedly. Tap the mic to start again.'));

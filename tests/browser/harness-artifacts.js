@@ -20,7 +20,7 @@
 const { JSDOM } = require('jsdom');
 const extract = require('./extract');
 
-const SHELL = extract.pageShell();
+const SHELL = 'var talk = null;   // no conversation here\n' + extract.pageShell();
 const VIEWER = extract.documentViewer();
 const MENU = extract.consoleMenu();
 const DOCUMENTS = extract.documents();

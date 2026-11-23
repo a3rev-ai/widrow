@@ -22,7 +22,7 @@ const path = require('path');
 const { JSDOM } = require('jsdom');
 const extract = require('./extract');
 
-const SHELL = extract.pageShell();
+const SHELL = 'var talk = null;   // no conversation here\n' + extract.pageShell();
 const INTEGRATIONS = extract.integrations();
 // C7: the ⋯ menu's machinery is shared and sits outside the page block.
 const MENU = extract.consoleMenu();

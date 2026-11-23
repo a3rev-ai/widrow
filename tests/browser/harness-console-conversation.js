@@ -1,17 +1,8 @@
 /*
- * Voice conversation mode in the Staff AI console — behavioural harness.
- *
- * Runs the SHIPPED console blocks (status, voice, the conversation block, the send path and
- * its stream, the chat render and reload, New chat, the release check), sliced by marker from
- * assets/js/staff-ai.js, inside jsdom against a fake host whose conversation() records what
- * the console asks of it and hands back callbacks a check can fire:
- * - the entry rule (status, host.conversation, WebRTC, her voice) and prepare() once;
- * - the start inside the tap, before any await, and the mint's body;
- * - the callbacks as text, the orb's colour and size, the read after each reply and at the
- *   end (confirmation chips, the chat reloaded), and at no other time;
- * - typing while it is on (speech_out, her reply's speech, the room muted while it plays);
- * - every ending's line, today's voice after a failure, a hidden page, the update held;
- * - no host.conversation: today's voice; no token or address in any log.
+ * Voice conversation mode in the Staff AI console. Runs the SHIPPED blocks, sliced by marker
+ * from assets/js/staff-ai.js, in jsdom against a fake host whose conversation() records what
+ * the console asks of it and hands back callbacks a check can fire. Its end() answers late
+ * (or never), as a real host may. See tests/browser/README.md for what each case covers.
  */
 const { JSDOM } = require('jsdom');
 const fs = require('fs');
@@ -33,6 +24,7 @@ const BUTTON = s('send button', l => l.includes('// Update send button state.'),
 const SEND = s('send path', l => l.startsWith('\tasync function sendMessage() {'), l => l.includes('// SHARE MODAL'), ['async function sendMessageStreaming', 'function showConfirmChip']);
 const VOICE = extract.voice();
 const RELEASE = extract.release();
+const SHELL = extract.pageShell();
 const CSS = fs.readFileSync(require('path').join(extract.REPO, 'assets/css/staff-ai.css'), 'utf8');
 
 const DOOR = 'https://api.defho.test/api/tenant/acme/staff-ai';
@@ -58,8 +50,9 @@ const HEAD = `
 `;
 const TAIL = `
 	initVoice();
+	consolePages.push({ route: 'documents', el: document.getElementById('docsPage') });
 	return {
-		sendMessage: sendMessage, resetToNewChat: resetToNewChat, loadConversation: loadConversation, quietEnough: quietEnough,
+		sendMessage: sendMessage, resetToNewChat: resetToNewChat, loadConversation: loadConversation, quietEnough: quietEnough, showPage: showPage,
 		state: function () { return { talk: typeof talk === 'undefined' ? undefined : talk, thread: currentConversationId,
 			messages: messages, on: conversationOn, mic: micBtn.dataset.state }; }
 	};`;
@@ -70,7 +63,8 @@ function boot(opts) {
 		'<div id="infoBanner"></div><div id="errorBanner"></div></div><div id="confirmChips"></div>' +
 		'<textarea id="composerInput" placeholder="Ask"></textarea><button id="sendBtn"></button>' +
 		'<button id="micBtn"></button><span id="micLabel"></span><button id="voiceBtn"></button>' +
-		'<select id="modelSelect" hidden></select><span id="modelChipName"></span><div id="welcomeMessage"></div>',
+		'<select id="modelSelect" hidden></select><span id="modelChipName"></span><div id="welcomeMessage"></div>' +
+		'<div id="composerContainer"></div><section id="docsPage" hidden></section>',
 	{ url: 'https://acme.defho.test/staff-ai/acme/', pretendToBeVisual: true });
 	const window = dom.window, document = window.document;
 	const $ = id => document.getElementById(id);
@@ -95,10 +89,13 @@ function boot(opts) {
 		supported: () => true, micAllowedBySite: () => true, log: () => [], note: m => logs.push(String(m)),
 		isStopPhrase: () => false,
 		createSpeaker: () => speaker,
-		createRecorder: () => ({ isRecording: () => false, release() {}, start: () => { rec.starts++; return Promise.resolve(true); }, stop: () => Promise.resolve(null) }),
+		// A phone that hands the mic over only inside a tap refuses a start outside one.
+		createRecorder: () => ({ isRecording: () => false, release() {}, stop: () => Promise.resolve(null),
+			start: () => { rec.starts++; return opts.tapOnly && !inTap ? Promise.reject(new Error('needs a tap')) : Promise.resolve(true); } }),
 	};
 
-	// The fake host: every request, and each conversation's callbacks.
+	// The fake host: every request, and each conversation's callbacks. Its end() answers
+	// late, or never (opts.silent); opts.failAt fails inside conversation() itself.
 	const calls = [], talks = [];
 	let prepares = 0, inTap = false;
 	const route = opts.route || (() => null);
@@ -108,9 +105,10 @@ function boot(opts) {
 		talks.push(c);
 		order.push('conversation');
 		cb.onState('connecting');
-		return { end() { c.ended++; c.finish('end'); }, mute(on) { c.mutes.push(on); order.push('mute:' + on); } };
+		if (opts.failAt) c.finish(opts.failAt, true);
+		return { end() { c.ended++; if (!opts.silent) setTimeout(() => c.finish('end'), 5); }, mute(on) { c.mutes.push(on); order.push('mute:' + on); } };
 	};
-	conversation.prepare = () => { prepares++; return Promise.resolve(true); };
+	if (!opts.noPrepare) conversation.prepare = () => { prepares++; return Promise.resolve(true); };
 	const host = {
 		fetch(url, init) {
 			init = init || {};
@@ -138,19 +136,19 @@ function boot(opts) {
 		localStorage: window.localStorage, sessionStorage: window.sessionStorage,
 		messagesList: $('messagesList'), messagesContainer: $('messagesContainer'), errorBanner: $('errorBanner'), infoBanner: $('infoBanner'),
 		welcomeMessage: $('welcomeMessage'), confirmChips: $('confirmChips'), composerInput: $('composerInput'), sendBtn: $('sendBtn'),
-		micBtn: $('micBtn'), micLabel: $('micLabel'), voiceBtn: $('voiceBtn'),
+		micBtn: $('micBtn'), micLabel: $('micLabel'), voiceBtn: $('voiceBtn'), composerContainer: $('composerContainer'), conversationList: null,
 		handOverToPortal: () => false, autoResize() {}, hasActiveFiles: () => false, stagedFiles: [], showWelcomeOrTip() {},
 		classifySuggestionOutcome: () => ({}), browserTimezone: () => '', clearStagedFiles() {}, uploadAllStagedFiles: async () => ({ success: true, fileIds: [] }),
 		renderMarkdown: s => '<p>' + String(s).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>') + '</p>',
 		applyCitations() {}, buildCitationMap: () => ({}), createToolOutputCard: () => null,
 		appendFileAttachments() {}, storedAttachment() {}, appendFileIndicators() {},
 		loadConversations() {}, rememberConversation() {}, updateReadOnlyState() {}, renderConversationList() {}, clearActiveProject() {},
-		showChat() {}, renderProjectChip() {}, sidebar: { classList: { contains: () => false } }, toggleSidebar() {},
-		isSessionExpiredError: () => false, showSessionExpired() {}, scrollToBottom() {},
+		renderProjectChip() {}, sidebar: { classList: { contains: () => false } }, toggleSidebar() {},
+		isSessionExpiredError: () => false, scrollToBottom() {},
 	};
 	const names = Object.keys(deps);
 	const api = new window.Function(...names, HEAD + PARSER + '\n' + TOOL_LABELS + '\n' + ESCAPE + '\n' + REQUEST + '\n' + INFO + '\n' +
-		RECOVER + '\n' + TOOL_ROWS + '\n' + BUTTON + '\n' + STATUS + '\n' + LOAD + '\n' + NEW_CHAT + '\n' + RELEASE + '\n' + RENDER + '\n' +
+		RECOVER + '\n' + TOOL_ROWS + '\n' + BUTTON + '\n' + STATUS + '\n' + LOAD + '\n' + SHELL + '\n' + NEW_CHAT + '\n' + RELEASE + '\n' + RENDER + '\n' +
 		VOICE + '\n' + SEND + TAIL)(...names.map(k => deps[k]));
 	const orb = () => document.querySelector('.talk-orb');
 	return {
@@ -160,6 +158,7 @@ function boot(opts) {
 		tap: () => { inTap = true; $('micBtn').click(); inTap = false; },
 		idle: () => { const r = idle; idle = []; r.forEach(f => f()); },
 		info: () => $('infoBanner').classList.contains('visible') ? $('infoBanner').textContent : '',
+		error: () => $('errorBanner').classList.contains('visible') ? $('errorBanner').textContent : '',
 		orb, orbState: () => orb() && !orb().hidden ? orb().dataset.state : 'gone',
 		bubbles: role => Array.from($('messagesList').querySelectorAll('.message-' + role + ' .message-content')),
 		chips: () => Array.from($('confirmChips').querySelectorAll('.confirm-chip')),
@@ -254,8 +253,8 @@ async function run(label, fn) {
 			JSON.stringify({ listening, still, speaking }));
 		const rule = sel => (new RegExp(sel.replace(/[.[\]"=]/g, '\\$&') + '\\s*\\{([^}]*)\\}').exec(CSS) || [])[1] || '';
 		const reduced = /@media \(prefers-reduced-motion: reduce\) \{\s*\/\*[^*]*\*\/\s*\.talk-orb \{\s*transform: none !important;/.test(CSS);
-		check('colours: grey connecting, blue listening, orange speaking; it does not move under reduced motion',
-			/#9ca3af/.test(rule('.talk-orb[data-state="connecting"]')) && /#2563eb/.test(rule('.talk-orb')) &&
+		check('colours: grey connecting (and before any state), blue listening, orange speaking; it does not move under reduced motion',
+			/#9ca3af/.test(rule('.talk-orb')) && /#2563eb/.test(rule('.talk-orb[data-state="listening"]')) &&
 			/#f97316/.test(rule('.talk-orb[data-state="speaking"]')) && reduced);
 	});
 
@@ -386,14 +385,15 @@ async function run(label, fn) {
 		['time_limit', false, 'The conversation reached its time limit. Tap the mic to start a new one.'],
 		['silence', false, 'Voice stopped unexpectedly. Tap the mic to start again.'], ['refused', false, 'Voice stopped unexpectedly. Tap the mic to start again.'],
 		['unknown', false, 'Voice stopped unexpectedly. Tap the mic to start again.'], ['mint', true, 'Voice stopped unexpectedly. Tap the mic to start again.'],
-		['microphone', true, 'Voice stopped unexpectedly. Tap the mic to start again.'], ['dropped', true, 'Voice stopped unexpectedly. Tap the mic to start again.']];
+		['microphone', true, 'The microphone is blocked for this site in your browser. Allow it in the site permissions (the icon beside the address bar) and try again.'],
+		['dropped', true, 'Voice stopped unexpectedly. Tap the mic to start again.']];
 	for (const [kind, error, line] of ENDINGS) {
 		await run('ending ' + kind, async () => {
 			const t = await started({ thread: 'th-1' });
 			t.last().finish(kind, error);
 			await settle();
 			t.last().cb.onCaption('late words', false);   // a callback after the ending is ignored
-			const info = t.info(), orb = t.orbState(), mic = t.api.state().mic;
+			const info = kind === 'microphone' ? t.error() : t.info(), orb = t.orbState(), mic = t.api.state().mic;
 			t.tap();
 			check((error ? 'onError ' : 'onEnded ') + kind + ': "' + line + '", the orb gone, and the next tap starts a conversation again',
 				info === line && orb === 'gone' && mic === 'idle' && t.bubbles('assistant').every(b => b.textContent !== 'late words') &&
@@ -421,7 +421,6 @@ async function run(label, fn) {
 		t.last().finish('busy', true);
 		await settle();
 		const line = t.info(), starts = t.rec.starts;
-		t.api.state();
 		check('onError busy: a short line, and today\'s voice for this tap', /busy/.test(line) && starts === 1, JSON.stringify({ line, starts }));
 	});
 	await run('busy next tap', async () => {
@@ -431,6 +430,19 @@ async function run(label, fn) {
 		t.api.resetToNewChat();   // today's voice ends (the conversation it fell back to)
 		t.tap();
 		check('after busy, the next tap tries a conversation again', t.talks.length === 2, 'talks ' + t.talks.length);
+	});
+	await run('busy needs a tap', async () => {
+		const t = await started({ thread: 'th-1', tapOnly: true });
+		t.last().finish('busy', true);
+		await settle();
+		const line = t.info();
+		t.tap();
+		await settle();
+		const next = [t.talks.length, t.rec.starts];
+		t.tap();   // ends today's voice
+		t.tap();
+		check('busy where today\'s voice wants a tap: the busy line, the next tap is today\'s voice once, the one after tries a conversation',
+			/busy/.test(line) && next[0] === 1 && next[1] === 2 && t.talks.length === 2, JSON.stringify({ line, next, talks: t.talks.length }));
 	});
 	await run('mic ends', async () => {
 		const t = await started({ thread: 'th-1' });
@@ -461,6 +473,67 @@ async function run(label, fn) {
 		const u = await started({ thread: 'th-1' });
 		u.api.resetToNewChat();
 		check('opening another chat, or New chat, ends it: the room is bound to its chat', opened === 1 && u.last().ended === 1);
+	});
+
+	await run('host ends late', async () => {
+		const t = await started({ thread: 'th-1' });
+		const c = t.last();
+		t.tap();
+		const now = [t.api.state().talk, t.api.state().mic, t.orbState(), t.info()];
+		await settle();   // the host's own onEnded, late
+		c.cb.onEnded('goodbye');
+		c.cb.onError('dropped');
+		await settle();
+		check('a tap ends it at once, before the host answers; a late or second answer changes nothing',
+			now[0] === null && now[1] === 'idle' && now[2] === 'gone' && now[3] === 'Conversation ended.' && c.ended === 1 &&
+			t.info() === 'Conversation ended.' && t.reads() === 1, JSON.stringify({ now, info: t.info(), reads: t.reads() }));
+	});
+	await run('host never answers', async () => {
+		const t = await started({ thread: 'th-1', silent: true });
+		t.tap();
+		const quiet = t.api.quietEnough();
+		t.tap();
+		check('a host that never calls back: the update is no longer held, and the next tap starts a conversation',
+			quiet === true && t.talks.length === 2 && t.talks[0].ended === 1, JSON.stringify({ quiet, talks: t.talks.length }));
+	});
+	await run('switch while connecting', async () => {
+		let answer;
+		const t = boot({ thread: 'th-1', route: url => url === DOOR + '/voice/room' ? new Promise(r => { answer = r; }) : null });
+		await settle();
+		t.tap();
+		await t.api.loadConversation('th-2');
+		answer(json(200, { url: ROOM_ADDR, token: GRANT, room: 'rm-1', thread_id: 'th-new' }));
+		await settle();
+		check('another chat opened while connecting: the mint\'s answer does not take its place', t.api.state().thread === 'th-2', t.api.state().thread);
+	});
+	await run('chip after switch', async () => {
+		const held = [];
+		const t = await started({ thread: 'th-1', route: url => url.indexOf(DOOR + '/voice/room/') === 0 ? new Promise(r => held.push(r)) : null });
+		t.last().cb.onReply();   // the room read is on its way
+		await t.api.loadConversation('th-2');
+		held.forEach(r => r(json(200, { ended: false, confirmations: ['Delete the draft invoice?'] })));
+		await settle();
+		check('a confirmation read for a chat no longer open shows no chip', held.length > 0 && t.chips().length === 0, 'chips ' + t.chips().length);
+	});
+	await run('fails at once', async () => {
+		const t = await started({ thread: 'th-1', failAt: 'connect' });
+		const st = t.api.state();
+		t.tap();
+		check('a host that fails inside conversation() leaves no conversation behind: the next tap is today\'s voice',
+			st.talk === null && st.mic === 'idle' && t.talks.length === 1 && t.rec.starts === 1, JSON.stringify({ talk: !!st.talk, starts: t.rec.starts }));
+	});
+	await run('leave the chat', async () => {
+		const t = await started({ thread: 'th-1' });
+		t.api.showPage('documents');
+		const u = await started({ thread: 'th-1' });
+		u.window.dispatchEvent(new u.window.Event('pagehide'));   // signing out, or the session gone
+		check('another console page, or leaving the page, ends it', t.last().ended === 1 && !t.api.state().talk && u.last().ended === 1 && !u.api.state().talk);
+	});
+	await run('older host', async () => {
+		const t = await started({ thread: 'th-1', noPrepare: true });
+		const mint = t.calls.find(c => c.url === DOOR + '/voice/room');
+		check('a host with no prepare(): the status is read in full and the tap starts a conversation',
+			t.talks.length === 1 && mint && mint.body.model_id === 'm-fast', JSON.stringify(mint && mint.body));
 	});
 
 	await run('no logs', async () => {

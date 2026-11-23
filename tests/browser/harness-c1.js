@@ -5,7 +5,7 @@
  */
 const { JSDOM } = require('jsdom');
 const extract = require('./extract');
-const BLOCK = extract.pageShell();
+const BLOCK = 'var talk = null;   // no conversation here\n' + extract.pageShell();
 // W88: the open chat per tab, its boot restore and loadConversation; New chat forgets it.
 const W88 = extract.slice('W88 restore',
   l => l.includes('// W88: the open chat, per tab'), l => l.includes('// Update read-only state'),

@@ -31,7 +31,7 @@
  */
 const { JSDOM } = require('jsdom');
 const extract = require('./extract');
-const BLOCK = extract.pageShell();
+const BLOCK = 'var talk = null;   // no conversation here\n' + extract.pageShell();
 const TEMPLATE = extract.templateSource();
 
 const HTML = `<!doctype html><html><body>

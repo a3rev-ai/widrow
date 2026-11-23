@@ -9,7 +9,7 @@
 const { JSDOM } = require('jsdom');
 const extract = require('./extract');
 
-const SHELL = extract.pageShell();
+const SHELL = 'var talk = null;   // no conversation here\n' + extract.pageShell();
 const MEMORIES = extract.memories();
 const USAGE = extract.usage();
 const INTEGRATIONS = extract.integrations();

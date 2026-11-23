@@ -2176,16 +2176,12 @@ html {
 	height: 40px;
 	margin: 8px auto 4px;
 	border-radius: 50%;
-	background: #2563eb;
+	background: #9ca3af;   /* connecting, or nothing yet: grey and still */
 	transition: transform 0.08s linear, background 0.2s ease;
 }
 
-.talk-orb[hidden] {
-	display: none;
-}
-
-.talk-orb[data-state="connecting"] {
-	background: #9ca3af;
+.talk-orb[data-state="listening"] {
+	background: #2563eb;
 }
 
 .talk-orb[data-state="speaking"] {
