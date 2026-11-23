@@ -1,7 +1,8 @@
 *** Widrow AI Changelog ***
 
 = 11.5.2 - 2026/11/23 =
-* Fix - In Customer Chat's conversation mode, each thing the visitor says now shows once, in its own message, and each of the employee's replies stays in its own message in the order things were said, also when the visitor talks over the employee; the employee's last reply is shown whole when the conversation ends.
+* Fix - In Customer Chat's conversation mode, each thing a visitor says is now shown once, and replies and messages stay in the order they were said, also when the visitor talks over the assistant.
+* Fix - In conversation mode, the orb now shows it is listening only once the assistant can hear, so a visitor's first words are not lost, and it now moves with the voice.
 
 = 11.5.1 - 2026/11/23 =
 * Feature - Ready for the Tenant Portal update that turns on voice conversation mode in Staff AI: where it is on, a tap on the microphone starts a conversation that stays on. You speak, the employee answers aloud, you can talk over the employee or type at any time, and an orb shows whose turn it is. A change the employee asks you to confirm shows as a button; saying "yes" never confirms it. Where it is off or the browser cannot do it, the microphone works as before. Nothing changes on your site.

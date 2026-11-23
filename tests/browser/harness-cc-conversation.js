@@ -70,12 +70,17 @@ function fakeLiveKit(w, h) {
     h.order.push('room');
     Object.assign(r, { handlers: {}, text: {}, state: 'disconnected', mic: [] });
     r.localParticipant = { identity: 'visitor', isSpeaking: false, audioLevel: 0,
-      getTrackPublication: source => (source === 'microphone' && r.mic.length ? { track: { stop() { h.micStops++; } } } : undefined),
+      getTrackPublication: source => (source === 'microphone' && r.mic.length ?
+        { track: { mediaStreamTrack: { side: 'you' }, stop() { h.micStops++; } } } : undefined),
       setMicrophoneEnabled: (on, opts) => {
         r.mic.push(opts ? { on, opts } : on);
         return h.micFails ? Promise.reject(Object.assign(new Error('no'), { name: 'NotAllowedError' })) : Promise.resolve();
       } };
-    r.her = { identity: 'agent', isSpeaking: false, audioLevel: 0 };
+    // Ready to hear unless a check says otherwise (her session's `lk.agent.state`).
+    r.her = { identity: 'agent', isSpeaking: false, audioLevel: 0,
+      attributes: h.herState === null ? {} : { 'lk.agent.state': h.herState || 'listening' } };
+    // Her voice's track subscribed, as the client announces it.
+    r.herTrack = () => r.emit('trackSubscribed', { kind: 'audio', mediaStreamTrack: { side: 'her' }, attach() {} }, { trackName: 'agent_voice' });
     // No employee yet when a check says so; h.join() brings her in.
     r.remoteParticipants = new Map(h.noEmployee ? [] : [['agent', r.her]]);
     r.on = (event, fn) => { r.handlers[event] = fn; return r; };
@@ -98,9 +103,7 @@ function fakeLiveKit(w, h) {
     r.replyDone = () => r.data('def.reply', { type: 'reply' });
     r.data = (topic, obj) => r.emit('dataReceived', new w.TextEncoder().encode(JSON.stringify(obj)), r.her, 0, topic);
     // Her words as a text stream: say() a piece, close() the segment. `attributes` as the
-    // room stamps them in the header (lk.segment_id, lk.transcription_final); none, as the
-    // older checks send. close(trailer) does as the client does with a trailer's attributes:
-    // a new object, the header's with the trailer's over them.
+    // room stamps them (lk.segment_id, lk.transcription_final); none, as the older checks send.
     r.words = (from, attributes) => {
       const queue = [], waiting = [];
       const feed = v => (waiting.length ? waiting.shift()(v) : queue.push(v));
@@ -109,10 +112,7 @@ function fakeLiveKit(w, h) {
           next: () => (queue.length ? Promise.resolve(queue.shift()) : new Promise(res => waiting.push(res))) }) };
       r.text['lk.transcription'](reader, { identity: from || 'agent' });
       return { say: t => feed({ done: false, value: t }),
-        close: trailer => {
-          if (trailer) reader.info.attributes = Object.assign({}, reader.info.attributes, trailer);
-          feed({ done: true });
-        },
+        close: () => feed({ done: true }),
         fail: () => (waiting.length ? waiting.shift() : () => {})(Promise.reject(Object.assign(new Error('x'), { name: 'NetworkError' }))) };
     };
   }
@@ -136,15 +136,20 @@ async function boot(opts) {
   w.WidrowAiPageContextHelper = { build: thread => ({ canonical_path: '/', for: thread }), markShipped() {} };
   const h = { w, noEmployee: !!opts.noEmployee, order: [], rooms: [], mints: [], roomMints: [], reads: [], typed: [], carts: [], starts: [], spoken: [],
     notes: [], disconnects: 0, micStops: 0, wakeReleases: 0, busy: null, readReply: opts.readReply || CARD_REPLY, roomStatus: 200, typedEvents: null,
-    holdReads: false, held: [] };
+    holdReads: false, held: [], levels: {}, herState: opts.herState };
   if (opts.webrtc !== false) w.RTCPeerConnection = function () {};
   w.AudioContext = function () {
     h.order.push('unlock');
     Object.assign(this, { state: 'running', destination: {},
       createBufferSource: () => ({ connect() {}, start() { h.order.push('silence'); } }),
       createBuffer: () => ({}), resume: () => Promise.resolve(),
-      createMediaStreamDestination: () => ({ stream: {} }), close: () => { h.closed = (h.closed || 0) + 1; return Promise.resolve(); } });
+      createMediaStreamDestination: () => ({ stream: {} }), close: () => { h.closed = (h.closed || 0) + 1; return Promise.resolve(); },
+      // Each side's analyser fills its bins with h.levels[side] (0 to 255).
+      createMediaStreamSource: stream => ({ side: stream.tracks[0].side,
+        connect(node) { node.side = this.side; }, disconnect() { h.meterStops = (h.meterStops || 0) + 1; } }),
+      createAnalyser: () => ({ frequencyBinCount: 8, getByteFrequencyData(bins) { bins.fill(h.levels[this.side] || 0); } }) });
   };
+  w.MediaStream = function (tracks) { this.tracks = tracks; };
   w.HTMLMediaElement.prototype.play = function () { h.order.push('prime'); return Promise.resolve(); };
   Object.defineProperty(w.navigator, 'wakeLock', { configurable: true,
     value: { request: () => { h.order.push('wakeLock'); return Promise.resolve({ release() { h.wakeReleased = true; h.wakeReleases++; } }); } } });
@@ -308,16 +313,20 @@ async function boot(opts) {
   // ── The orb ──
   check('blue from the moment it listens', h.orb().dataset.state === 'listening', h.orb().dataset.state);
   check('the line-shown flag is written once it listens', h.w.localStorage.getItem('def:talk_line_shown') === '1');
-  h.room().localParticipant.isSpeaking = true; h.room().localParticipant.audioLevel = 0.5;
-  await sleep(40);
-  check('the visitor speaks: listening, moving with their voice', h.orb().dataset.state === 'listening' && /scale\(1\.3/.test(h.orb().style.transform),
-    h.orb().dataset.state + ' ' + h.orb().style.transform);
+  // The levels come from each side's own track, measured as the client's analyser helper does.
+  h.room().herTrack();
+  h.levels = { you: 64, her: 0 };   // about a quarter of full scale
+  h.room().localParticipant.isSpeaking = true;
+  await sleep(400);
+  check('the visitor speaks: listening, moving with their own microphone\'s level (eased to 1 + 0.8 x level)',
+    h.orb().dataset.state === 'listening' && /^scale\(1\.20\d\)$/.test(h.orb().style.transform), h.orb().dataset.state + ' ' + h.orb().style.transform);
   h.room().localParticipant.isSpeaking = false;
-  h.room().her.isSpeaking = true; h.room().her.audioLevel = 1;
-  await sleep(40);
-  check('she speaks: orange (speaking), moving with hers', h.orb().dataset.state === 'speaking' && /scale\(1\.6/.test(h.orb().style.transform),
-    h.orb().dataset.state + ' ' + h.orb().style.transform);
-  h.room().her.isSpeaking = false;
+  h.levels = { you: 0, her: 255 };
+  h.room().her.isSpeaking = true;
+  await sleep(400);
+  check('she speaks: orange (speaking), moving with her own track\'s level, at most 1.4', h.orb().dataset.state === 'speaking' &&
+    h.orb().style.transform === 'scale(1.400)', h.orb().dataset.state + ' ' + h.orb().style.transform);
+  h.room().her.isSpeaking = false; h.levels = {};
   await sleep(500);
   check('nobody speaks: still listening (blue, no movement); idle is only for the end', h.orb().dataset.state === 'listening' && h.orb().style.transform === '',
     h.orb().dataset.state + ' ' + h.orb().style.transform);
@@ -670,10 +679,10 @@ async function boot(opts) {
   check('…and the next tap tries a conversation again', h.rooms.length === 2 && h.orbRow().style.display === '');
   h = await boot({ clock: true, noEmployee: true });
   await h.start();
-  await sleep(50);   // about nine of the module's seconds after the connect
+  await sleep(30);   // about seven of the module's seconds after the connect
   h.room().remoteParticipants.set('agent', h.room().her);
   await sleep(150);
-  check('the employee joins at about nine seconds: no busy, the conversation stays', h.orbRow().style.display === '' &&
+  check('the employee joins, ready, at about seven seconds: no busy, the conversation stays', h.orbRow().style.display === '' &&
     h.micStops === 0 && h.starts.length === 0);
   h = await boot({ clock: true, noEmployee: true });
   await h.start();
@@ -731,22 +740,6 @@ async function boot(opts) {
   check('the final copy of an utterance arriving after she began: still once, in its own bubble, and once in the history',
     show(h.log()) === show(['you: What time do you open?', 'her: At nine.']) &&
       JSON.parse(h.w.localStorage.getItem('a3rev_threads'))[0].messages[0].content === 'What time do you open?', show(h.log()));
-
-  h = await boot({ readReply: { ended: false, reply: { id: 'w1', content: 'We open at nine.', tool_outputs: [] } } });
-  await h.start();
-  await h.utter('U1', 'When do you open?');
-  const delta = h.her('A1');   // her words: the header says "false"; "true" comes in the trailer
-  delta.say('We open');
-  await sleep(5);
-  delta.say(' at nine.');
-  delta.close({ 'lk.transcription_final': 'true' });
-  await sleep(5);
-  const captionsWhole = show(h.log());
-  h.room().replyDone();
-  await sleep(40);
-  check('her words, marked final only in the trailer: one bubble with all her words, then the written reply in its place',
-    captionsWhole === show(['you: When do you open?', 'her: We open at nine.']) && h.spokenBubbles().length === 0 &&
-      show(h.log()) === show(['you: When do you open?', 'her: We open at nine.']), captionsWhole + ' then ' + show(h.log()));
 
   const together = {
     words: async x => { await x.utter('U2', 'Sorry, and on Sundays?'); },
@@ -832,7 +825,7 @@ async function boot(opts) {
   await h.start();
   await h.utter('Q1', 'Is there parking?');
   const one = h.her('A1');
-  one.say('Yes, behind the hall.'); one.close({ 'lk.transcription_final': 'true' });
+  one.say('Yes, behind the hall.'); one.close();
   await sleep(5);
   h.room().replyDone();
   await sleep(5);
@@ -878,6 +871,89 @@ async function boot(opts) {
       show(h.log()) === show(['you: Is there parking?', 'her: Yes, there is parking behind the hall.', 'you: Thanks, that is all.', 'her: You are welcome, goodbye.']) &&
         h.spokenBubbles().length === 0, show(h.log()));
   }
+
+  // ── Words over her last reply, and the final words, kept ──
+  h = await boot({ readReply: { ended: false, reply: { id: 'w1', content: 'We open at nine.', tool_outputs: [] } } });
+  await h.start();
+  await h.utter('U1', 'When do you open?');
+  const last = h.her('A1');
+  last.say('We open at');
+  await sleep(5);
+  await h.utter('U2', 'And on Sundays?');
+  h.tap();   // the conversation ends while her reply is on screen
+  await sleep(60);
+  const thread = JSON.parse(h.w.localStorage.getItem('a3rev_threads') || '[{"messages":[]}]')[0].messages.map(m => m.role + ': ' + m.content);
+  check('words said over her last reply, then the end: said once to a screen reader and kept in the history after the reply',
+    announced().filter(l => l === 'And on Sundays?').length === 1 &&
+      show(thread) === show(['user: When do you open?', 'assistant: We open at nine.', 'user: And on Sundays?']), show(announced()) + ' ' + show(thread));
+
+  h = await boot({ readReply: { ended: false, reply: { id: 'w1', content: 'At nine.', tool_outputs: [] } } });
+  await h.start();
+  const interim = h.room().words('visitor', { 'lk.segment_id': 'U1', 'lk.transcription_final': 'false' });
+  interim.say('What time do you'); interim.close();
+  await sleep(5);
+  const begun = h.her('A1');
+  begun.say('At nine.');
+  await sleep(5);
+  const finalCopy = h.room().words('visitor', { 'lk.segment_id': 'U1', 'lk.transcription_final': 'true' });
+  finalCopy.say('What time do you open?'); finalCopy.close();
+  begun.close();
+  await sleep(5);
+  h.room().replyDone();
+  await sleep(40);
+  check('the final copy differs from the interim and comes after her first words: the bubble and the history hold the final words',
+    show(h.log()) === show(['you: What time do you open?', 'her: At nine.']) &&
+      JSON.parse(h.w.localStorage.getItem('a3rev_threads'))[0].messages[0].content === 'What time do you open?', show(h.log()));
+
+  // ── Listening only once she can hear ──
+  h = await boot({ herState: null });
+  await h.start();
+  h.levels = { you: 255 };
+  h.room().localParticipant.isSpeaking = true;
+  await sleep(60);
+  const noState = h.orb().dataset.state + ' ' + h.orb().style.transform;
+  h.room().her.attributes = { 'lk.agent.state': 'initializing' };
+  await sleep(60);
+  const initializing = h.orb().dataset.state + ' ' + h.orb().style.transform;
+  check('the employee in the room with no state, then "initializing": still connecting, grey and still, the line-shown flag not written',
+    noState === 'connecting ' && initializing === 'connecting ' && h.w.localStorage.getItem('def:talk_line_shown') === null, noState + ' / ' + initializing);
+  h.room().her.attributes = { 'lk.agent.state': 'listening' };
+  await sleep(60);
+  check('…her state says listening: listening, moving with the visitor\'s voice, the flag written',
+    h.orb().dataset.state === 'listening' && /scale/.test(h.orb().style.transform) && h.w.localStorage.getItem('def:talk_line_shown') === '1',
+    h.orb().dataset.state + ' ' + h.orb().style.transform);
+  h = await boot({ noEmployee: true });
+  await h.start();
+  await sleep(60);
+  check('no employee in the room yet: connecting', h.orb().dataset.state === 'connecting', h.orb().dataset.state);
+  h = await boot({ herState: null });
+  await h.start();
+  h.room().her.isSpeaking = true;
+  await sleep(60);
+  check('she speaks before her state arrives: she can be heard, speaking', h.orb().dataset.state === 'speaking', h.orb().dataset.state);
+  h = await boot({ clock: true, herState: null });
+  await h.start();
+  await sleep(150);
+  check('an employee who joins and is never ready: busy at ten seconds, today\'s voice for this tap',
+    h.orbRow().style.display === 'none' && h.starts.length === 1 && h.notes.indexOf('conversation employee not ready') !== -1, show(h.notes));
+  h = await boot({ clock: true, herState: null });
+  await h.start();
+  await sleep(30);
+  h.room().her.attributes = { 'lk.agent.state': 'listening' };
+  await sleep(150);
+  check('one who is ready in time: no busy, listening', h.orbRow().style.display === '' && h.starts.length === 0 &&
+    h.orb().dataset.state === 'listening', h.orb().dataset.state);
+
+  // ── The orb's levels: released at the end; still under reduced motion ──
+  h = await boot();
+  await h.start();
+  h.room().herTrack();
+  h.tap();
+  await sleep(20);
+  check('both sides\' level meters are released at the end', h.meterStops === 2, 'stops=' + h.meterStops);
+  check('reduced motion: the orb keeps its colours and does not move',
+    /@media \(prefers-reduced-motion: reduce\) \{[^}]*\.def-cc-orb \{\s*transform: none !important;/.test(
+      fs.readFileSync(path.join(extract.REPO, 'assets/css/widrow-ai-customer-chat.css'), 'utf8')));
 
   console.log('harness-cc-conversation: ' + pass + ' passed, ' + fail + ' failed');
   console.log(results.join('\n'));
