@@ -12,7 +12,7 @@ const path = require('path');
 const { JSDOM } = require('jsdom');
 const REPO = path.resolve(__dirname, '..', '..');
 const extract = require('./extract');
-const SHELL = extract.pageShell();
+const SHELL = 'var talk = null;   // no conversation here\n' + extract.pageShell();
 const PROJECTS = extract.projects();
 // C7: the menu machinery is shared and sits outside the page block.
 const MENU = extract.consoleMenu();

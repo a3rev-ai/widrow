@@ -25,7 +25,7 @@ const REPO = path.resolve(__dirname, '..', '..');
 const extract = require('./extract');
 const ASK = extract.askEntry();
 const CALLS = extract.askEntryCalls();
-const SHELL = extract.pageShell();
+const SHELL = 'var talk = null;   // no conversation here\n' + extract.pageShell();
 const PROJECTS = extract.projects();
 // C7: the menu machinery is shared and sits outside the page block.
 const MENU = extract.consoleMenu();

@@ -31,7 +31,7 @@ const { JSDOM, VirtualConsole } = require('jsdom');
 const quiet = new VirtualConsole();
 quiet.on('jsdomError', function () {});
 const extract = require('./extract');
-const SHELL = extract.pageShell();
+const SHELL = 'var talk = null;   // no conversation here\n' + extract.pageShell();
 const MENU = extract.consoleMenu();
 const DOCUMENTS = extract.documents();
 const VIEWER = extract.documentViewer();

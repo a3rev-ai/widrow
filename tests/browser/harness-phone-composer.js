@@ -255,6 +255,7 @@ async function boot(models, saved) {
 	w.eval('(function () {\n'
 		+ "var statusUrl = '/status', assistantName = '', assistantNameSubscribers = [];\n"
 		+ 'function handOverToPortal() { return false; }\n'
+		+ 'function prepareTalk() {}\n'
 		+ 'function wpFetch() { return Promise.resolve({ ok: true, json: function () { return window.__status; } }); }\n'
 		+ SWITCHER + '\n})();');
 	for (let i = 0; i < 5; i++) await new Promise(r => setTimeout(r, 0));

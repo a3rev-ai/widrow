@@ -172,7 +172,7 @@ const SA_LIVE = 'wss://api.example.test/api/staff_ai/voice/live';
 const DOOR_LIVE = 'wss://door.example.test/api/tenant/acme/staff-ai/voice/live';
 const HEAD = `
 	let nonce = StaffAIConfig.nonce;
-	var messages = [], isLoading = false, isReadOnly = false, conversationOn = false, spokenTurn = false,
+	var messages = [], isLoading = false, isReadOnly = false, conversationOn = false, spokenTurn = false, talk = null, talkTyped = false,
 		openingSpoken = null, lastSuggestion = null, selectedModel = '', currentConversationId = null,
 		activeProjectId = null, turnReleased = false, _isStreaming = false, _userScrolledUp = false,
 		dirtyInput = false, chipEpoch = 0, readbackBuffer = '';

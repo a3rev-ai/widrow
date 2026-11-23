@@ -4,7 +4,7 @@ Tags: ai, chat, digital employee, ai assistant, customer support
 Requires at least: 6.2
 Tested up to: 7.1
 Requires PHP: 8.0
-Stable tag: 11.5.0
+Stable tag: 11.5.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -118,6 +118,9 @@ Chat messages, user display name, session context, and the visitor's IP address 
 4. Admin Settings — Branding, Chat Settings, Escalation, and Connection tabs
 
 == Changelog ==
+
+= 11.5.1 - 2026-11-23 =
+* Feature - Ready for the Tenant Portal update that turns on voice conversation mode in Staff AI: where it is on, a tap on the microphone starts a conversation that stays on. You speak, the employee answers aloud, you can talk over the employee or type at any time, and an orb shows whose turn it is. A change the employee asks you to confirm shows as a button; saying "yes" never confirms it. Where it is off or the browser cannot do it, the microphone works as before. Nothing changes on your site.
 
 = 11.5.0 - 2026-11-23 =
 * Feature - Ready for the platform update that turns on conversation mode: in Customer Chat, a tap on the microphone starts a conversation that stays on, the visitor can talk over the employee, an orb shows whose turn it is, and typing still works. Where it is off or the browser cannot do it, the microphone works as before.

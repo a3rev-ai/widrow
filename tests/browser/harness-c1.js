@@ -5,7 +5,7 @@
  */
 const { JSDOM } = require('jsdom');
 const extract = require('./extract');
-const BLOCK = extract.pageShell();
+const BLOCK = 'var talk = null;   // no conversation here\n' + extract.pageShell();
 // W88: the open chat per tab, its boot restore and loadConversation; New chat forgets it.
 const W88 = extract.slice('W88 restore',
   l => l.includes('// W88: the open chat, per tab'), l => l.includes('// Update read-only state'),
@@ -86,7 +86,7 @@ async function bootChat(startUrl, stored, ids) {
   };
   const names = Object.keys(deps);
   const api = new window.Function(...names,
-    'var currentConversationId = null, messages = [], isReadOnly = false, conversationOn = false,' +
+    'var currentConversationId = null, messages = [], isReadOnly = false, conversationOn = false, talk = null, talkTyped = false,' +
     ' spokenTurn = false, _streamAbort = null, turnReleased = false, stopTurn = null;\n' +
     BLOCK + '\n' + W88 + '\n' + NEW_CHAT + REG.replace('return {', 'return { restore: restoreConversation,' +
       ' reset: resetToNewChat, load: loadConversation, conversation: function () { return currentConversationId; },')

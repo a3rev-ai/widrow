@@ -20,7 +20,7 @@ const { JSDOM } = require('jsdom');
 const extract = require('./extract');
 
 const REPO = path.resolve(__dirname, '..', '..');
-const SHELL = extract.pageShell();
+const SHELL = 'var talk = null;   // no conversation here\n' + extract.pageShell();
 const VIEWER = extract.documentViewer();
 
 // #documentsPane stands in for "the page the user came from" — the checks are

@@ -29,7 +29,7 @@ const path = require('path');
 const { JSDOM } = require('jsdom');
 const extract = require('./extract');
 
-const SHELL = extract.pageShell();
+const SHELL = 'var talk = null;   // no conversation here\n' + extract.pageShell();
 const MEMORIES = extract.memories();
 const CSS = fs.readFileSync(path.join(extract.REPO, 'assets/css/staff-ai.css'), 'utf8');
 const TEMPLATE = extract.templateSource();

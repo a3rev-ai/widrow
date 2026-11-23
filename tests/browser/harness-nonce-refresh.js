@@ -70,7 +70,7 @@ function boot(script, opts) {
   };
   const names = Object.keys(deps);
   const api = new window.Function(...names,
-    'let nonce = StaffAIConfig.nonce; var isLoading = false, isReadOnly = false, conversationOn = false,' +
+    'let nonce = StaffAIConfig.nonce; var isLoading = false, isReadOnly = false, conversationOn = false, talk = null, talkTyped = false,' +
     ' spokenTurn = false, openingSpoken = null, lastSuggestion = null, selectedModel = "", currentConversationId = null,' +
     ' activeProjectId = null, _streamAbort = null, _turnReachedServer = false, turnReleased = false, _eventsSeen = 0,' +
     ' _isStreaming = false, _userScrolledUp = false;\n' +
