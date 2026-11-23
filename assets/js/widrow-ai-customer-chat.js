@@ -2320,12 +2320,14 @@
 	var talkEpoch = 0;         // a callback from an ended conversation is ignored
 	var talkRoom = '';
 	var talkState = '';
-	var captionEl = null;      // the bubble her words fill as she says them
-	var spokenEls = [];        // her reply's bubbles so far: one per segment she speaks
+	// Each segment of words is bound, when it starts, to what it fills: the room may deliver a
+	// segment more than once (an utterance comes twice, each copy closed), and the streams of
+	// one moment arrive in any order, so nothing is written to "the current bubble".
+	var segments = {};         // a segment's id → the visitor's message or her bubble it fills
+	var heard = null;          // the visitor's message being filled: { el, ids, texts }
+	var unanswered = [];       // their messages since her last reply began
+	var reply = null;          // her reply in progress: { bubbles, asked }
 	var lastReplyId = '';      // a reply is drawn, and its add to cart carried out, once
-	var heardEl = null;        // the visitor's message, filled as they speak
-	var heardDone = '';        // its finished segments, until she answers
-	var captionAsked = '';     // the visitor's words her reply in progress answers
 	var heldSpeech = [];       // a typed reply's lines, waiting for her spoken reply to finish
 	var typedSpeaking = false; // a typed reply's lines are arriving
 	var talkMuted = false;
@@ -2419,7 +2421,7 @@
 		});
 		var epoch = ++talkEpoch;
 		var mine = function (fn) {
-			return function (a, b) { if (epoch === talkEpoch) fn(a, b); };
+			return function (a, b, c) { if (epoch === talkEpoch) fn(a, b, c); };
 		};
 		showOrb();
 		setMicState('conversation', t('talking'));
@@ -2436,26 +2438,33 @@
 				var level = talkState === 'speaking' ? spoken : heard;
 				els.orbBall.style.transform = level ? 'scale(' + (1 + 0.6 * Math.min(level, 1)) + ')' : '';
 			}),
-			// The visitor's words: one message until she answers, however many segments.
-			onHeard: mine(function (text, final) {
-				if (!heardEl) heardEl = appendUserMessage('', [], true);
-				var words = (heardDone ? heardDone + ' ' : '') + text;
-				heardEl.textContent = words;   // as text, never markup
-				if (final) heardDone = words;
+			// The visitor's words: one message until a bubble of hers comes after it, however
+			// many segments; a segment delivered again replaces its own words.
+			onHeard: mine(function (text, final, id) {
+				var msg = segments[id];
+				if (!msg) {
+					if (!heard) unanswered.push(heard = { el: appendUserMessage('', [], true), ids: [], texts: {} });
+					msg = segments[id] = heard;
+					msg.ids.push(id);
+				}
+				msg.texts[id] = text;
+				msg.el.textContent = msg.ids.map(function (i) { return msg.texts[i]; }).filter(Boolean).join(' ');   // as text, never markup
 				scrollToBottom();
 			}),
-			onCaption: mine(function (text, final) {
-				if (!captionEl) {
-					if (!spokenEls.length) answerStarts();
+			// Her words: a bubble per segment, in the reply in progress when the segment starts.
+			onCaption: mine(function (text, final, id) {
+				var bubble = segments[id];
+				if (!bubble) {
+					if (!reply) reply = { bubbles: [], asked: answerStarts() };
 					var msg = el('div', 'def-cc-message def-cc-message--assistant def-cc-message--spoken');
-					captionEl = msg.appendChild(el('div', 'def-cc-message-content'));
+					bubble = segments[id] = msg.appendChild(el('div', 'def-cc-message-content'));
 					els.messages.appendChild(msg);
-					spokenEls.push(captionEl);
+					reply.bubbles.push(bubble);
+					heard = null;   // the visitor's next words go below it
 				}
 				var follow = isAtEnd();
-				captionEl.textContent = text;   // her words as text, never markup
+				bubble.textContent = text;   // her words as text, never markup
 				if (follow) scrollToBottom();
-				if (final) captionEl = null;
 			}),
 			// The room says her reply is over (spoken or cut off): the one read for it.
 			onReply: mine(function () { replyOver(); }),
@@ -2482,31 +2491,30 @@
 		talk = null;
 		talkRoom = '';
 		talkState = '';
-		captionEl = heardEl = null;
-		heardDone = captionAsked = '';
-		spokenEls = [];
+		segments = {};
+		heard = reply = null;
+		unanswered = [];
 		heldSpeech = [];
 		typedSpeaking = talkMuted = false;
 		if (els.orb) els.orb.style.display = 'none';
 		setMicState('idle');
 	}
 
-	// She answers (or the turn is over without her words): the visitor's message is whole,
-	// said once (as a spoken message is when its transcript fills it), and is that turn's
-	// for the history.
+	// She answers (or the turn is over without her words): the visitor's messages since her
+	// last reply are said once each (as a spoken message is when its transcript fills it),
+	// and their words are that turn's for the history.
 	function answerStarts() {
-		if (heardEl) announce(heardEl);
-		captionAsked = heardDone;
-		heardEl = null;
-		heardDone = '';
+		var asked = unanswered.map(function (msg) { announce(msg.el); return msg.el.textContent; }).join(' ');
+		unanswered = [];
+		heard = null;
+		return asked;
 	}
 
+	// The read is for this reply: bound to its bubbles now, before anything newer arrives.
 	function replyOver() {
-		if (!spokenEls.length) answerStarts();
-		readReply(spokenEls, talkRoom, captionAsked);
-		captionEl = null;
-		spokenEls = [];
-		captionAsked = '';
+		var over = reply || { bubbles: [], asked: answerStarts() };
+		reply = null;
+		readReply(over.bubbles, talkRoom, over.asked);
 	}
 
 	// After her reply, its written form and tool outputs take the place of the words she
@@ -2579,9 +2587,10 @@
 	 * iPhone allows only there runs before the mint is awaited. Callbacks:
 	 * onState('connecting', then 'listening' whenever she is not speaking, 'speaking' while she
 	 * is, 'idle' once it is over), onLevel(in, out) each
-	 * frame, onCaption(text so far, final) for her words, onHeard(text so far, final) for the
-	 * visitor's own (optional), onReply() at `def.reply`, once per reply when its speech has
-	 * finished or was cut off (optional), onNotice(kind) for `def.notice`,
+	 * frame, onCaption(text so far, final, segment id) for her words, onHeard(text so far, final,
+	 * segment id) for the visitor's own (optional; a segment may come more than once),
+	 * onReply() at `def.reply`, once per reply when its speech has finished or was cut off
+	 * (optional), onNotice(kind) for `def.notice`,
 	 * onEnded('goodbye' | 'stop_phrase' | 'silence' | 'refused' | 'unknown': her `def.ended`;
 	 * 'end': end() was called) and onError('mint' | 'connect' | 'microphone' | 'dropped' |
 	 * 'busy': no employee joined in time);
@@ -2592,7 +2601,7 @@
 	function conversation(minted, cb) {
 		var LK = window.LivekitClient;
 		var RoomEvent = LK.RoomEvent;
-		var over = false, state = '', stage = 'mint', announced = '', wakeLock = null, muted = false;
+		var over = false, state = '', stage = 'mint', announced = '', wakeLock = null, muted = false, streams = 0;
 		// The client sets isSpeaking and audioLevel from the server's speaker updates, in
 		// steps; a side stays speaking across a gap this long.
 		var HOLD_MS = 400;
@@ -2681,18 +2690,25 @@
 		room.registerTextStreamHandler('lk.transcription', function (reader, from) {
 			var mine = from.identity === room.localParticipant.identity;
 			var say = mine ? cb.onHeard || function () {} : cb.onCaption;
+			var info = reader.info || {};
+			var id = (info.attributes && info.attributes['lk.segment_id']) || info.id || String(++streams);
+			// Final unless marked "false", read once the stream is done: her words' mark comes in
+			// the stream's trailer, which the client puts in a new attributes object at the close.
+			var whole = function () {
+				return ((reader.info && reader.info.attributes) || {})['lk.transcription_final'] !== 'false';
+			};
 			var text = '';
 			var pieces = reader[Symbol.asyncIterator]();
 			(function next() {
 				pieces.next().then(function (r) {
 					if (over) return;
-					if (r.done) { say(text, true); return; }
+					if (r.done) { say(text, whole(), id); return; }
 					text += String(r.value);
-					say(text, false);
+					say(text, false, id);
 					next();
 				}, function (e) {
 					note('words stream failed (' + (e && e.name) + ')');
-					if (!over && text) say(text, true);
+					if (!over && text) say(text, true, id);
 				});
 			})();
 		});

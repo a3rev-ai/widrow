@@ -15,7 +15,10 @@
  * typed message keeps the room, asks for speech and mutes the room's microphone while
  * its reply plays, after her spoken reply; `not_understood` offers typing; each ending;
  * a rejected mint and a room that cannot connect fall back, the second for the page's
- * life with its cause in the voice log; nothing arrives after the end.
+ * life with its cause in the voice log; nothing arrives after the end. Each segment of
+ * words fills the bubble bound when it starts: an utterance the room delivers twice shows
+ * once, and at a talk-over, in any order of arrival, each read's reply lands in its own
+ * reply's place and the screen keeps the order things were said.
  *
  * Bite check: CC_MODULE=<a scratch copy of the widget> runs it against that file.
  */
@@ -94,14 +97,22 @@ function fakeLiveKit(w, h) {
     r.close = () => { r.closed = true; r.state = 'disconnected'; r.emit('disconnected', DisconnectReason.UNKNOWN_REASON); };
     r.replyDone = () => r.data('def.reply', { type: 'reply' });
     r.data = (topic, obj) => r.emit('dataReceived', new w.TextEncoder().encode(JSON.stringify(obj)), r.her, 0, topic);
-    // Her words as a text stream: say() a piece, close() the segment.
-    r.words = from => {
+    // Her words as a text stream: say() a piece, close() the segment. `attributes` as the
+    // room stamps them in the header (lk.segment_id, lk.transcription_final); none, as the
+    // older checks send. close(trailer) does as the client does with a trailer's attributes:
+    // a new object, the header's with the trailer's over them.
+    r.words = (from, attributes) => {
       const queue = [], waiting = [];
       const feed = v => (waiting.length ? waiting.shift()(v) : queue.push(v));
-      r.text['lk.transcription']({ [Symbol.asyncIterator]: () => ({
-        next: () => (queue.length ? Promise.resolve(queue.shift()) : new Promise(res => waiting.push(res))) }) },
-        { identity: from || 'agent' });
-      return { say: t => feed({ done: false, value: t }), close: () => feed({ done: true }),
+      const reader = { info: { id: 'TS_' + (h.streams = (h.streams || 0) + 1), attributes: attributes || {} },
+        [Symbol.asyncIterator]: () => ({
+          next: () => (queue.length ? Promise.resolve(queue.shift()) : new Promise(res => waiting.push(res))) }) };
+      r.text['lk.transcription'](reader, { identity: from || 'agent' });
+      return { say: t => feed({ done: false, value: t }),
+        close: trailer => {
+          if (trailer) reader.info.attributes = Object.assign({}, reader.info.attributes, trailer);
+          feed({ done: true });
+        },
         fail: () => (waiting.length ? waiting.shift() : () => {})(Promise.reject(Object.assign(new Error('x'), { name: 'NetworkError' }))) };
     };
   }
@@ -124,7 +135,8 @@ async function boot(opts) {
   for (const k of Object.keys(opts.storage || {})) w.localStorage.setItem(k, opts.storage[k]);
   w.WidrowAiPageContextHelper = { build: thread => ({ canonical_path: '/', for: thread }), markShipped() {} };
   const h = { w, noEmployee: !!opts.noEmployee, order: [], rooms: [], mints: [], roomMints: [], reads: [], typed: [], carts: [], starts: [], spoken: [],
-    notes: [], disconnects: 0, micStops: 0, wakeReleases: 0, busy: null, readReply: opts.readReply || CARD_REPLY, roomStatus: 200, typedEvents: null };
+    notes: [], disconnects: 0, micStops: 0, wakeReleases: 0, busy: null, readReply: opts.readReply || CARD_REPLY, roomStatus: 200, typedEvents: null,
+    holdReads: false, held: [] };
   if (opts.webrtc !== false) w.RTCPeerConnection = function () {};
   w.AudioContext = function () {
     h.order.push('unlock');
@@ -168,6 +180,8 @@ async function boot(opts) {
     }
     if (url.indexOf(ROOM + '/') === 0) {
       h.reads.push({ url, auth: init.headers.Authorization, mintsBefore: h.mints.slice() });
+      // h.holdReads: each read waits until a check answers it, h.answer(n, body), in any order.
+      if (h.holdReads) return new Promise(done => h.held.push(body => done(res(body, 200))));
       return res(h.readReply, 200);
     }
     if (url === DIRECT || url === CC.chatStreamUrl) {
@@ -205,6 +219,20 @@ async function boot(opts) {
     scripts: () => Array.from(w.document.head.querySelectorAll('script')).map(s => s.src),
     loadClient: () => { w.LivekitClient = fakeLiveKit(w, h); },
     tap: () => h.mic().click(),
+    // The log as it reads, top to bottom: whose message, and its words.
+    log: () => Array.from(root.querySelectorAll('.def-cc-message')).filter(m => !h.opening.has(m)).map(m =>
+      (m.classList.contains('def-cc-message--user') ? 'you: ' : 'her: ') + m.textContent.trim()),
+    // One of the visitor's utterances as the room delivers it: the segment twice, each closed,
+    // the same id, first not final then final.
+    utter: async (id, text) => {
+      for (const final of ['false', 'true']) {
+        const s = h.room().words('visitor', { 'lk.segment_id': id, 'lk.transcription_final': final });
+        s.say(text); s.close();
+        await sleep(5);
+      }
+    },
+    her: id => h.room().words('agent', { 'lk.segment_id': id, 'lk.transcription_final': 'false' }),
+    answer: (n, id, content) => h.held[n]({ ended: false, reply: { id, content, tool_outputs: [] } }),
     // A tap, then the mint, the connect and the microphone settle.
     start: async () => { h.tap(); await sleep(40); },
     send: async text => {
@@ -216,6 +244,7 @@ async function boot(opts) {
   w.eval(MODULE);
   w.DEFCustomerChat.init(root, Object.assign({}, CC, opts.config || {}));
   await sleep(40);
+  h.opening = new Set(root.querySelectorAll('.def-cc-message'));   // the greeting, before any conversation
   if (opts.load !== false) h.loadClient();
   return h;
 }
@@ -674,6 +703,181 @@ async function boot(opts) {
   h = await boot({ language: '' });
   await h.start();
   check('an empty browser language sends no language field', !!h.roomMints[0] && !('language' in h.roomMints[0].body), show(h.roomMints[0]));
+
+  // ── Each utterance and each reply in its own bubble, bound when it starts ──
+  // The room's real order: the visitor's utterance comes as one segment delivered twice, each
+  // closed; at a talk-over their words, the end of her reply (`def.reply`) and the close of her
+  // words arrive together, in any order, and the read answers once her next reply has begun.
+  h = await boot();
+  await h.start();
+  await h.utter('U1', 'What time do you open?');
+  check('one utterance delivered as two closed segments with one id: its words shown once',
+    show(h.log()) === show(['you: What time do you open?']), show(h.log()));
+  h = await boot({ readReply: { ended: false, reply: { id: 'w1', content: 'At nine.', tool_outputs: [] } } });
+  await h.start();
+  const first = h.room().words('visitor', { 'lk.segment_id': 'U1', 'lk.transcription_final': 'false' });
+  first.say('What time do you open?'); first.close();
+  await sleep(5);
+  const starts = h.her('A1');
+  starts.say('At');
+  await sleep(5);
+  const second = h.room().words('visitor', { 'lk.segment_id': 'U1', 'lk.transcription_final': 'true' });
+  second.say('What time do you open?'); second.close();
+  await sleep(5);
+  starts.say(' nine.'); starts.close();
+  await sleep(5);
+  h.room().replyDone();
+  await sleep(40);
+  check('the final copy of an utterance arriving after she began: still once, in its own bubble, and once in the history',
+    show(h.log()) === show(['you: What time do you open?', 'her: At nine.']) &&
+      JSON.parse(h.w.localStorage.getItem('a3rev_threads'))[0].messages[0].content === 'What time do you open?', show(h.log()));
+
+  h = await boot({ readReply: { ended: false, reply: { id: 'w1', content: 'We open at nine.', tool_outputs: [] } } });
+  await h.start();
+  await h.utter('U1', 'When do you open?');
+  const delta = h.her('A1');   // her words: the header says "false"; "true" comes in the trailer
+  delta.say('We open');
+  await sleep(5);
+  delta.say(' at nine.');
+  delta.close({ 'lk.transcription_final': 'true' });
+  await sleep(5);
+  const captionsWhole = show(h.log());
+  h.room().replyDone();
+  await sleep(40);
+  check('her words, marked final only in the trailer: one bubble with all her words, then the written reply in its place',
+    captionsWhole === show(['you: When do you open?', 'her: We open at nine.']) && h.spokenBubbles().length === 0 &&
+      show(h.log()) === show(['you: When do you open?', 'her: We open at nine.']), captionsWhole + ' then ' + show(h.log()));
+
+  const together = {
+    words: async x => { await x.utter('U2', 'Sorry, and on Sundays?'); },
+    replyOver: async x => { x.room().replyDone(); await sleep(5); },
+    closed: async x => { x.cut.close(); await sleep(5); },
+  };
+  const orders = [['words', 'replyOver', 'closed'], ['words', 'closed', 'replyOver'], ['replyOver', 'words', 'closed'],
+    ['replyOver', 'closed', 'words'], ['closed', 'words', 'replyOver'], ['closed', 'replyOver', 'words']];
+  for (const order of orders) {
+    h = await boot();
+    h.holdReads = true;
+    await h.start();
+    await h.utter('U1', 'What time do you open?');
+    h.cut = h.her('A1');
+    h.cut.say('We open at nine and');
+    await sleep(5);
+    for (const step of order) await together[step](h);
+    const next = h.her('A2');
+    next.say('Of course,');
+    await sleep(5);
+    h.answer(0, 'w1', 'We open at nine and close at five.');
+    await sleep(20);
+    const midway = h.log();
+    next.say(' on Sundays too.'); next.close();
+    await sleep(5);
+    h.room().replyDone();
+    await sleep(20);
+    if (h.held[1]) h.answer(1, 'w2', 'We open on Sundays too.');
+    await sleep(20);
+    check('talk-over (' + order.join(', ') + '): the written reply in the cut reply\'s own bubble, their words after it, her next reply after that',
+      show(midway) === show(['you: What time do you open?', 'her: We open at nine and close at five.', 'you: Sorry, and on Sundays?', 'her: Of course,']) &&
+        show(h.log()) === show(['you: What time do you open?', 'her: We open at nine and close at five.', 'you: Sorry, and on Sundays?', 'her: We open on Sundays too.']) &&
+        h.spokenBubbles().length === 0,
+      show(midway) + ' then ' + show(h.log()));
+  }
+
+  h = await boot();
+  h.holdReads = true;
+  await h.start();
+  await h.utter('Q', 'Tell me about the courses.');
+  const long = h.her('A1');
+  long.say('There are three courses');
+  await sleep(5);
+  await h.utter('H1', 'The first one.');
+  await h.utter('H2', 'And the price.');
+  await h.utter('H3', 'And the dates.');
+  long.say(' on offer.'); long.close();
+  await sleep(5);
+  h.room().replyDone();
+  await sleep(5);
+  h.answer(0, 'w1', 'There are three courses on offer.');
+  await sleep(20);
+  const all = h.her('A2');
+  all.say('The first costs ten and starts in May.'); all.close();
+  await sleep(5);
+  h.room().replyDone();
+  await sleep(5);
+  h.answer(1, 'w2', 'The first costs ten and starts in May.');
+  await sleep(20);
+  const kept = JSON.parse(h.w.localStorage.getItem('a3rev_threads'))[0].messages;
+  check('three utterances held while she speaks, then one reply: their words once each, in order, in their own message, then the reply',
+    show(h.log()) === show(['you: Tell me about the courses.', 'her: There are three courses on offer.',
+      'you: The first one. And the price. And the dates.', 'her: The first costs ten and starts in May.']) &&
+      kept[2].content === 'The first one. And the price. And the dates.', show(h.log()) + ' ' + show(kept));
+
+  h = await boot();
+  await h.start();
+  await h.utter('Q', 'Tell me about the courses.');
+  const part = h.her('A1');
+  part.say('There are three.'); part.close();
+  await sleep(5);
+  await h.utter('H1', 'The first one.');
+  const more = h.her('A1b');
+  more.say('Each runs a term.'); more.close();
+  await sleep(5);
+  await h.utter('H2', 'And the price.');
+  check('while she speaks: on screen in the order said, never the visitor\'s words above words of hers said before them',
+    show(h.log()) === show(['you: Tell me about the courses.', 'her: There are three.', 'you: The first one.', 'her: Each runs a term.', 'you: And the price.']),
+    show(h.log()));
+
+  h = await boot();
+  h.holdReads = true;
+  await h.start();
+  await h.utter('Q1', 'Is there parking?');
+  const one = h.her('A1');
+  one.say('Yes, behind the hall.'); one.close({ 'lk.transcription_final': 'true' });
+  await sleep(5);
+  h.room().replyDone();
+  await sleep(5);
+  await h.utter('Q2', 'Is it free?');
+  const two = h.her('A2');
+  two.say('Yes, it is free.'); two.close();
+  await sleep(5);
+  h.room().replyDone();
+  await sleep(5);
+  h.answer(1, 'w2', 'Yes, parking is free.');
+  await sleep(20);
+  h.answer(0, 'w1', 'Yes, there is parking behind the hall.');
+  await sleep(20);
+  check('two reads answering out of order: each written reply in its own reply\'s place',
+    show(h.log()) === show(['you: Is there parking?', 'her: Yes, there is parking behind the hall.', 'you: Is it free?', 'her: Yes, parking is free.']),
+    show(h.log()));
+
+  for (const late of [false, true]) {
+    h = await boot();
+    h.holdReads = true;
+    await h.start();
+    await h.utter('Q1', 'Is there parking?');
+    const one = h.her('A1');
+    one.say('Yes, behind the hall.');
+    if (!late) one.close();
+    await sleep(5);
+    h.room().replyDone();
+    await sleep(5);
+    if (late) { one.close(); await sleep(5); }   // her words' close after the reply message
+    h.answer(0, 'w1', 'Yes, there is parking behind the hall.');
+    await sleep(20);
+    await h.utter('Q2', 'Thanks, that is all.');
+    const bye = h.her('A2');
+    bye.say('You are welcome, good');   // cut off mid-word: the room closes
+    await sleep(5);
+    h.room().data('def.ended', { type: 'ended', reason: 'goodbye' });
+    h.room().close();
+    await sleep(20);
+    h.held[1]({ ended: true, reason: 'goodbye', reply: { id: 'bye', content: 'You are welcome, goodbye.', tool_outputs: [] } });
+    await sleep(20);
+    check('the goodbye' + (late ? ', after a reply whose words closed after its reply message' : '') +
+      ': the end\'s read puts the whole written reply in the goodbye\'s bubble, after the words it answers',
+      show(h.log()) === show(['you: Is there parking?', 'her: Yes, there is parking behind the hall.', 'you: Thanks, that is all.', 'her: You are welcome, goodbye.']) &&
+        h.spokenBubbles().length === 0, show(h.log()));
+  }
 
   console.log('harness-cc-conversation: ' + pass + ' passed, ' + fail + ' failed');
   console.log(results.join('\n'));
