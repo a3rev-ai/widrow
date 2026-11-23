@@ -1177,10 +1177,16 @@ final class Widrow_AI {
 			'voiceNeedsStreaming'  => __( 'Voice needs a browser that can stream replies.', 'widrow-ai' ),
 			'voiceLogEmpty'        => __( 'No voice events yet.', 'widrow-ai' ),
 			// Conversation mode: the mic opens a conversation that stays on.
-			'talking'              => __( 'Speak, or type — tap the mic to end', 'widrow-ai' ),
+			'talking'              => __( 'Speak, or type. Tap the button to end.', 'widrow-ai' ),
+			'talkingMic'           => __( 'Speak, or type — tap the mic to end', 'widrow-ai' ),
 			'talkNotUnderstood'    => __( "I couldn't make that out. You can type your message below instead.", 'widrow-ai' ),
-			'talkLost'             => __( 'The conversation was cut off. Tap the mic to talk again.', 'widrow-ai' ),
+			'talkLost'             => __( 'The conversation was cut off. Tap the button to talk again.', 'widrow-ai' ),
 			'talkBusy'             => __( 'Conversations are busy right now, so the microphone works as usual.', 'widrow-ai' ),
+			// The button at the message box's end, where conversation mode is on.
+			'startVoice'           => __( 'Start voice', 'widrow-ai' ),
+			'tapToSpeakAgainButton' => __( 'Tap the button to speak again.', 'widrow-ai' ),
+			'micClosedIdleButton'  => __( 'The mic closed. Tap the button to speak again.', 'widrow-ai' ),
+			'endVoice'             => __( 'End voice', 'widrow-ai' ),
 		);
 
 		// Per-site overrides for the hand-off form copy (5.6.0): the same form

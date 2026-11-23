@@ -102,7 +102,6 @@ check('floor: beside an enabled Send the mic stays at least 44 by 44', (function
 
 // ── Without :has() a browser drops the whole rule a :has() selector sits in ─
 const NO_HAS = Object.keys(FLOOR).filter(s => s !== '.composer-hint').concat([
-	'.composer-toolbar .mic-btn[hidden]', '.composer-toolbar .voice-btn[hidden]',
 	'.model-select[hidden] + .model-chip', '.model-select:focus-visible + .model-chip', '.composer-hint']);
 (function () {
 	const bad = RULES.filter(r => r.media === PHONE && r.selectors.some(s => NO_HAS.includes(s))
@@ -131,9 +130,9 @@ function spec(sel) {
 function cmp(a, b) { return a[0] - b[0] || a[1] - b[1] || a[2] - b[2]; }
 const CASCADE = RULES.filter(r => r.media === null || r.media === PHONE);
 function matches(el, sel) { try { return el.matches(sel); } catch (e) { return false; } }
-function computed(el, prop) {
+function computed(el, prop, cascade) {
 	let best = null, bestSpec = null;
-	CASCADE.forEach(r => {
+	(cascade || CASCADE).forEach(r => {
 		if (!(prop in r.decls)) return;
 		r.selectors.forEach(sel => {
 			if (!matches(el, sel)) return;
@@ -165,6 +164,8 @@ function row(setup) {
 		els.mic.dataset.state = state; els.label.textContent = text || ''; els.label.hidden = !text;
 	};
 	els.setSend = function (disabled, stop) { els.send.classList.toggle('is-stop', !!stop); els.send.disabled = disabled; };
+	// Conversation mode on: the button's role, and the mic not shown.
+	els.setVoice = function (role) { els.send.dataset.voice = role; els.mic.hidden = true; };
 	els.setMic('idle');
 	els.setSend(true);
 	setup(els);
@@ -172,7 +173,9 @@ function row(setup) {
 	const visible = Object.keys(controls).filter(k => shown(controls[k]));
 	const main = visible.filter(k => computed(controls[k], 'width') === '48px');
 	return { visible, main, pill: /^1 1/.test(computed(els.mic, 'flex') || ''),
-		micWidth: computed(els.mic, 'width'), labelWrap: computed(els.label, 'white-space') };
+		micWidth: computed(els.mic, 'width'), labelWrap: computed(els.label, 'white-space'),
+		icons: ['send-icon', 'stop-icon', 'wave-icon'].filter(c => shown(els.send.querySelector('.' + c))),
+		sendWidth: computed(els.send, 'width'), sendHeight: computed(els.send, 'height'), sendBg: computed(els.send, 'background') };
 }
 const ALL = ['attach', 'mic', 'readback', 'model', 'send'];
 const MATRIX = [
@@ -192,8 +195,14 @@ const MATRIX = [
 	['answering, Stop gone', e => { e.setMic('answering', 'Ann is answering · tap to end'); }, ['mic'], [], true],
 	['no microphone', e => { e.mic.hidden = true; e.voice.hidden = true; }, ['attach', 'model', 'send'], ['send'], false],
 	['no model picker', e => { e.select.hidden = true; }, ['attach', 'mic', 'readback'], ['mic'], false],
-	['read-only', e => { e.container.classList.add('disabled'); }, ['attach', 'mic', 'readback', 'model'], ['mic'], false]
+	['read-only', e => { e.container.classList.add('disabled'); }, ['attach', 'mic', 'readback', 'model'], ['mic'], false],
+	['conversation mode, box empty: Start voice', e => { e.setVoice('start'); e.setSend(false); }, ['attach', 'readback', 'model', 'send'], ['send'], false],
+	['conversation mode, words typed: Send', e => { e.input.value = 'hi'; e.setVoice('send'); e.setSend(false); }, ['attach', 'readback', 'model', 'send'], ['send'], false],
+	['in a conversation, box empty: End voice', e => { e.setMic('conversation', 'Speak, or type'); e.setVoice('end'); e.setSend(false); },
+		['attach', 'readback', 'model', 'send'], ['send'], false]
 ];
+const ICONS = { 'conversation mode, box empty: Start voice': ['wave-icon'], 'conversation mode, words typed: Send': ['send-icon'],
+	'in a conversation, box empty: End voice': ['stop-icon'] };
 MATRIX.forEach(function (m) {
 	const r = row(m[1]);
 	check('state ' + m[0] + ': shows ' + m[2].join(', ') + '; main ' + (m[3][0] || 'none') + (m[4] ? '; the pill is the row' : ''),
@@ -203,7 +212,28 @@ MATRIX.forEach(function (m) {
 		check('  and the mic beside Send is the plain 44', r.micWidth === '44px', r.micWidth);
 	}
 	if (m[0] === 'answering, with Stop') check('  and its label may wrap', r.labelWrap === 'normal', r.labelWrap);
+	if (ICONS[m[0]]) {
+		check('  and it is the 48 by 48 round button, showing ' + ICONS[m[0]].join(', ') + (m[0].indexOf('End') > -1 ? ' on the live red' : ''),
+			r.sendWidth === '48px' && r.sendHeight === '48px' && JSON.stringify(r.icons) === JSON.stringify(ICONS[m[0]]) &&
+			(m[0].indexOf('End') > -1 ? r.sendBg === '#d63638' : r.sendBg === '#2271b1'), JSON.stringify(r));
+	}
 });
+
+// ── Desktop: where conversation mode is on, the button is a size up from the mic ──
+check('desktop: with conversation mode on the button is 40 by 40, larger than the 32 mic; round',
+	decl(null, '.send-btn[data-voice]').width === '40px' && decl(null, '.send-btn[data-voice]').height === '40px' &&
+	decl(null, '.mic-btn').width === '32px' && decl(null, '.send-btn')['border-radius'] === '50%');
+
+// What is DRAWN at desktop width (no phone query): a hidden mic is not drawn beside the role button.
+(function () {
+	const d = new JSDOM('<!doctype html><div id="staff-ai-app"><main class="chat-container">' + COMPOSER + '</main></div>').window.document;
+	const mic = d.getElementById('micBtn'), send = d.getElementById('sendBtn');
+	mic.hidden = true;
+	send.dataset.voice = 'start';
+	const desktop = RULES.filter(r => r.media === null);
+	check('desktop: with the role button shown, the hidden mic is not drawn (display none, not the hidden property alone)',
+		computed(mic, 'display', desktop) === 'none' && computed(send, 'display', desktop) === 'flex', computed(mic, 'display', desktop));
+})();
 
 // ── Desktop: the wrapper is no box, the chip is not drawn ────────────────
 check('desktop: the wrapper is no box and the chip is not drawn',

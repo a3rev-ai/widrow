@@ -1483,6 +1483,38 @@ body {
 	display: block;
 }
 
+/* Conversation mode on: Send is a size up from the mic and the way to talk: a voice wave
+   with the box empty (Start voice), the stop mark on the live red while a conversation is
+   on (End voice), the send arrow once there are words. */
+.send-btn[data-voice] {
+	width: 40px;
+	height: 40px;
+}
+
+.send-btn[data-voice] svg {
+	width: 20px;
+	height: 20px;
+}
+
+.send-btn .wave-icon,
+.send-btn[data-voice="start"] .send-icon,
+.send-btn[data-voice="end"] .send-icon {
+	display: none;
+}
+
+.send-btn[data-voice="start"] .wave-icon,
+.send-btn[data-voice="end"] .stop-icon {
+	display: block;
+}
+
+.send-btn[data-voice="end"] {
+	background: #d63638;
+}
+
+.send-btn[data-voice="end"]:hover {
+	background: #b32d2e;
+}
+
 .message-stopped-note {
 	margin-top: 6px;
 	font-size: 12px;
@@ -2121,6 +2153,12 @@ html {
 	flex-shrink: 0;
 }
 
+/* `hidden` loses to the buttons' own display:flex. */
+.composer-toolbar .mic-btn[hidden],
+.composer-toolbar .voice-btn[hidden] {
+	display: none;
+}
+
 .upload-btn:hover,
 .mic-btn:hover,
 .voice-btn:hover {
@@ -2253,12 +2291,6 @@ html {
 	.composer-toolbar .send-btn svg {
 		width: 24px;
 		height: 24px;
-	}
-
-	/* `hidden` loses to the buttons' own display:flex. */
-	.composer-toolbar .mic-btn[hidden],
-	.composer-toolbar .voice-btn[hidden] {
-		display: none;
 	}
 
 	.composer-toolbar .model-picker {

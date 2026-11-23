@@ -144,7 +144,7 @@ function boot(route, held) {   // held: an array that keeps the re-attach waits 
     confirmChips: $('confirmChips'), composerInput: $('composerInput'), sendBtn: $('sendBtn'),
     showInfo: msg => { $('infoBanner').textContent = msg; },
     autoResize() {}, hideInfo() {}, hasActiveFiles: () => false, stagedFiles: [],
-    classifySuggestionOutcome: () => ({}), endConversation() {}, browserTimezone: () => '', clearStagedFiles() {},
+    classifySuggestionOutcome: () => ({}), endConversation() {}, talkButton: () => '', micBtn: null, browserTimezone: () => '', clearStagedFiles() {},
     readBack() {}, readBackSoFar() {}, loadConversations() { loads++; }, rememberConversation() {}, updateReadOnlyState() {}, afterSpokenTurn() {},
     dropUnfilledTranscript() { return false; }, uploadAllStagedFiles: async () => ({ success: true, fileIds: [] }),
     renderMarkdown: s => s, speaker: { speak() {} },

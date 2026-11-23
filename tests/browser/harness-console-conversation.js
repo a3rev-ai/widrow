@@ -21,6 +21,8 @@ const RENDER = s('renderMessages', l => l.includes('\t// Render messages'), l =>
 const RECOVER = s('recoverTurn', l => l.includes("// V-S1's client half (7.6.9)"), l => l.includes('// ── C3b: the installed app keeps up'), ['async function recoverTurn']);
 const INFO = s('info banner', l => l.includes('\t// Show info'), l => l.includes('// Smart scroll'), ['function showInfo', 'function showError']);
 const BUTTON = s('send button', l => l.includes('// Update send button state.'), l => l.includes('// The Stop button end'), ['function updateSendButton']);
+const KEYS = s('Enter handler', l => l.includes('// Keyboard handler: Enter to send'), l => l.includes('// Click in input clears suggestion'), ["e.key === 'Enter'"]);
+const CLICK = s('send button click', l => l.startsWith("\tsendBtn.addEventListener('click'"), l => l.includes('\t// Show info'), ['micTap()', 'requestStop()']);
 const SEND = s('send path', l => l.startsWith('\tasync function sendMessage() {'), l => l.includes('// SHARE MODAL'), ['async function sendMessageStreaming', 'function showConfirmChip']);
 const VOICE = extract.voice();
 const RELEASE = extract.release();
@@ -52,7 +54,7 @@ const TAIL = `
 	initVoice();
 	consolePages.push({ route: 'documents', el: document.getElementById('docsPage') });
 	return {
-		sendMessage: sendMessage, resetToNewChat: resetToNewChat, loadConversation: loadConversation, quietEnough: quietEnough, showPage: showPage,
+		sendMessage: sendMessage, resetToNewChat: resetToNewChat, updateSendButton: updateSendButton, loadConversation: loadConversation, quietEnough: quietEnough, showPage: showPage,
 		state: function () { return { talk: typeof talk === 'undefined' ? undefined : talk, thread: currentConversationId,
 			messages: messages, on: conversationOn, mic: micBtn.dataset.state }; }
 	};`;
@@ -90,7 +92,7 @@ function boot(opts) {
 		isStopPhrase: () => false,
 		createSpeaker: () => speaker,
 		// A phone that hands the mic over only inside a tap refuses a start outside one.
-		createRecorder: () => ({ isRecording: () => false, release() {}, stop: () => Promise.resolve(null),
+		createRecorder: o => (rec.opts = o, { isRecording: () => false, release() {}, stop: () => Promise.resolve(null),
 			start: () => { rec.starts++; return opts.tapOnly && !inTap ? Promise.reject(new Error('needs a tap')) : Promise.resolve(true); } }),
 	};
 
@@ -148,14 +150,20 @@ function boot(opts) {
 	};
 	const names = Object.keys(deps);
 	const api = new window.Function(...names, HEAD + PARSER + '\n' + TOOL_LABELS + '\n' + ESCAPE + '\n' + REQUEST + '\n' + INFO + '\n' +
-		RECOVER + '\n' + TOOL_ROWS + '\n' + BUTTON + '\n' + STATUS + '\n' + LOAD + '\n' + SHELL + '\n' + NEW_CHAT + '\n' + RELEASE + '\n' + RENDER + '\n' +
+		RECOVER + '\n' + TOOL_ROWS + '\n' + BUTTON + '\n' + KEYS + '\n' + CLICK + '\n' + STATUS + '\n' + LOAD + '\n' + SHELL + '\n' + NEW_CHAT + '\n' + RELEASE + '\n' + RENDER + '\n' +
 		VOICE + '\n' + SEND + TAIL)(...names.map(k => deps[k]));
 	const orb = () => document.querySelector('.talk-orb');
 	return {
-		window, document, api, calls, talks, rec, said, order, logs, prepares: () => prepares,
+		window, document, api, calls, talks, rec, said, order, logs, prepares: () => prepares, staged: deps.stagedFiles,
 		last: () => talks[talks.length - 1],
 		// The tap, and whether the mint and the conversation happened inside it, before any await.
 		tap: () => { inTap = true; $('micBtn').click(); inTap = false; },
+		// The button at the box's end, tapped; typing into the box (what its input listener does).
+		press: () => { inTap = true; $('sendBtn').click(); inTap = false; },
+		type: text => { $('composerInput').value = text; api.updateSendButton(); },
+		// What shows: the button's role, name, tooltip and whether it is enabled, and whether the mic shows.
+		shows: () => ({ role: $('sendBtn').dataset.voice || 'today', name: $('sendBtn').getAttribute('aria-label'),
+			title: $('sendBtn').getAttribute('title'), enabled: !$('sendBtn').disabled, mic: !$('micBtn').hidden }),
 		idle: () => { const r = idle; idle = []; r.forEach(f => f()); },
 		info: () => $('infoBanner').classList.contains('visible') ? $('infoBanner').textContent : '',
 		error: () => $('errorBanner').classList.contains('visible') ? $('errorBanner').textContent : '',
@@ -382,11 +390,11 @@ async function run(label, fn) {
 	});
 
 	const ENDINGS = [['goodbye', false, 'Conversation ended.'], ['stop_phrase', false, 'Conversation ended.'], ['end', false, 'Conversation ended.'],
-		['time_limit', false, 'The conversation reached its time limit. Tap the mic to start a new one.'],
-		['silence', false, 'Voice stopped unexpectedly. Tap the mic to start again.'], ['refused', false, 'Voice stopped unexpectedly. Tap the mic to start again.'],
-		['unknown', false, 'Voice stopped unexpectedly. Tap the mic to start again.'], ['mint', true, 'Voice stopped unexpectedly. Tap the mic to start again.'],
+		['time_limit', false, 'The conversation reached its time limit. Tap the button to start a new one.'],
+		['silence', false, 'Voice stopped unexpectedly. Tap the button to start again.'], ['refused', false, 'Voice stopped unexpectedly. Tap the button to start again.'],
+		['unknown', false, 'Voice stopped unexpectedly. Tap the button to start again.'], ['mint', true, 'Voice stopped unexpectedly. Tap the button to start again.'],
 		['microphone', true, 'The microphone is blocked for this site in your browser. Allow it in the site permissions (the icon beside the address bar) and try again.'],
-		['dropped', true, 'Voice stopped unexpectedly. Tap the mic to start again.']];
+		['dropped', true, 'Voice stopped unexpectedly. Tap the button to start again.']];
 	for (const [kind, error, line] of ENDINGS) {
 		await run('ending ' + kind, async () => {
 			const t = await started({ thread: 'th-1' });
@@ -546,6 +554,212 @@ async function run(label, fn) {
 		await settle();
 		const leak = t.logs.filter(l => l.indexOf(GRANT) > -1 || l.indexOf(ROOM_ADDR) > -1);
 		check('no token or room address in any log', leak.length === 0, JSON.stringify(leak));
+	});
+
+	// ── The button at the box's end: Start voice / Send / End voice where the mode is on ──
+	const J = JSON.stringify;
+	const TODAY = { role: 'today', name: 'Send message', title: null, enabled: false, mic: true };
+	await run('start voice', async () => {
+		const t = boot({ thread: 'th-1' });
+		await settle();
+		check('mode on, box empty: one button "Start voice" (name and tooltip), enabled; no mic',
+			J(t.shows()) === J({ role: 'start', name: 'Start voice', title: 'Start voice', enabled: true, mic: false }), J(t.shows()));
+		t.press();
+		const mint = t.calls.find(c => c.url === DOOR + '/voice/room');
+		check('a tap on Start voice starts the conversation inside its own handler, the mint sent before any await',
+			t.talks.length === 1 && t.talks[0].inTap && mint && mint.inTap && t.rec.starts === 0, J({ talks: t.talks.length, mint }));
+		await settle();
+		check('in a conversation, box empty: the same button is "End voice"; no mic',
+			J(t.shows()) === J({ role: 'end', name: 'End voice', title: 'End voice', enabled: true, mic: false }), J(t.shows()));
+		check('the hint and the mic\'s name name the button, not the mic',
+			t.document.getElementById('micLabel').textContent === 'Speak, or type. Tap the button to end.' &&
+			t.document.getElementById('micBtn').getAttribute('aria-label') === 'Speak, or type. Tap the button to end.', t.document.getElementById('micLabel').textContent);
+		t.type('What else?');
+		check('in a conversation, words typed: the same button is Send', J(t.shows()) === J({ role: 'send', name: 'Send message', title: null, enabled: true, mic: false }), J(t.shows()));
+		t.press();
+		await settle();
+		check('…and it sends, the conversation kept on; the box empty again: End voice',
+			t.streams().length === 1 && t.streams()[0].body.messages.slice(-1)[0].content === 'What else?' && t.last().ended === 0 &&
+			t.api.state().talk && t.shows().role === 'end', J({ streams: t.streams().length, ended: t.last().ended, now: t.shows() }));
+		t.press();
+		await settle();
+		check('End voice ends it, as the mic tap did; back to Start voice', t.last().ended === 1 && !t.api.state().talk && t.shows().role === 'start',
+			J({ ended: t.last().ended, now: t.shows() }));
+	});
+	await run('start voice typing', async () => {
+		const t = boot({ thread: 'th-1' });
+		await settle();
+		t.type('Hello');
+		check('mode on, words typed: Send', J(t.shows()) === J({ role: 'send', name: 'Send message', title: null, enabled: true, mic: false }), J(t.shows()));
+		t.type('  ');
+		check('the box cleared: Start voice again', t.shows().role === 'start' && t.shows().name === 'Start voice', J(t.shows()));
+		t.type('Hello');
+		t.press();
+		await settle();
+		check('Send sends a typed message, no conversation', t.streams().length === 1 && t.talks.length === 0 && t.shows().role === 'start',
+			J({ streams: t.streams().length, talks: t.talks.length, now: t.shows() }));
+	});
+	for (const [why, opts] of [['the mode is off', { status: false }], ['the Voice button is on the device voice', { mode: 'device' }],
+		['a WordPress site with no host', { wordpress: true }]]) {
+		await run('today ' + why, async () => {
+			const t = boot(opts);
+			await settle();
+			t.type('');
+			const empty = t.shows();
+			t.type('Hello');
+			const typed = t.shows();
+			check('where ' + why + ': today\'s Send and today\'s mic, unchanged', J(empty) === J(TODAY) &&
+				J(typed) === J(Object.assign({}, TODAY, { enabled: true })), J({ empty, typed }));
+		});
+	}
+	await run('voice button', async () => {
+		const t = boot({ mode: 'off' });
+		await settle();
+		const before = t.shows().role;
+		t.document.getElementById('voiceBtn').click();   // off → her voice
+		check('the Voice button turned to her voice: Start voice appears', before === 'today' && t.shows().role === 'start', J({ before, now: t.shows() }));
+	});
+	await run('start voice failed', async () => {
+		const t = boot({ thread: 'th-1', failAt: 'connect' });
+		await settle();
+		t.press();
+		await settle();
+		check('the mode fails for the page: today\'s Send and mic from then on, told in today\'s words (the mic)',
+			J(t.shows()) === J(TODAY) && t.info() === 'Voice conversation is unavailable right now. Tap the mic to talk.', J(t.shows()) + ' ' + t.info());
+	});
+	await run('start voice busy', async () => {
+		const t = boot({ thread: 'th-1' });
+		await settle();
+		t.press();
+		t.last().finish('busy', true);
+		await settle();
+		check('the busy fallback: the tap goes on as today\'s voice, said as before, with today\'s mic to end it',
+			t.rec.starts === 1 && /busy/.test(t.info()) && t.shows().role === 'today' && t.shows().mic, J(t.shows()));
+		t.tap();   // ends today's voice
+		await settle();
+		check('…and the next tap is Start voice again', t.shows().role === 'start', J(t.shows()));
+	});
+	await run('start voice busy needs a tap', async () => {
+		const t = boot({ thread: 'th-1', tapOnly: true });
+		await settle();
+		t.press();
+		t.last().finish('busy', true);
+		await settle();
+		check('busy where today\'s voice wants a tap: today\'s mic for that next tap', t.shows().role === 'today' && t.shows().mic, J(t.shows()));
+	});
+
+	// A typed reply held open, its frames pushed by the check.
+	const held = () => {
+		const enc = new TextEncoder();
+		let ctrl;
+		const route = url => url === DOOR + '/chat/stream' ? new Response(new ReadableStream({ start(c) { ctrl = c; } }),
+			{ status: 200, headers: { 'content-type': 'text/event-stream' } }) : null;
+		return { route, push: f => ctrl.enqueue(enc.encode(f)), close: () => ctrl.close() };
+	};
+	await run('stop in a conversation', async () => {
+		const live = held();
+		const t = boot({ thread: 'th-1', route: live.route });
+		await settle();
+		t.press();
+		await settle();
+		t.type('What else?');
+		t.press();
+		await settle();
+		live.push(frame(1, { type: 'text_delta', text: 'Here', step: 1 }));
+		await settle();
+		check('a typed reply streaming in a conversation: the button is Stop, and the mic shows as today\'s end control',
+			J(t.shows()) === J({ role: 'today', name: 'Stop', title: null, enabled: true, mic: true }), J(t.shows()));
+		const micHint = () => [t.document.getElementById('micLabel').textContent, t.document.getElementById('micBtn').getAttribute('aria-label')];
+		check('…and the mic\'s label and name say the mic ends it', J(micHint()) === J(['Speak, or type — tap the mic to end', 'Speak, or type — tap the mic to end']), J(micHint()));
+		t.press();
+		await settle();
+		check('…Stop stops the reply and keeps the conversation on', t.calls.some(c => /\/turns\/msg-1\/stop$/.test(c.url)) && t.last().ended === 0,
+			J(t.calls.map(c => c.url)));
+		live.push(frame(2, { type: 'done', choices: [{ message: { content: 'Here' } }] }));
+		live.close();
+		await settle();
+		check('…and the reply over, End voice is back and the mic hidden', J(t.shows()) === J({ role: 'end', name: 'End voice', title: 'End voice', enabled: true, mic: false }), J(t.shows()));
+		check('…its hint naming the button again', t.document.getElementById('micLabel').textContent === 'Speak, or type. Tap the button to end.', J(micHint()));
+	});
+	await run('mic ends while a typed reply streams', async () => {
+		const live = held();
+		const t = boot({ thread: 'th-1', route: live.route });
+		await settle();
+		t.press();
+		await settle();
+		t.type('What else?');
+		t.press();
+		await settle();
+		live.push(frame(1, { type: 'text_delta', text: 'Here', step: 1 }));
+		await settle();
+		t.tap();
+		await settle();
+		check('…the mic ends the conversation then', t.last().ended === 1, 'ended ' + t.last().ended);
+		live.close();
+		await settle();
+	});
+	await run('file chips', async () => {
+		const t = boot({ thread: 'th-1' });
+		await settle();
+		for (const status of ['failed', 'uploading']) {
+			t.staged.length = 0;
+			t.staged.push({ status });
+			t.type('');
+			check('a ' + status + ' file chip with the box empty: today\'s Send and mic', t.shows().role === 'today' && t.shows().name === 'Send message' && t.shows().mic, J(t.shows()));
+		}
+		t.staged.length = 0;
+		t.staged.push({ status: 'uploaded' });
+		t.type('');
+		check('an uploaded file chip with the box empty: Send', t.shows().role === 'send', J(t.shows()));
+	});
+	const SUGGEST = [frame(1, { type: 'text_delta', text: 'Typed reply', step: 1 }), frame(2, { type: 'suggestions', suggestion: 'Tell me more' }),
+		frame(3, { type: 'done', choices: [{ message: { content: 'Typed reply' } }] })];
+	await run('suggestion', async () => {
+		const t = boot({ thread: 'th-1', stream: SUGGEST });
+		await settle();
+		await t.send('Hello');
+		await settle();
+		const box = t.document.getElementById('composerInput');
+		check('a suggestion left in the box after a reply: Start voice; no mic', box.value === 'Tell me more' &&
+			J(t.shows()) === J({ role: 'start', name: 'Start voice', title: 'Start voice', enabled: true, mic: false }), box.value + ' ' + J(t.shows()));
+		box.dispatchEvent(new t.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+		await settle();
+		check('…and Enter sends the suggestion, as today', t.streams().length === 2 && t.streams()[1].body.messages.slice(-1)[0].content === 'Tell me more' &&
+			t.talks.length === 0, J(t.streams().map(c => c.body.messages.slice(-1)[0].content)));
+	});
+	await run('suggestion in a conversation', async () => {
+		const t = boot({ thread: 'th-1', stream: SUGGEST });
+		await settle();
+		t.press();
+		await settle();
+		t.type('Hello');
+		t.press();
+		await settle();
+		check('in a conversation, a suggestion left after a typed reply: End voice',
+			t.document.getElementById('composerInput').value === 'Tell me more' && t.shows().role === 'end', J(t.shows()));
+		t.press();
+		await settle();
+		check('…and a tap ends the conversation', t.last().ended === 1, 'ended ' + t.last().ended);
+	});
+	await run('fallback lines and focus', async () => {
+		const t = boot({ thread: 'th-1' });
+		await settle();
+		t.press();
+		t.last().finish('busy', true);
+		await settle();
+		t.document.getElementById('micBtn').focus();
+		t.rec.opts.onIdle();
+		await settle();
+		check('the busy fallback closes quietly: the line names the button', t.info() === 'The mic closed. Tap the button to speak again.', t.info());
+		check('the focused mic hidden as Start voice takes over: focus moves to the button',
+			t.document.activeElement === t.document.getElementById('sendBtn') && t.shows().role === 'start', String(t.document.activeElement && t.document.activeElement.id));
+		const off = boot({ status: false });
+		await settle();
+		off.tap();
+		await settle();
+		off.rec.opts.onIdle();
+		await settle();
+		check('mode off: today\'s line, naming the mic', off.info() === 'The mic closed — tap it to speak again.', off.info());
 	});
 
 	console.log('Console conversation mode (harness-console-conversation.js)');

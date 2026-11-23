@@ -185,7 +185,7 @@ function bootConsole(spoken) {
 		'window', 'document', 't', 'micBtn', 'micLabel', 'voiceBtn', 'composerInput',
 		'messages', 'renderMessages', 'showInfo', 'showError', 'removeTypingMessage',
 		'_streamAbort', 'assistantName', 'onAssistantName', 'isLoading', 'isReadOnly',
-		'hideError', 'hideInfo', 'streamTokenLeft',
+		'hideError', 'hideInfo', 'streamTokenLeft', 'updateSendButton',
 		VOICE + CONSOLE_TAIL);
 	const api = factory(window, document,
 		(key, fallback) => fallback,
@@ -195,7 +195,7 @@ function bootConsole(spoken) {
 		msg => calls.push('error:' + msg),
 		() => { const i = messages.findIndex(m => m.isTyping); if (i >= 0) messages.splice(i, 1); },
 		{ abort: () => calls.push('abort') }, 'Sue', () => {}, false, false,
-		() => {}, () => {}, () => 0);
+		() => {}, () => {}, () => 0, () => {});
 	if (spoken !== false) api.startTurn();
 	return { api, messages, calls, page };
 }
@@ -224,7 +224,7 @@ function bootChat() {
 	const factory = new window.Function(
 		'window', 'document', 'config', 't', 'els', 'root', 'appendMessage', 'setState',
 		'setComposerDisabled', 'hideThinking', 'voiceRecorder', 'speaker', 'conversationOn',
-		'spokenTurn', 'transcribingEl', 'composerPlaceholder', 'destroyed', 'isComposerDisabled',
+		'spokenTurn', 'transcribingEl', 'composerPlaceholder', 'destroyed', 'isComposerDisabled', 'updateSendButton',
 		CHAT_VOICE + CHAT_TAIL);
 	const api = factory(window, document, { assistantName: 'Joe' },
 		key => STRINGS[key] || key, els, document.body,
@@ -232,7 +232,7 @@ function bootChat() {
 		off => calls.push('composer:' + (off ? 'off' : 'on')),
 		() => calls.push('thinking:hidden'),
 		{ release: () => calls.push('mic:released') }, { stop: () => {} },
-		true, true, document.getElementById('bubble'), '', false, false);
+		true, true, document.getElementById('bubble'), '', false, false, () => {});
 	return { api, calls, document, window };
 }
 

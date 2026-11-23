@@ -199,9 +199,12 @@ async function boot(opts) {
       if (h.holdReads) return new Promise(done => h.held.push(body => done(res(body, 200))));
       return res(h.readReply, 200);
     }
+    if (url.indexOf('/api/customer/employee-tools') !== -1) return res({ tools: opts.uploads ? ['upload_file'] : [] }, 200);
     if (url === DIRECT || url === CC.chatStreamUrl) {
       const body = JSON.parse(init.body);
       h.typed.push(body);
+      // h.typedGate: the reply held in flight until a check releases it.
+      if (h.typedGate) return h.typedGate.then(() => sse(h.typedEvents || [{ type: 'done', thread_id: body.thread_id || 'thr-typed', choices: [{ message: { content: 'Typed reply.' } }] }]));
       return sse(h.typedEvents || [{ type: 'text_delta', text: 'Typed reply.' },
         { type: 'done', thread_id: body.thread_id || 'thr-typed', choices: [{ message: { content: 'Typed reply.' } }] }]);
     }
@@ -214,7 +217,7 @@ async function boot(opts) {
       speak: text => h.spoken.push(text), discard() {},
       // A check holds the player busy (h.busy = a promise) to keep a reply sounding.
       whenIdle: () => h.busy || Promise.resolve() }),
-    createRecorder: o => ({ start: live => { h.starts.push(live); return Promise.resolve(true); }, isRecording: () => false,
+    createRecorder: o => (h.recorderOpts = o, { start: live => { h.starts.push(live); return Promise.resolve(true); }, isRecording: () => false,
       release() { h.recorderReleases = (h.recorderReleases || 0) + 1; }, stop: () => new Promise(() => {}) }),
     toBase64: () => Promise.resolve('AAAA'), log: () => h.notes.slice(), note: line => h.notes.push(line),
   };
@@ -232,7 +235,12 @@ async function boot(opts) {
     spokenBubbles: () => root.querySelectorAll('.def-cc-message--spoken'),
     bubbles: () => Array.from(root.querySelectorAll('.def-cc-message--assistant .def-cc-message-content')).map(b => b.textContent.trim()),
     scripts: () => Array.from(w.document.head.querySelectorAll('script')).map(s => s.src),
-    loadClient: () => { w.LivekitClient = fakeLiveKit(w, h); },
+    // The client arrives as the page's script does: its load event fires.
+    loadClient: () => {
+      w.LivekitClient = fakeLiveKit(w, h);
+      const tag = w.document.head.querySelector('script[src="' + LIVEKIT + '"]');
+      if (tag) tag.dispatchEvent(new w.Event('load'));
+    },
     tap: () => h.mic().click(),
     // The log as it reads, top to bottom: whose message, and its words.
     log: () => Array.from(root.querySelectorAll('.def-cc-message')).filter(m => !h.opening.has(m)).map(m =>
@@ -425,7 +433,7 @@ async function boot(opts) {
   h.room().close();
   await sleep(10);
   check('her goodbye ends it: idle, the orb goes, the mic rests, nothing said as a fault',
-    h.orb().dataset.state === 'idle' && h.orbRow().style.display === 'none' && h.mic().dataset.state === 'idle' && h.bubbles().indexOf('The conversation was cut off. Tap the mic to talk again.') === -1);
+    h.orb().dataset.state === 'idle' && h.orbRow().style.display === 'none' && h.mic().dataset.state === 'idle' && h.bubbles().indexOf('The conversation was cut off. Tap the button to talk again.') === -1);
 
   // ── A second conversation: the line once; a tap ends it ──
   await h.start();
@@ -456,7 +464,7 @@ async function boot(opts) {
   h.room().close();
   await sleep(10);
   check('a room dropped mid-conversation: back to the chat with a line, the mode still on',
-    h.orbRow().style.display === 'none' && h.bubbles().indexOf('The conversation was cut off. Tap the mic to talk again.') !== -1);
+    h.orbRow().style.display === 'none' && h.bubbles().indexOf('The conversation was cut off. Tap the button to talk again.') !== -1);
   await h.start();
   check('the next tap starts a conversation again', h.rooms.length === 2 && h.starts.length === 0);
 
@@ -1022,6 +1030,191 @@ async function boot(opts) {
   await sleep(60);
   check('reduced motion: nothing measured, the orb still', h.sources.length === 0 && h.orb().style.transform === '' &&
     h.orb().dataset.state === 'listening', show(h.sources) + ' ' + h.orb().style.transform);
+
+  // ── The button at the box's end: Start voice / Send / End voice where the mode is on ──
+  const btn = h => h.root.querySelector('.def-cc-composer-send');
+  const box = h => h.root.querySelector('.def-cc-composer-input');
+  const type = (h, text) => { box(h).value = text; box(h).dispatchEvent(new h.w.Event('input', { bubbles: true })); };
+  // What shows: the button's role, name and tooltip, whether it is enabled, and whether the mic shows.
+  const shows = h => {
+    const b = btn(h);
+    const role = ['start', 'end'].find(r => b.classList.contains('def-cc-composer-send--' + r)) ||
+      (b.classList.contains('def-cc-composer-send--talk') ? 'send' : 'today');
+    return { role, name: b.getAttribute('aria-label'), title: b.getAttribute('title'), enabled: !b.disabled, mic: h.mic().style.display !== 'none' };
+  };
+  const today = h => { const now = shows(h); delete now.enabled; return show(now) === show({ role: 'today', name: 'Send message', title: null, mic: true }); };
+
+  h = await boot();
+  check('mode on, box empty: one round button "Start voice" (name and tooltip), enabled; no mic',
+    show(shows(h)) === show({ role: 'start', name: 'Start voice', title: 'Start voice', enabled: true, mic: false }) &&
+      / composer-send--talk /.test(' ' + btn(h).getAttribute('part') + ' ') && / composer-send--start /.test(' ' + btn(h).getAttribute('part') + ' '),
+    show(shows(h)) + ' part=' + btn(h).getAttribute('part'));
+  box(h).dispatchEvent(new h.w.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+  await sleep(20);
+  check('Enter in the empty box: nothing sent and no conversation, as today', h.typed.length === 0 && h.rooms.length === 0);
+  btn(h).click();
+  const tapOrder = h.order.slice();
+  check('a tap on Start voice starts the conversation inside the tap: unlock, both elements primed, wake lock, room, startAudio; the mint only after',
+    show(tapOrder.filter(s => s !== 'speakerUnlock')) === show(['unlock', 'silence', 'prime', 'prime', 'wakeLock', 'room', 'startAudio']) &&
+      h.starts.length === 0, show(tapOrder));
+  await sleep(40);
+  check('in a conversation, box empty: the same button is "End voice"; no mic',
+    show(shows(h)) === show({ role: 'end', name: 'End voice', title: 'End voice', enabled: true, mic: false }), show(shows(h)));
+  check('the box\'s hint names the button, not the mic', box(h).placeholder === 'Speak, or type. Tap the button to end.', box(h).placeholder);
+  type(h, 'Do you deliver?');
+  check('in a conversation, words typed: the same button is Send', show(shows(h)) === show({ role: 'send', name: 'Send message', title: null, enabled: true, mic: false }), show(shows(h)));
+  btn(h).click();
+  await sleep(80);
+  check('…and it sends, the conversation kept on', h.typed.length === 1 && h.typed[0].messages[0].content === 'Do you deliver?' && h.disconnects === 0 &&
+    h.orbRow().style.display === '' && shows(h).role === 'end', show({ typed: h.typed.length, disconnects: h.disconnects, now: shows(h) }));
+  btn(h).click();
+  await sleep(20);
+  check('End voice ends it, as the mic tap did; back to Start voice', h.disconnects === 1 && h.orbRow().style.display === 'none' &&
+    shows(h).role === 'start', show({ disconnects: h.disconnects, now: shows(h) }));
+
+  h = await boot();
+  type(h, 'Hello');
+  check('mode on, words typed: the same button is Send', show(shows(h)) === show({ role: 'send', name: 'Send message', title: null, enabled: true, mic: false }), show(shows(h)));
+  type(h, '');
+  check('the box cleared: Start voice again', shows(h).role === 'start' && shows(h).name === 'Start voice');
+  type(h, 'Hello');
+  btn(h).click();
+  await sleep(80);
+  check('Send sends a typed message, no conversation', h.typed.length === 1 && h.typed[0].messages[0].content === 'Hello' && h.rooms.length === 0 &&
+    shows(h).role === 'start', show({ typed: h.typed.length, rooms: h.rooms.length, now: shows(h) }));
+
+  h = await boot({ conversation: false });
+  check('mode off: today\'s Send and today\'s mic, unchanged, and today\'s hint', today(h) && box(h).placeholder === 'Type your message...' &&
+    btn(h).getAttribute('part') === 'composer-send', show(shows(h)) + ' part=' + btn(h).getAttribute('part'));
+  type(h, 'Hello');
+  check('mode off, words typed: today\'s Send, the mic beside it', today(h) && shows(h).enabled, show(shows(h)));
+
+  h = await boot({ load: false });
+  check('mode on but the client not loaded yet: today\'s controls', today(h), show(shows(h)));
+  h.loadClient();
+  check('…and Start voice once it has loaded', shows(h).role === 'start', show(shows(h)));
+
+  h = await boot();
+  h.connectFails = true;
+  btn(h).click();
+  await sleep(40);
+  check('the mode fails for the page: the tap goes on as today\'s voice, with today\'s mic to end it and today\'s hint', h.starts.length === 1 &&
+    today(h) && /^Listening/.test(box(h).placeholder), show(shows(h)) + ' ' + box(h).placeholder);
+  h.tap();   // ends today's voice
+  await sleep(10);
+  check('…and after it, today\'s controls for the page\'s life', today(h), show(shows(h)));
+
+  h = await boot({ clock: true, noEmployee: true });
+  btn(h).click();
+  await sleep(200);
+  check('the busy fallback: the tap goes on as today\'s voice, said as before, with today\'s mic to end it',
+    h.starts.length === 1 && h.bubbles().indexOf('Conversations are busy right now, so the microphone works as usual.') !== -1 &&
+      today(h), show(shows(h)));
+  h.tap();   // ends today's voice
+  await sleep(10);
+  check('…and the next tap is Start voice again', shows(h).role === 'start', show(shows(h)));
+
+  // ── While a typed reply streams in a conversation, End voice stays ──
+  h = await boot();
+  btn(h).click();
+  await sleep(40);
+  let releaseTyped;
+  h.typedGate = new Promise(r => { releaseTyped = r; });
+  type(h, 'Ship today?');
+  btn(h).click();
+  await sleep(20);
+  check('a typed message in a conversation, its reply still in flight: the box empty, the button End voice, enabled; no mic',
+    h.typed.length === 1 && box(h).value === '' && show(shows(h)) === show({ role: 'end', name: 'End voice', title: 'End voice', enabled: true, mic: false }), show(shows(h)));
+  btn(h).click();
+  await sleep(20);
+  check('…and a tap on it ends the conversation then', h.disconnects === 1 && h.orbRow().style.display === 'none', 'disconnects=' + h.disconnects);
+  releaseTyped();
+  await sleep(40);
+
+  // ── A file chip that cannot be sent, the box empty: today's controls ──
+  h = await boot({ uploads: true });
+  await h.send('Hello');
+  const bad = new h.w.File(['x'], 'tool.exe', { type: 'application/octet-stream' });
+  const paste = new h.w.Event('paste', { bubbles: true, cancelable: true });
+  paste.clipboardData = { items: [{ kind: 'file', getAsFile: () => bad }] };
+  box(h).dispatchEvent(paste);
+  await sleep(20);
+  check('a failed file chip with the box empty: today\'s Send and today\'s mic, as with the mode off',
+    !!h.root.querySelector('.def-cc-attachment-chip--failed') && today(h), show(shows(h)));
+
+  // ── A suggestion left in the box after a reply counts as empty; Enter still sends it ──
+  const SUGGEST = [{ type: 'text_delta', text: 'Typed reply.' },
+    { type: 'done', thread_id: 'thr-typed', choices: [{ message: { content: 'Typed reply.' } }] }, { type: 'suggestions', suggestion: 'Tell me more' }];
+  h = await boot();
+  h.typedEvents = SUGGEST;
+  await h.send('Hello');
+  const ghost = box(h).value;
+  check('a suggestion left in the box after a reply: the button is Start voice; no mic', ghost === 'Tell me more' &&
+    show(shows(h)) === show({ role: 'start', name: 'Start voice', title: 'Start voice', enabled: true, mic: false }), ghost + ' ' + show(shows(h)));
+  box(h).dispatchEvent(new h.w.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+  await sleep(80);
+  check('…and Enter sends the suggestion, as today', h.typed.length === 2 && h.typed[1].messages.slice(-1)[0].content === 'Tell me more' &&
+    h.rooms.length === 0, show(h.typed.map(b => b.messages.slice(-1)[0].content)));
+  h = await boot();
+  btn(h).click();
+  await sleep(40);
+  h.typedEvents = SUGGEST;
+  type(h, 'Hello');
+  btn(h).click();
+  await sleep(80);
+  check('in a conversation, a suggestion left after a typed reply: End voice', box(h).value === 'Tell me more' && shows(h).role === 'end',
+    box(h).value + ' ' + show(shows(h)));
+  btn(h).click();
+  await sleep(20);
+  check('…and a tap ends the conversation', h.disconnects === 1, 'disconnects=' + h.disconnects);
+
+  // ── In a conversation, a chip that cannot be sent brings today's mic back as the end: the hint says so ──
+  h = await boot({ uploads: true });
+  btn(h).click();
+  await sleep(40);
+  const bad2 = new h.w.File(['x'], 'tool.exe', { type: 'application/octet-stream' });
+  const paste2 = new h.w.Event('paste', { bubbles: true, cancelable: true });
+  paste2.clipboardData = { items: [{ kind: 'file', getAsFile: () => bad2 }] };
+  box(h).dispatchEvent(paste2);
+  await sleep(20);
+  check('in a conversation, a failed chip with the box empty: the mic ends it, and the hint names the mic',
+    !!h.root.querySelector('.def-cc-attachment-chip--failed') && shows(h).mic && shows(h).role === 'today' &&
+      box(h).placeholder === 'Speak, or type \u2014 tap the mic to end' && h.mic().getAttribute('aria-label') === box(h).placeholder,
+    show(shows(h)) + ' ' + box(h).placeholder);
+  btn(h).click();   // nothing: a disabled Send
+  h.tap();
+  await sleep(20);
+  check('…and the mic ends it', h.disconnects === 1, 'disconnects=' + h.disconnects);
+
+  // ── After a fallback, the lines say what to tap; focus follows the control ──
+  h = await boot({ clock: true, noEmployee: true });
+  btn(h).click();
+  await sleep(200);   // busy: today's voice for this tap
+  h.mic().focus();
+  h.recorderOpts.onIdle();
+  await sleep(5);
+  check('the fallback closes quietly with the mode on: the line names the button',
+    h.bubbles().indexOf('The mic closed. Tap the button to speak again.') !== -1, show(h.bubbles().slice(-1)));
+  check('the focused mic hidden as Start voice takes over: focus moves to the button', h.root.activeElement === btn(h) && shows(h).role === 'start',
+    String(h.root.activeElement && h.root.activeElement.className));
+  h = await boot({ conversation: false });
+  await h.start();
+  h.recorderOpts.onIdle();
+  await sleep(5);
+  check('mode off: today\'s line, naming the mic', h.bubbles().indexOf('The mic closed \u2014 tap it to speak again.') !== -1, show(h.bubbles().slice(-1)));
+
+  (function () {
+    const css = fs.readFileSync(path.join(extract.REPO, 'assets/css/widrow-ai-customer-chat.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    const blocks = css.split(/\.def-cc-composer-send--talk\s*\{/).slice(1).map(b => b.slice(0, b.indexOf('}')));
+    const d = blocks[0] || '';
+    const size = k => +((new RegExp('(^|[;\\s])' + k + ':\\s*(\\d+)px')).exec(d) || [])[2];
+    const shownBy = cls => (css.match(new RegExp('([^{}]*)\\{[^}]*display:\\s*block', 'g')) || []).filter(r => r.indexOf(cls) > -1).join(' ');
+    check('End voice shows the stop mark (a filled square), the wave only for Start voice',
+      /\.def-cc-composer-send--end \.def-cc-send-end/.test(shownBy('def-cc-send-end')) && !/--end/.test(shownBy('def-cc-send-wave')) &&
+        /\.def-cc-composer-send--start \.def-cc-send-wave/.test(shownBy('def-cc-send-wave')), shownBy('def-cc-send-'));
+    check('the button at any width, a phone\'s included (one rule, no width query): round, 48 by 48, larger than the mic (44)',
+      blocks.length === 1 && size('width') === 48 && size('height') === 48 && /border-radius:\s*50%/.test(d), d);
+  })();
 
   console.log('harness-cc-conversation: ' + pass + ' passed, ' + fail + ' failed');
   console.log(results.join('\n'));
