@@ -586,6 +586,14 @@ if ( ! defined( 'ABSPATH' ) ) {
 									<svg class="stop-icon" viewBox="0 0 24 24" aria-hidden="true">
 										<rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"></rect>
 									</svg>
+									<svg class="wave-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+										stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+										<line x1="4" y1="10" x2="4" y2="14"></line>
+										<line x1="8" y1="6" x2="8" y2="18"></line>
+										<line x1="12" y1="3" x2="12" y2="21"></line>
+										<line x1="16" y1="7" x2="16" y2="17"></line>
+										<line x1="20" y1="10" x2="20" y2="14"></line>
+									</svg>
 								</button>
 							</div>
 						</div>
@@ -1001,6 +1009,8 @@ if ( ! defined( 'ABSPATH' ) ) {
 			talkUnavailable: <?php echo wp_json_encode( __( 'Voice conversation is unavailable right now. Tap the mic to talk.', 'widrow-ai' ) ); ?>,
 			talkBusy: <?php echo wp_json_encode( __( 'Voice conversation is busy right now, so the microphone works as usual.', 'widrow-ai' ) ); ?>,
 			talkStopped: <?php echo wp_json_encode( __( 'Voice stopped unexpectedly. Tap the mic to start again.', 'widrow-ai' ) ); ?>,
+			startVoice: <?php echo wp_json_encode( __( 'Start voice', 'widrow-ai' ) ); ?>,
+			endVoice: <?php echo wp_json_encode( __( 'End voice', 'widrow-ai' ) ); ?>,
 			voiceLogEmpty: <?php echo wp_json_encode( __( 'No voice events yet.', 'widrow-ai' ) ); ?>,
 			voicePlaybackFailed: <?php echo wp_json_encode( __( "Couldn't play %s's voice on this device (%e).", 'widrow-ai' ) ); ?>,
 			spoken: <?php echo wp_json_encode( __( 'Spoken', 'widrow-ai' ) ); ?>,

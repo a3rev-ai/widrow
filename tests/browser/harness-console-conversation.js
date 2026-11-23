@@ -21,6 +21,7 @@ const RENDER = s('renderMessages', l => l.includes('\t// Render messages'), l =>
 const RECOVER = s('recoverTurn', l => l.includes("// V-S1's client half (7.6.9)"), l => l.includes('// ── C3b: the installed app keeps up'), ['async function recoverTurn']);
 const INFO = s('info banner', l => l.includes('\t// Show info'), l => l.includes('// Smart scroll'), ['function showInfo', 'function showError']);
 const BUTTON = s('send button', l => l.includes('// Update send button state.'), l => l.includes('// The Stop button end'), ['function updateSendButton']);
+const CLICK = s('send button click', l => l.startsWith("\tsendBtn.addEventListener('click'"), l => l.includes('\t// Show info'), ['micTap()', 'requestStop()']);
 const SEND = s('send path', l => l.startsWith('\tasync function sendMessage() {'), l => l.includes('// SHARE MODAL'), ['async function sendMessageStreaming', 'function showConfirmChip']);
 const VOICE = extract.voice();
 const RELEASE = extract.release();
@@ -52,7 +53,7 @@ const TAIL = `
 	initVoice();
 	consolePages.push({ route: 'documents', el: document.getElementById('docsPage') });
 	return {
-		sendMessage: sendMessage, resetToNewChat: resetToNewChat, loadConversation: loadConversation, quietEnough: quietEnough, showPage: showPage,
+		sendMessage: sendMessage, resetToNewChat: resetToNewChat, updateSendButton: updateSendButton, loadConversation: loadConversation, quietEnough: quietEnough, showPage: showPage,
 		state: function () { return { talk: typeof talk === 'undefined' ? undefined : talk, thread: currentConversationId,
 			messages: messages, on: conversationOn, mic: micBtn.dataset.state }; }
 	};`;
@@ -148,7 +149,7 @@ function boot(opts) {
 	};
 	const names = Object.keys(deps);
 	const api = new window.Function(...names, HEAD + PARSER + '\n' + TOOL_LABELS + '\n' + ESCAPE + '\n' + REQUEST + '\n' + INFO + '\n' +
-		RECOVER + '\n' + TOOL_ROWS + '\n' + BUTTON + '\n' + STATUS + '\n' + LOAD + '\n' + SHELL + '\n' + NEW_CHAT + '\n' + RELEASE + '\n' + RENDER + '\n' +
+		RECOVER + '\n' + TOOL_ROWS + '\n' + BUTTON + '\n' + CLICK + '\n' + STATUS + '\n' + LOAD + '\n' + SHELL + '\n' + NEW_CHAT + '\n' + RELEASE + '\n' + RENDER + '\n' +
 		VOICE + '\n' + SEND + TAIL)(...names.map(k => deps[k]));
 	const orb = () => document.querySelector('.talk-orb');
 	return {
@@ -156,6 +157,12 @@ function boot(opts) {
 		last: () => talks[talks.length - 1],
 		// The tap, and whether the mint and the conversation happened inside it, before any await.
 		tap: () => { inTap = true; $('micBtn').click(); inTap = false; },
+		// The button at the box's end, tapped; typing into the box (what its input listener does).
+		press: () => { inTap = true; $('sendBtn').click(); inTap = false; },
+		type: text => { $('composerInput').value = text; api.updateSendButton(); },
+		// What shows: the button's role, name, tooltip and whether it is enabled, and whether the mic shows.
+		shows: () => ({ role: $('sendBtn').dataset.voice || 'today', name: $('sendBtn').getAttribute('aria-label'),
+			title: $('sendBtn').getAttribute('title'), enabled: !$('sendBtn').disabled, mic: !$('micBtn').hidden }),
 		idle: () => { const r = idle; idle = []; r.forEach(f => f()); },
 		info: () => $('infoBanner').classList.contains('visible') ? $('infoBanner').textContent : '',
 		error: () => $('errorBanner').classList.contains('visible') ? $('errorBanner').textContent : '',
@@ -546,6 +553,94 @@ async function run(label, fn) {
 		await settle();
 		const leak = t.logs.filter(l => l.indexOf(GRANT) > -1 || l.indexOf(ROOM_ADDR) > -1);
 		check('no token or room address in any log', leak.length === 0, JSON.stringify(leak));
+	});
+
+	// ── The button at the box's end: Start voice / Send / End voice where the mode is on ──
+	const J = JSON.stringify;
+	const TODAY = { role: 'today', name: 'Send message', title: null, enabled: false, mic: true };
+	await run('start voice', async () => {
+		const t = boot({ thread: 'th-1' });
+		await settle();
+		check('mode on, box empty: one button "Start voice" (name and tooltip), enabled; no mic',
+			J(t.shows()) === J({ role: 'start', name: 'Start voice', title: 'Start voice', enabled: true, mic: false }), J(t.shows()));
+		t.press();
+		const mint = t.calls.find(c => c.url === DOOR + '/voice/room');
+		check('a tap on Start voice starts the conversation inside its own handler, the mint sent before any await',
+			t.talks.length === 1 && t.talks[0].inTap && mint && mint.inTap && t.rec.starts === 0, J({ talks: t.talks.length, mint }));
+		await settle();
+		check('in a conversation, box empty: the same button is "End voice"; no mic',
+			J(t.shows()) === J({ role: 'end', name: 'End voice', title: 'End voice', enabled: true, mic: false }), J(t.shows()));
+		t.type('What else?');
+		check('in a conversation, words typed: the same button is Send', J(t.shows()) === J({ role: 'send', name: 'Send message', title: null, enabled: true, mic: false }), J(t.shows()));
+		t.press();
+		await settle();
+		check('…and it sends, the conversation kept on; the box empty again: End voice',
+			t.streams().length === 1 && t.streams()[0].body.messages.slice(-1)[0].content === 'What else?' && t.last().ended === 0 &&
+			t.api.state().talk && t.shows().role === 'end', J({ streams: t.streams().length, ended: t.last().ended, now: t.shows() }));
+		t.press();
+		await settle();
+		check('End voice ends it, as the mic tap did; back to Start voice', t.last().ended === 1 && !t.api.state().talk && t.shows().role === 'start',
+			J({ ended: t.last().ended, now: t.shows() }));
+	});
+	await run('start voice typing', async () => {
+		const t = boot({ thread: 'th-1' });
+		await settle();
+		t.type('Hello');
+		check('mode on, words typed: Send', J(t.shows()) === J({ role: 'send', name: 'Send message', title: null, enabled: true, mic: false }), J(t.shows()));
+		t.type('  ');
+		check('the box cleared: Start voice again', t.shows().role === 'start' && t.shows().name === 'Start voice', J(t.shows()));
+		t.type('Hello');
+		t.press();
+		await settle();
+		check('Send sends a typed message, no conversation', t.streams().length === 1 && t.talks.length === 0 && t.shows().role === 'start',
+			J({ streams: t.streams().length, talks: t.talks.length, now: t.shows() }));
+	});
+	for (const [why, opts] of [['the mode is off', { status: false }], ['the Voice button is on the device voice', { mode: 'device' }],
+		['a WordPress site with no host', { wordpress: true }]]) {
+		await run('today ' + why, async () => {
+			const t = boot(opts);
+			await settle();
+			t.type('');
+			const empty = t.shows();
+			t.type('Hello');
+			const typed = t.shows();
+			check('where ' + why + ': today\'s Send and today\'s mic, unchanged', J(empty) === J(TODAY) &&
+				J(typed) === J(Object.assign({}, TODAY, { enabled: true })), J({ empty, typed }));
+		});
+	}
+	await run('voice button', async () => {
+		const t = boot({ mode: 'off' });
+		await settle();
+		const before = t.shows().role;
+		t.document.getElementById('voiceBtn').click();   // off → her voice
+		check('the Voice button turned to her voice: Start voice appears', before === 'today' && t.shows().role === 'start', J({ before, now: t.shows() }));
+	});
+	await run('start voice failed', async () => {
+		const t = boot({ thread: 'th-1', failAt: 'connect' });
+		await settle();
+		t.press();
+		await settle();
+		check('the mode fails for the page: today\'s Send and mic from then on', J(t.shows()) === J(TODAY), J(t.shows()));
+	});
+	await run('start voice busy', async () => {
+		const t = boot({ thread: 'th-1' });
+		await settle();
+		t.press();
+		t.last().finish('busy', true);
+		await settle();
+		check('the busy fallback: the tap goes on as today\'s voice, said as before, with today\'s mic to end it',
+			t.rec.starts === 1 && /busy/.test(t.info()) && t.shows().role === 'today' && t.shows().mic, J(t.shows()));
+		t.tap();   // ends today's voice
+		await settle();
+		check('…and the next tap is Start voice again', t.shows().role === 'start', J(t.shows()));
+	});
+	await run('start voice busy needs a tap', async () => {
+		const t = boot({ thread: 'th-1', tapOnly: true });
+		await settle();
+		t.press();
+		t.last().finish('busy', true);
+		await settle();
+		check('busy where today\'s voice wants a tap: today\'s mic for that next tap', t.shows().role === 'today' && t.shows().mic, J(t.shows()));
 	});
 
 	console.log('Console conversation mode (harness-console-conversation.js)');

@@ -35,6 +35,8 @@
 		talkNotUnderstood: "I couldn't make that out. You can type your message below instead.",
 		talkLost: 'The conversation was cut off. Tap the mic to talk again.',
 		talkBusy: 'Conversations are busy right now, so the microphone works as usual.',
+		startVoice: 'Start voice',
+		endVoice: 'End voice',
 		clearChat: 'Clear conversation & start fresh',
 		clearConfirmTitle: 'Clear conversation?',
 		clearConfirmDesc:
@@ -650,12 +652,20 @@
 		els.micBtn = micBtn;
 		form.appendChild(micBtn);
 
-		// Send button.
+		// Send button. Where conversation mode is on it is also the way to talk (talkButton).
 		var sendBtn = el('button', 'def-cc-composer-send');
 		sendBtn.type = 'submit';
 		sendBtn.setAttribute('aria-label', 'Send message');
 		sendBtn.innerHTML =
-			'<svg viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>';
+			'<svg class="def-cc-send-icon" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>'
+			+ '<svg class="def-cc-send-wave" viewBox="0 0 24 24"><line x1="4" y1="10" x2="4" y2="14"/><line x1="8" y1="6" x2="8" y2="18"/><line x1="12" y1="3" x2="12" y2="21"/><line x1="16" y1="7" x2="16" y2="17"/><line x1="20" y1="10" x2="20" y2="14"/></svg>'
+			+ '<svg class="def-cc-send-end" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>';
+		// Start or End voice is the mic's tap, in this same tap: no submit.
+		sendBtn.addEventListener('click', function (e) {
+			if (!sendBtn.classList.contains('def-cc-composer-send--start') && !sendBtn.classList.contains('def-cc-composer-send--end')) return;
+			e.preventDefault();
+			handleMicClick();
+		});
 		els.sendBtn = sendBtn;
 		form.appendChild(sendBtn);
 
@@ -2033,7 +2043,10 @@
 				if (!data || data.enabled !== true || destroyed) return;
 				enableVoice();
 				talkMode = data.conversation === true;
-				if (talkMode) loadRoomClient();
+				if (talkMode) {
+					loadRoomClient();
+					updateSendButton();
+				}
 			})
 			.catch(function () {
 				untrackAbort(controller);
@@ -2069,6 +2082,7 @@
 		els.micBtn.setAttribute('aria-label', placeholder || t('micStart'));
 		if (!composerPlaceholder) composerPlaceholder = els.input.placeholder;
 		els.input.placeholder = placeholder || composerPlaceholder;
+		if (talkMode) updateSendButton();
 	}
 
 	// A long press (or right-click) on the mic shows what the phone did with the voice —
@@ -2139,6 +2153,7 @@
 			else msg = t('micFailed').replace('%e', (name && name !== 'Error' ? name : (e && e.message)) || 'unknown');
 			appendMessage('assistant', msg);
 		});
+		if (talkMode) updateSendButton();   // a tap that goes on as the voice above has the mic back for it
 	}
 
 	function endConversation(message) {
@@ -2346,6 +2361,7 @@
 		if (window.LivekitClient || !config.liveKitUrl || !window.RTCPeerConnection) return;
 		var script = document.createElement('script');
 		script.src = config.liveKitUrl;
+		script.onload = updateSendButton;
 		document.head.appendChild(script);
 	}
 
@@ -2355,10 +2371,26 @@
 		return m ? m[1] + '/api/customer/voice/room' : '';
 	}
 
+	// The mode is on for this page: the button at the box's end is the way to talk.
+	function talkOn() {
+		return talkMode && !talkFailed && !!window.RTCPeerConnection && !!window.LivekitClient;
+	}
+
 	// The mint binds the room to the token's chat, so it needs a fresh token for the chat open.
 	function canTalk() {
-		return talkMode && !talkFailed && !!window.RTCPeerConnection && !!window.LivekitClient &&
-			streamTokenLeft() >= 30000 && !!roomUrl();
+		return talkOn() && streamTokenLeft() >= 30000 && !!roomUrl();
+	}
+
+	// Where the mode is on, Send is the one button to talk with, and the mic is not shown: with
+	// the box empty it starts a conversation ('start') or ends the one on ('end'); with words or
+	// files in it, it is Send ('send'). '' is today's Send and mic: the mode off or failed, or a
+	// tap gone on as the voice above.
+	function talkButton() {
+		if (!voiceRecorder || !els.micBtn) return '';
+		var talking = els.micBtn.dataset.state === 'conversation';
+		if (!talking && (!talkOn() || conversationOn)) return '';
+		var typed = els.input.value.trim() && !els.input.classList.contains('def-cc-suggestion-text');
+		return typed || stagedFiles.length ? 'send' : talking ? 'end' : 'start';
 	}
 
 	// A room that made a new chat is read, and typed into, on a token for that chat.
@@ -5170,6 +5202,7 @@
 		if (els.sendBtn) els.sendBtn.disabled = disabled;
 		if (els.attachBtn) els.attachBtn.disabled = disabled;
 		if (els.micBtn) els.micBtn.disabled = disabled && !conversationOn && !talk;
+		if (talkButton()) updateSendButton();
 		// Welcome chips share the composer's disabled state — without this,
 		// taps during sending would silently no-op (chips look tappable
 		// but the click handler early-returns).
@@ -5187,7 +5220,18 @@
 		var hasFiles = stagedFiles.some(function (f) {
 			return f.status === 'staged';
 		});
-		els.sendBtn.disabled = isComposerDisabled || (!hasText && !hasFiles);
+		var role = talkButton();
+		var voice = role === 'start' || role === 'end';
+		els.sendBtn.disabled = voice ? role === 'start' && isComposerDisabled : isComposerDisabled || (!hasText && !hasFiles);
+		if (voiceRecorder) els.micBtn.style.display = role ? 'none' : '';
+		setState(els.sendBtn, 'def-cc-composer-send--talk', !!role);
+		setState(els.sendBtn, 'def-cc-composer-send--start', role === 'start');
+		setState(els.sendBtn, 'def-cc-composer-send--end', role === 'end');
+		// Set only when it changes: a screen reader hears the new name once.
+		var name = role === 'start' ? t('startVoice') : role === 'end' ? t('endVoice') : 'Send message';
+		if (els.sendBtn.getAttribute('aria-label') !== name) els.sendBtn.setAttribute('aria-label', name);
+		if (voice) els.sendBtn.title = name;
+		else els.sendBtn.removeAttribute('title');
 	}
 
 	function autoResizeInput() {

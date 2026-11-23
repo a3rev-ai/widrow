@@ -846,6 +846,36 @@
 	stroke-linejoin: round;
 }
 
+/* Conversation mode on: Send is one round button, a size up from the mic, and the way to
+   talk: a voice wave with the box empty (Start voice), the stop mark while a conversation
+   is on (End voice), the send arrow once there are words. */
+.def-cc-composer-send--talk {
+	width: 48px;
+	height: 48px;
+	border-radius: 50%;
+}
+
+.def-cc-composer-send--talk svg {
+	width: 22px;
+	height: 22px;
+}
+
+.def-cc-composer-send .def-cc-send-wave,
+.def-cc-composer-send .def-cc-send-end,
+.def-cc-composer-send--start .def-cc-send-icon,
+.def-cc-composer-send--end .def-cc-send-icon {
+	display: none;
+}
+
+.def-cc-composer-send--start .def-cc-send-wave {
+	display: block;
+}
+
+.def-cc-composer-send--end .def-cc-send-end {
+	display: block;
+	fill: currentColor;
+}
+
 .def-cc-composer-attach,
 .def-cc-composer-mic {
 	display: inline-flex;

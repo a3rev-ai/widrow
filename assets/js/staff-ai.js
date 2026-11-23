@@ -1293,11 +1293,21 @@ function t(key, fallback) {
 	// it asks DEF to stop the reply, and it reads "Stopping…" until the turn's last frame.
 	var stopTurn = null;   // { thread, turn, stopping } — the running turn the button stops
 	function updateSendButton() {
-		sendBtn.classList.toggle('is-stop', !!stopTurn);
-		sendBtn.setAttribute('aria-label', !stopTurn ? t('sendMessage', 'Send message')
-			: stopTurn.stopping ? t('stopping', 'Stopping…') : t('stop', 'Stop'));
-		sendBtn.disabled = stopTurn ? stopTurn.stopping
+		var role = talkButton();
+		var voice = role === 'start' || role === 'end';
+		sendBtn.classList.toggle('is-stop', !!stopTurn && !voice);
+		// Set only when it changes: a screen reader hears the new name once.
+		var name = role === 'start' ? t('startVoice', 'Start voice') : role === 'end' ? t('endVoice', 'End voice')
+			: !stopTurn ? t('sendMessage', 'Send message') : stopTurn.stopping ? t('stopping', 'Stopping…') : t('stop', 'Stop');
+		if (sendBtn.getAttribute('aria-label') !== name) sendBtn.setAttribute('aria-label', name);
+		sendBtn.disabled = role === 'start' ? isLoading || isReadOnly : role === 'end' ? false
+			: stopTurn ? stopTurn.stopping
 			: (!composerInput.value.trim() && !hasActiveFiles()) || isLoading || isReadOnly;
+		if (role) sendBtn.dataset.voice = role;
+		else delete sendBtn.dataset.voice;
+		if (voice) sendBtn.title = name;
+		else sendBtn.removeAttribute('title');
+		if (micBtn && speaker) micBtn.hidden = !!role;
 	}
 
 	async function requestStop() {
@@ -1344,7 +1354,11 @@ function t(key, fallback) {
 		}
 	});
 
-	sendBtn.addEventListener('click', function () { if (stopTurn) requestStop(); else sendMessage(); });
+	sendBtn.addEventListener('click', function () {
+		if (sendBtn.dataset.voice === 'start' || sendBtn.dataset.voice === 'end') micTap();   // the mic's tap, in this tap
+		else if (stopTurn) requestStop();
+		else sendMessage();
+	});
 
 	// Show info
 	function showInfo(msg) {
@@ -2964,6 +2978,7 @@ function t(key, fallback) {
 		micLabel.textContent = label || '';
 		micLabel.hidden = !label;
 		micBtn.setAttribute('aria-label', label || t('micStart', 'Speak'));
+		if (talkMode) updateSendButton();
 	}
 
 	function initVoice() {
@@ -3017,6 +3032,7 @@ function t(key, fallback) {
 				speaker.setMode(next);
 				try { localStorage.setItem(VOICE_MODE_KEY, next); } catch (e) { /* storage blocked */ }
 				paint();
+				if (talkMode) updateSendButton();   // only her voice holds conversations
 				showInfo(voiceModeLabel(next));
 			});
 		}
@@ -3028,24 +3044,26 @@ function t(key, fallback) {
 			onSilence: finishRecording,
 			onIdle: function () { endConversation(t('micClosedIdle', 'The mic closed — tap it to speak again.')); }
 		});
-		micBtn.addEventListener('click', function () {
-			if (talk) { endTalk(); return; }
-			if (voiceRecorder.isRecording()) { finishRecording(); return; }
-			if (conversationOn) { endConversation(); return; }   // she is answering or speaking
-			if (isLoading || isReadOnly) return;
-			if (!DefVoice.micAllowedBySite()) {
-				// The site's own security headers forbid it: no prompt will ever appear,
-				// and only the site admin can change that (a3rev.com, 2026-09-07).
-				showError(t('micBlockedBySite', "This site's security settings block the microphone for every visitor (Permissions-Policy). The site admin needs to allow it for this site."));
-				return;
-			}
-			if (talkSkip) talkSkip = false;
-			else if (canTalk()) { startTalk(); return; }
-			speaker.stop();
-			speaker.unlock();   // inside the tap: iOS lets audio start only from a gesture
-			conversationOn = true;
-			listen(true);
-		});
+		micBtn.addEventListener('click', micTap);
+	}
+
+	function micTap() {
+		if (talk) { endTalk(); return; }
+		if (voiceRecorder.isRecording()) { finishRecording(); return; }
+		if (conversationOn) { endConversation(); return; }   // she is answering or speaking
+		if (isLoading || isReadOnly) return;
+		if (!DefVoice.micAllowedBySite()) {
+			// The site's own security headers forbid it: no prompt will ever appear,
+			// and only the site admin can change that (a3rev.com, 2026-09-07).
+			showError(t('micBlockedBySite', "This site's security settings block the microphone for every visitor (Permissions-Policy). The site admin needs to allow it for this site."));
+			return;
+		}
+		if (talkSkip) talkSkip = false;
+		else if (canTalk()) { startTalk(); return; }
+		speaker.stop();
+		speaker.unlock();   // inside the tap: iOS lets audio start only from a gesture
+		conversationOn = true;
+		listen(true);
 	}
 
 	// fromTap: the first listen of a conversation runs inside the user's tap; the
@@ -3319,10 +3337,23 @@ function t(key, fallback) {
 		if (talkMode || data.voice_conversation !== true || !host || typeof host.conversation !== 'function') return;
 		talkMode = true;
 		if (typeof host.conversation.prepare === 'function') host.conversation.prepare();   // loads the client before the tap
+		updateSendButton();
 	}
 
 	function canTalk() {
 		return talkMode && !talkFailed && !!window.RTCPeerConnection && speaker.getMode() === 'server';
+	}
+
+	// Where the mode is on, Send is the one button to talk with, and the mic is not shown: with
+	// the box empty it starts a conversation ('start') or ends the one on ('end'); with words or
+	// files in it, or a reply's Stop, it is today's button ('send'). '' is today's Send and mic:
+	// the mode off or failed, or a tap gone on as the voice above.
+	function talkButton() {
+		if (!speaker) return '';
+		var talking = micBtn.dataset.state === 'conversation';
+		if (!talking && (!canTalk() || talkSkip || conversationOn)) return '';
+		var typed = composerInput.value.trim() && !composerInput.classList.contains('staff-ai-suggestion-text');
+		return typed || stagedFiles.length || (stopTurn && !talking) ? 'send' : talking ? 'end' : 'start';
 	}
 
 	// Inside the mic tap, before any await: the host unlocks the phone's audio there.
@@ -3463,11 +3494,13 @@ function t(key, fallback) {
 			conversationOn = true;
 			listen().then(function () {
 				if (!conversationOn) talkSkip = true;
+				updateSendButton();
 				showInfo(t('talkBusy', 'Voice conversation is busy right now, so the microphone works as usual.'));
 			});
 		} else {
 			showInfo(t('talkStopped', 'Voice stopped unexpectedly. Tap the mic to start again.'));
 		}
+		updateSendButton();   // a failed mode, or a tap gone on as the voice above, has the mic back
 	}
 
 	// A typed message's reply plays with the room's microphone muted, so the room does not
