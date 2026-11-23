@@ -1142,18 +1142,49 @@ async function boot(opts) {
   check('a failed file chip with the box empty: today\'s Send and today\'s mic, as with the mode off',
     !!h.root.querySelector('.def-cc-attachment-chip--failed') && today(h), show(shows(h)));
 
-  // ── A suggestion in the box is sent by Send, as today ──
+  // ── A suggestion left in the box after a reply counts as empty; Enter still sends it ──
+  const SUGGEST = [{ type: 'text_delta', text: 'Typed reply.' },
+    { type: 'done', thread_id: 'thr-typed', choices: [{ message: { content: 'Typed reply.' } }] }, { type: 'suggestions', suggestion: 'Tell me more' }];
   h = await boot();
-  h.typedEvents = [{ type: 'suggestions', suggestion: 'Tell me more' },
-    { type: 'done', thread_id: 'thr-typed', choices: [{ message: { content: 'Typed reply.' } }] }];
+  h.typedEvents = SUGGEST;
   await h.send('Hello');
   const ghost = box(h).value;
-  check('a suggestion in the box: the button is Send, enabled', ghost === 'Tell me more' &&
-    show(shows(h)) === show({ role: 'send', name: 'Send message', title: null, enabled: true, mic: false }), ghost + ' ' + show(shows(h)));
+  check('a suggestion left in the box after a reply: the button is Start voice; no mic', ghost === 'Tell me more' &&
+    show(shows(h)) === show({ role: 'start', name: 'Start voice', title: 'Start voice', enabled: true, mic: false }), ghost + ' ' + show(shows(h)));
+  box(h).dispatchEvent(new h.w.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+  await sleep(80);
+  check('…and Enter sends the suggestion, as today', h.typed.length === 2 && h.typed[1].messages.slice(-1)[0].content === 'Tell me more' &&
+    h.rooms.length === 0, show(h.typed.map(b => b.messages.slice(-1)[0].content)));
+  h = await boot();
+  btn(h).click();
+  await sleep(40);
+  h.typedEvents = SUGGEST;
+  type(h, 'Hello');
   btn(h).click();
   await sleep(80);
-  check('…and a tap sends the suggestion, no conversation', h.typed.length === 2 && h.typed[1].messages.slice(-1)[0].content === 'Tell me more' &&
-    h.rooms.length === 0, show(h.typed.map(b => b.messages.slice(-1)[0].content)));
+  check('in a conversation, a suggestion left after a typed reply: End voice', box(h).value === 'Tell me more' && shows(h).role === 'end',
+    box(h).value + ' ' + show(shows(h)));
+  btn(h).click();
+  await sleep(20);
+  check('…and a tap ends the conversation', h.disconnects === 1, 'disconnects=' + h.disconnects);
+
+  // ── In a conversation, a chip that cannot be sent brings today's mic back as the end: the hint says so ──
+  h = await boot({ uploads: true });
+  btn(h).click();
+  await sleep(40);
+  const bad2 = new h.w.File(['x'], 'tool.exe', { type: 'application/octet-stream' });
+  const paste2 = new h.w.Event('paste', { bubbles: true, cancelable: true });
+  paste2.clipboardData = { items: [{ kind: 'file', getAsFile: () => bad2 }] };
+  box(h).dispatchEvent(paste2);
+  await sleep(20);
+  check('in a conversation, a failed chip with the box empty: the mic ends it, and the hint names the mic',
+    !!h.root.querySelector('.def-cc-attachment-chip--failed') && shows(h).mic && shows(h).role === 'today' &&
+      box(h).placeholder === 'Speak, or type \u2014 tap the mic to end' && h.mic().getAttribute('aria-label') === box(h).placeholder,
+    show(shows(h)) + ' ' + box(h).placeholder);
+  btn(h).click();   // nothing: a disabled Send
+  h.tap();
+  await sleep(20);
+  check('…and the mic ends it', h.disconnects === 1, 'disconnects=' + h.disconnects);
 
   // ── After a fallback, the lines say what to tap; focus follows the control ──
   h = await boot({ clock: true, noEmployee: true });

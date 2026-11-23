@@ -1308,7 +1308,7 @@ function t(key, fallback) {
 		if (voice) sendBtn.title = name;
 		else sendBtn.removeAttribute('title');
 		if (micBtn && speaker) {
-			if (role && document.activeElement === micBtn) sendBtn.focus();   // focus is not dropped to the page
+			if (role && document.activeElement === micBtn) (sendBtn.disabled ? composerInput : sendBtn).focus();   // focus is not dropped to the page
 			micBtn.hidden = !!role;
 			// In a conversation the hint names whichever control ends it: the button, or the mic
 			// while a typed reply streams (the button is Stop then).
@@ -3363,7 +3363,7 @@ function t(key, fallback) {
 		var talking = micBtn.dataset.state === 'conversation';
 		if (!talking && (!canTalk() || talkSkip || conversationOn)) return '';
 		if (stopTurn) return talking ? '' : 'send';   // a reply streaming: Stop, and in a conversation the mic ends it
-		var typed = composerInput.value.trim();   // a suggestion too: Send sends it
+		var typed = composerInput.value.trim() && !composerInput.classList.contains('staff-ai-suggestion-text');   // a suggestion counts as empty
 		if (!typed && stagedFiles.some(function (f) { return f.status === 'failed' || f.status === 'uploading'; })) return '';
 		return typed || stagedFiles.length ? 'send' : talking ? 'end' : 'start';
 	}

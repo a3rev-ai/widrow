@@ -34,6 +34,7 @@
 		voiceNeedsStreaming: 'Voice needs a browser that can stream replies.',
 		voiceLogEmpty: 'No voice events yet.',
 		talking: 'Speak, or type. Tap the button to end.',
+		talkingMic: 'Speak, or type \u2014 tap the mic to end',
 		talkNotUnderstood: "I couldn't make that out. You can type your message below instead.",
 		talkLost: 'The conversation was cut off. Tap the button to talk again.',
 		talkBusy: 'Conversations are busy right now, so the microphone works as usual.',
@@ -2392,7 +2393,7 @@
 		if (!voiceRecorder || !els.micBtn) return '';
 		var talking = els.micBtn.dataset.state === 'conversation';
 		if (!talking && (!talkOn() || conversationOn)) return '';
-		var typed = els.input.value.trim();   // a suggestion too: Send sends it
+		var typed = els.input.value.trim() && !els.input.classList.contains('def-cc-suggestion-text');   // a suggestion counts as empty
 		if (!typed && stagedFiles.some(function (f) { return f.status === 'failed' || f.status === 'uploading'; })) return '';
 		return typed || stagedFiles.length ? 'send' : talking ? 'end' : 'start';
 	}
@@ -5232,8 +5233,15 @@
 		var role = talkButton();
 		var voice = role === 'start' || role === 'end';
 		els.sendBtn.disabled = voice ? role === 'start' && isComposerDisabled : isComposerDisabled || (!hasText && !hasFiles);
-		if (role && root && root.activeElement === els.micBtn) els.sendBtn.focus();   // focus is not dropped to the page
+		if (role && root && root.activeElement === els.micBtn) (els.sendBtn.disabled ? els.input : els.sendBtn).focus();   // focus is not dropped to the page
 		if (voiceRecorder) els.micBtn.style.display = role ? 'none' : '';
+		// In a conversation the hint names whichever control ends it: the button, or the mic
+		// where today's controls are back (a file chip that cannot be sent).
+		if (els.micBtn.dataset.state === 'conversation') {
+			var hint = role ? t('talking') : t('talkingMic');
+			els.input.placeholder = hint;
+			els.micBtn.setAttribute('aria-label', hint);
+		}
 		setState(els.sendBtn, 'def-cc-composer-send--talk', !!role);
 		setState(els.sendBtn, 'def-cc-composer-send--start', role === 'start');
 		setState(els.sendBtn, 'def-cc-composer-send--end', role === 'end');

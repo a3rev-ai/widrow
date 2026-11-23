@@ -21,6 +21,7 @@ const RENDER = s('renderMessages', l => l.includes('\t// Render messages'), l =>
 const RECOVER = s('recoverTurn', l => l.includes("// V-S1's client half (7.6.9)"), l => l.includes('// ── C3b: the installed app keeps up'), ['async function recoverTurn']);
 const INFO = s('info banner', l => l.includes('\t// Show info'), l => l.includes('// Smart scroll'), ['function showInfo', 'function showError']);
 const BUTTON = s('send button', l => l.includes('// Update send button state.'), l => l.includes('// The Stop button end'), ['function updateSendButton']);
+const KEYS = s('Enter handler', l => l.includes('// Keyboard handler: Enter to send'), l => l.includes('// Click in input clears suggestion'), ["e.key === 'Enter'"]);
 const CLICK = s('send button click', l => l.startsWith("\tsendBtn.addEventListener('click'"), l => l.includes('\t// Show info'), ['micTap()', 'requestStop()']);
 const SEND = s('send path', l => l.startsWith('\tasync function sendMessage() {'), l => l.includes('// SHARE MODAL'), ['async function sendMessageStreaming', 'function showConfirmChip']);
 const VOICE = extract.voice();
@@ -149,7 +150,7 @@ function boot(opts) {
 	};
 	const names = Object.keys(deps);
 	const api = new window.Function(...names, HEAD + PARSER + '\n' + TOOL_LABELS + '\n' + ESCAPE + '\n' + REQUEST + '\n' + INFO + '\n' +
-		RECOVER + '\n' + TOOL_ROWS + '\n' + BUTTON + '\n' + CLICK + '\n' + STATUS + '\n' + LOAD + '\n' + SHELL + '\n' + NEW_CHAT + '\n' + RELEASE + '\n' + RENDER + '\n' +
+		RECOVER + '\n' + TOOL_ROWS + '\n' + BUTTON + '\n' + KEYS + '\n' + CLICK + '\n' + STATUS + '\n' + LOAD + '\n' + SHELL + '\n' + NEW_CHAT + '\n' + RELEASE + '\n' + RENDER + '\n' +
 		VOICE + '\n' + SEND + TAIL)(...names.map(k => deps[k]));
 	const orb = () => document.querySelector('.talk-orb');
 	return {
@@ -711,12 +712,34 @@ async function run(label, fn) {
 		t.type('');
 		check('an uploaded file chip with the box empty: Send', t.shows().role === 'send', J(t.shows()));
 	});
+	const SUGGEST = [frame(1, { type: 'text_delta', text: 'Typed reply', step: 1 }), frame(2, { type: 'suggestions', suggestion: 'Tell me more' }),
+		frame(3, { type: 'done', choices: [{ message: { content: 'Typed reply' } }] })];
 	await run('suggestion', async () => {
-		const t = boot({ thread: 'th-1' });
+		const t = boot({ thread: 'th-1', stream: SUGGEST });
 		await settle();
-		t.document.getElementById('composerInput').classList.add('staff-ai-suggestion-text');
-		t.type('Tell me more');
-		check('a suggestion in the box: Send, enabled, as today', J(t.shows()) === J({ role: 'send', name: 'Send message', title: null, enabled: true, mic: false }), J(t.shows()));
+		await t.send('Hello');
+		await settle();
+		const box = t.document.getElementById('composerInput');
+		check('a suggestion left in the box after a reply: Start voice; no mic', box.value === 'Tell me more' &&
+			J(t.shows()) === J({ role: 'start', name: 'Start voice', title: 'Start voice', enabled: true, mic: false }), box.value + ' ' + J(t.shows()));
+		box.dispatchEvent(new t.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+		await settle();
+		check('…and Enter sends the suggestion, as today', t.streams().length === 2 && t.streams()[1].body.messages.slice(-1)[0].content === 'Tell me more' &&
+			t.talks.length === 0, J(t.streams().map(c => c.body.messages.slice(-1)[0].content)));
+	});
+	await run('suggestion in a conversation', async () => {
+		const t = boot({ thread: 'th-1', stream: SUGGEST });
+		await settle();
+		t.press();
+		await settle();
+		t.type('Hello');
+		t.press();
+		await settle();
+		check('in a conversation, a suggestion left after a typed reply: End voice',
+			t.document.getElementById('composerInput').value === 'Tell me more' && t.shows().role === 'end', J(t.shows()));
+		t.press();
+		await settle();
+		check('…and a tap ends the conversation', t.last().ended === 1, 'ended ' + t.last().ended);
 	});
 	await run('fallback lines and focus', async () => {
 		const t = boot({ thread: 'th-1' });
