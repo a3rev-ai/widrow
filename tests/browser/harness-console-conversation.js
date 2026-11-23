@@ -389,11 +389,11 @@ async function run(label, fn) {
 	});
 
 	const ENDINGS = [['goodbye', false, 'Conversation ended.'], ['stop_phrase', false, 'Conversation ended.'], ['end', false, 'Conversation ended.'],
-		['time_limit', false, 'The conversation reached its time limit. Tap the mic to start a new one.'],
-		['silence', false, 'Voice stopped unexpectedly. Tap the mic to start again.'], ['refused', false, 'Voice stopped unexpectedly. Tap the mic to start again.'],
-		['unknown', false, 'Voice stopped unexpectedly. Tap the mic to start again.'], ['mint', true, 'Voice stopped unexpectedly. Tap the mic to start again.'],
+		['time_limit', false, 'The conversation reached its time limit. Tap the button to start a new one.'],
+		['silence', false, 'Voice stopped unexpectedly. Tap the button to start again.'], ['refused', false, 'Voice stopped unexpectedly. Tap the button to start again.'],
+		['unknown', false, 'Voice stopped unexpectedly. Tap the button to start again.'], ['mint', true, 'Voice stopped unexpectedly. Tap the button to start again.'],
 		['microphone', true, 'The microphone is blocked for this site in your browser. Allow it in the site permissions (the icon beside the address bar) and try again.'],
-		['dropped', true, 'Voice stopped unexpectedly. Tap the mic to start again.']];
+		['dropped', true, 'Voice stopped unexpectedly. Tap the button to start again.']];
 	for (const [kind, error, line] of ENDINGS) {
 		await run('ending ' + kind, async () => {
 			const t = await started({ thread: 'th-1' });
@@ -570,6 +570,9 @@ async function run(label, fn) {
 		await settle();
 		check('in a conversation, box empty: the same button is "End voice"; no mic',
 			J(t.shows()) === J({ role: 'end', name: 'End voice', title: 'End voice', enabled: true, mic: false }), J(t.shows()));
+		check('the hint and the mic\'s name name the button, not the mic',
+			t.document.getElementById('micLabel').textContent === 'Speak, or type. Tap the button to end.' &&
+			t.document.getElementById('micBtn').getAttribute('aria-label') === 'Speak, or type. Tap the button to end.', t.document.getElementById('micLabel').textContent);
 		t.type('What else?');
 		check('in a conversation, words typed: the same button is Send', J(t.shows()) === J({ role: 'send', name: 'Send message', title: null, enabled: true, mic: false }), J(t.shows()));
 		t.press();
@@ -620,7 +623,8 @@ async function run(label, fn) {
 		await settle();
 		t.press();
 		await settle();
-		check('the mode fails for the page: today\'s Send and mic from then on', J(t.shows()) === J(TODAY), J(t.shows()));
+		check('the mode fails for the page: today\'s Send and mic from then on, told in today\'s words (the mic)',
+			J(t.shows()) === J(TODAY) && t.info() === 'Voice conversation is unavailable right now. Tap the mic to talk.', J(t.shows()) + ' ' + t.info());
 	});
 	await run('start voice busy', async () => {
 		const t = boot({ thread: 'th-1' });

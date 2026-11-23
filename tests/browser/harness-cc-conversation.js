@@ -430,7 +430,7 @@ async function boot(opts) {
   h.room().close();
   await sleep(10);
   check('her goodbye ends it: idle, the orb goes, the mic rests, nothing said as a fault',
-    h.orb().dataset.state === 'idle' && h.orbRow().style.display === 'none' && h.mic().dataset.state === 'idle' && h.bubbles().indexOf('The conversation was cut off. Tap the mic to talk again.') === -1);
+    h.orb().dataset.state === 'idle' && h.orbRow().style.display === 'none' && h.mic().dataset.state === 'idle' && h.bubbles().indexOf('The conversation was cut off. Tap the button to talk again.') === -1);
 
   // ── A second conversation: the line once; a tap ends it ──
   await h.start();
@@ -461,7 +461,7 @@ async function boot(opts) {
   h.room().close();
   await sleep(10);
   check('a room dropped mid-conversation: back to the chat with a line, the mode still on',
-    h.orbRow().style.display === 'none' && h.bubbles().indexOf('The conversation was cut off. Tap the mic to talk again.') !== -1);
+    h.orbRow().style.display === 'none' && h.bubbles().indexOf('The conversation was cut off. Tap the button to talk again.') !== -1);
   await h.start();
   check('the next tap starts a conversation again', h.rooms.length === 2 && h.starts.length === 0);
 
@@ -1057,6 +1057,7 @@ async function boot(opts) {
   await sleep(40);
   check('in a conversation, box empty: the same button is "End voice"; no mic',
     show(shows(h)) === show({ role: 'end', name: 'End voice', title: 'End voice', enabled: true, mic: false }), show(shows(h)));
+  check('the box\'s hint names the button, not the mic', box(h).placeholder === 'Speak, or type. Tap the button to end.', box(h).placeholder);
   type(h, 'Do you deliver?');
   check('in a conversation, words typed: the same button is Send', show(shows(h)) === show({ role: 'send', name: 'Send message', title: null, enabled: true, mic: false }), show(shows(h)));
   btn(h).click();
@@ -1080,7 +1081,7 @@ async function boot(opts) {
     shows(h).role === 'start', show({ typed: h.typed.length, rooms: h.rooms.length, now: shows(h) }));
 
   h = await boot({ conversation: false });
-  check('mode off: today\'s Send and today\'s mic, unchanged', today(h) &&
+  check('mode off: today\'s Send and today\'s mic, unchanged, and today\'s hint', today(h) && box(h).placeholder === 'Type your message...' &&
     btn(h).getAttribute('part') === 'composer-send', show(shows(h)) + ' part=' + btn(h).getAttribute('part'));
   type(h, 'Hello');
   check('mode off, words typed: today\'s Send, the mic beside it', today(h) && shows(h).enabled, show(shows(h)));
@@ -1094,8 +1095,8 @@ async function boot(opts) {
   h.connectFails = true;
   btn(h).click();
   await sleep(40);
-  check('the mode fails for the page: the tap goes on as today\'s voice, with today\'s mic to end it', h.starts.length === 1 &&
-    today(h), show(shows(h)));
+  check('the mode fails for the page: the tap goes on as today\'s voice, with today\'s mic to end it and today\'s hint', h.starts.length === 1 &&
+    today(h) && /^Listening/.test(box(h).placeholder), show(shows(h)) + ' ' + box(h).placeholder);
   h.tap();   // ends today's voice
   await sleep(10);
   check('…and after it, today\'s controls for the page\'s life', today(h), show(shows(h)));
@@ -1115,6 +1116,10 @@ async function boot(opts) {
     const blocks = css.split(/\.def-cc-composer-send--talk\s*\{/).slice(1).map(b => b.slice(0, b.indexOf('}')));
     const d = blocks[0] || '';
     const size = k => +((new RegExp('(^|[;\\s])' + k + ':\\s*(\\d+)px')).exec(d) || [])[2];
+    const shownBy = cls => (css.match(new RegExp('([^{}]*)\\{[^}]*display:\\s*block', 'g')) || []).filter(r => r.indexOf(cls) > -1).join(' ');
+    check('End voice shows the stop mark (a filled square), the wave only for Start voice',
+      /\.def-cc-composer-send--end \.def-cc-send-end/.test(shownBy('def-cc-send-end')) && !/--end/.test(shownBy('def-cc-send-wave')) &&
+        /\.def-cc-composer-send--start \.def-cc-send-wave/.test(shownBy('def-cc-send-wave')), shownBy('def-cc-send-'));
     check('the button at any width, a phone\'s included (one rule, no width query): round, 48 by 48, larger than the mic (44)',
       blocks.length === 1 && size('width') === 48 && size('height') === 48 && /border-radius:\s*50%/.test(d), d);
   })();

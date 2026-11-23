@@ -3054,7 +3054,7 @@ function t(key, fallback) {
 		if (isLoading || isReadOnly) return;
 		if (!DefVoice.micAllowedBySite()) {
 			// The site's own security headers forbid it: no prompt will ever appear,
-			// and only the site admin can change that (a3rev.com, 2026-09-07).
+			// and only the site admin can change that.
 			showError(t('micBlockedBySite', "This site's security settings block the microphone for every visitor (Permissions-Policy). The site admin needs to allow it for this site."));
 			return;
 		}
@@ -3386,7 +3386,7 @@ function t(key, fallback) {
 		}
 		talkOrb.hidden = false;
 		hideInfo();
-		setMicState('conversation', t('talking', 'Speak, or type — tap the mic to end'));
+		setMicState('conversation', t('talking', 'Speak, or type. Tap the button to end.'));
 		var c = window.StaffAIConfig.host.conversation(minted, {
 			onState: mine(function (state) {
 				talkState = talkOrb.dataset.state = state;
@@ -3482,7 +3482,7 @@ function t(key, fallback) {
 		if (kind === 'goodbye' || kind === 'stop_phrase' || kind === 'end') {
 			showInfo(t('voiceStopped', 'Conversation ended.'));
 		} else if (kind === 'time_limit') {
-			showInfo(t('talkTimeLimit', 'The conversation reached its time limit. Tap the mic to start a new one.'));
+			showInfo(t('talkTimeLimit', 'The conversation reached its time limit. Tap the button to start a new one.'));
 		} else if (kind === 'connect' || kind === 'load') {
 			talkFailed = true;
 			showInfo(t('talkUnavailable', 'Voice conversation is unavailable right now. Tap the mic to talk.'));
@@ -3498,7 +3498,7 @@ function t(key, fallback) {
 				showInfo(t('talkBusy', 'Voice conversation is busy right now, so the microphone works as usual.'));
 			});
 		} else {
-			showInfo(t('talkStopped', 'Voice stopped unexpectedly. Tap the mic to start again.'));
+			showInfo(t('talkStopped', 'Voice stopped unexpectedly. Tap the button to start again.'));
 		}
 		updateSendButton();   // a failed mode, or a tap gone on as the voice above, has the mic back
 	}

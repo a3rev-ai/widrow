@@ -1484,8 +1484,8 @@ body {
 }
 
 /* Conversation mode on: Send is a size up from the mic and the way to talk: a voice wave
-   with the box empty (Start voice), the wave on the live red while a conversation is on
-   (End voice), the send arrow once there are words. */
+   with the box empty (Start voice), the stop mark on the live red while a conversation is
+   on (End voice), the send arrow once there are words. */
 .send-btn[data-voice] {
 	width: 40px;
 	height: 40px;
@@ -1503,7 +1503,7 @@ body {
 }
 
 .send-btn[data-voice="start"] .wave-icon,
-.send-btn[data-voice="end"] .wave-icon {
+.send-btn[data-voice="end"] .stop-icon {
 	display: block;
 }
 

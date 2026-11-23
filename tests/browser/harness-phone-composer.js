@@ -203,7 +203,7 @@ const MATRIX = [
 		['attach', 'readback', 'model', 'send'], ['send'], false]
 ];
 const ICONS = { 'conversation mode, box empty: Start voice': ['wave-icon'], 'conversation mode, words typed: Send': ['send-icon'],
-	'in a conversation, box empty: End voice': ['wave-icon'] };
+	'in a conversation, box empty: End voice': ['stop-icon'] };
 MATRIX.forEach(function (m) {
 	const r = row(m[1]);
 	check('state ' + m[0] + ': shows ' + m[2].join(', ') + '; main ' + (m[3][0] || 'none') + (m[4] ? '; the pill is the row' : ''),
