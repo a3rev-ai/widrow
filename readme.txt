@@ -4,7 +4,7 @@ Tags: ai, chat, digital employee, ai assistant, customer support
 Requires at least: 6.2
 Tested up to: 7.1
 Requires PHP: 8.0
-Stable tag: 11.5.3
+Stable tag: 11.5.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -118,6 +118,9 @@ Chat messages, user display name, session context, and the visitor's IP address 
 4. Admin Settings — Branding, Chat Settings, Escalation, and Connection tabs
 
 == Changelog ==
+
+= 11.5.4 - 2026-11-24 =
+* Fix - In the Staff AI console, a voice conversation that ends after five minutes with nothing said now shows "Conversation ended." It used to show "Voice stopped unexpectedly.", as if something had gone wrong.
 
 = 11.5.3 - 2026-11-23 =
 * Feature - In voice conversation mode, Customer Chat and Staff AI start talking from one larger round button at the end of the message box, easy to tap with a thumb: with the box empty it shows a voice wave and is called Start voice, as soon as you type it becomes Send, and while a conversation is on it ends it. The small microphone is not shown there. Nothing changes on your site until the site owner has conversation mode on.

@@ -1,5 +1,8 @@
 *** Widrow AI Changelog ***
 
+= 11.5.4 - 2026/11/24 =
+* Fix - In the Staff AI console, a voice conversation that ends after five minutes with nothing said now shows "Conversation ended." It used to show "Voice stopped unexpectedly.", as if something had gone wrong.
+
 = 11.5.3 - 2026/11/23 =
 * Feature - In voice conversation mode, Customer Chat and Staff AI start talking from one larger round button at the end of the message box, easy to tap with a thumb: with the box empty it shows a voice wave and is called Start voice, as soon as you type it becomes Send, and while a conversation is on it ends it. The small microphone is not shown there. Nothing changes on your site until the site owner has conversation mode on.
 
