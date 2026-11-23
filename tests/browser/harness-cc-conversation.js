@@ -91,6 +91,7 @@ function fakeLiveKit(w, h) {
     };
     // The server closes the room: after her announced ending, or as a fault.
     r.close = () => { r.closed = true; r.state = 'disconnected'; r.emit('disconnected', DisconnectReason.UNKNOWN_REASON); };
+    r.replyDone = () => r.data('def.reply', { type: 'reply' });
     r.data = (topic, obj) => r.emit('dataReceived', new w.TextEncoder().encode(JSON.stringify(obj)), r.her, 0, topic);
     // Her words as a text stream: say() a piece, close() the segment.
     r.words = from => {
@@ -99,7 +100,8 @@ function fakeLiveKit(w, h) {
       r.text['lk.transcription']({ [Symbol.asyncIterator]: () => ({
         next: () => (queue.length ? Promise.resolve(queue.shift()) : new Promise(res => waiting.push(res))) }) },
         { identity: from || 'agent' });
-      return { say: t => feed({ done: false, value: t }), close: () => feed({ done: true }) };
+      return { say: t => feed({ done: false, value: t }), close: () => feed({ done: true }),
+        fail: () => (waiting.length ? waiting.shift() : () => {})(Promise.reject(Object.assign(new Error('x'), { name: 'NetworkError' }))) };
     };
   }
   return { Room, RoomEvent: { TrackSubscribed: 'trackSubscribed', TrackUnsubscribed: 'trackUnsubscribed',
@@ -182,7 +184,7 @@ async function boot(opts) {
       // A check holds the player busy (h.busy = a promise) to keep a reply sounding.
       whenIdle: () => h.busy || Promise.resolve() }),
     createRecorder: o => ({ start: live => { h.starts.push(live); return Promise.resolve(true); }, isRecording: () => false,
-      release() {}, stop: () => new Promise(() => {}) }),
+      release() { h.recorderReleases = (h.recorderReleases || 0) + 1; }, stop: () => new Promise(() => {}) }),
     toBase64: () => Promise.resolve('AAAA'), log: () => h.notes.slice(), note: line => h.notes.push(line),
   };
   const root = w.document.getElementById('host').attachShadow({ mode: 'open' });
@@ -244,12 +246,17 @@ async function boot(opts) {
   h = await boot({ storage: { 'def:wc_cart_token': 'cart-123' } });
   h.tap();
   const inTap = h.order.slice();
-  check('inside the tap, in the proof page\'s order: unlock, both elements primed, wake lock, room, startAudio; the mint only after',
+  check('inside the tap, in order: unlock, both elements primed, wake lock, room, startAudio; the mint only after',
     show(inTap.filter(s => s !== 'speakerUnlock')) === show(['unlock', 'silence', 'prime', 'prime', 'wakeLock', 'room', 'startAudio']),
     show(inTap));
   check('the orb shows grey (connecting) from the tap', h.orb().dataset.state === 'connecting' && h.orbRow().style.display === '');
   check('the line-shown flag is not written at the tap', h.w.localStorage.getItem('def:talk_line_shown') === null);
-  check('the visitor\'s line has no part a theme could reach', h.line().hasAttribute && !h.line().hasAttribute('part'));
+  check('the visitor\'s line has no part, nor any ancestor of it below the panel', (() => {
+    for (let node = h.line(); node && node.classList && !node.classList.contains('def-cc-panel'); node = node.parentNode) {
+      if (!node.hasAttribute || node.hasAttribute('part')) return false;
+    }
+    return !!h.line().parentNode;
+  })());
   await sleep(40);
   const mint = h.roomMints[0];
   check('the mint: POST beside the stream route, on the stream token, credentials omitted',
@@ -307,7 +314,7 @@ async function boot(opts) {
   check('a second segment before she answers joins the same message; a tag in it is text',
     show(userBubble()) === show(['Do you have the <b onclick="window.pwned=1">drill</b>? A cordless one.']) &&
       !h.root.querySelector('.def-cc-message--user b'), show(userBubble()));
-  const announced = () => Array.from(h.root.querySelectorAll('.def-cc-announcer > *')).map(n => n.textContent);
+  var announced = () => Array.from(h.root.querySelectorAll('.def-cc-announcer > *')).map(n => n.textContent);
   check('the visitor\'s spoken message is not said while it arrives', announced().filter(l => l.indexOf('A cordless one.') !== -1).length === 0, show(announced()));
   const words = h.room().words();
   words.say('The drill ');
@@ -322,6 +329,9 @@ async function boot(opts) {
   check('her captions are not the visitor\'s: one spoken bubble, the visitor\'s message unchanged',
     h.spokenBubbles().length === 1 && userBubble().length === 1, show(userBubble()));
   words.close();
+  await sleep(80);
+  check('her words done, no read yet: the read waits for the room\'s reply message', h.reads.length === 0, show(h.reads));
+  h.room().replyDone();
   await sleep(80);
   const read = h.reads[0];
   check('the reply ends: the after-reply read, GET on the token for the new chat, minted before it',
@@ -451,19 +461,23 @@ async function boot(opts) {
   await sleep(20);
   const part1 = h.room().words();
   part1.say('Let me check.'); part1.close();
-  await sleep(20);
+  h.room().her.isSpeaking = false;
+  await sleep(2000);   // a pause far past the speaking hold, inside one reply
+  h.room().her.isSpeaking = true;
   const part2 = h.room().words();
   part2.say('The drill is in stock.'); part2.close();
   await sleep(20);
-  check('no read while she is still speaking', h.reads.length === 0, show(h.reads));
+  check('a two-second pause between two segments of one reply reads nothing', h.reads.length === 0, show(h.reads));
   h.room().her.isSpeaking = false;
-  await sleep(600);
+  h.room().replyDone();
+  await sleep(100);
   check('a reply in two segments is read once, drawn once and adds to the cart once',
     h.reads.length === 1 && h.spokenBubbles().length === 0 && h.bubbles().filter(b => b === 'The drill is in stock.').length === 1 &&
       h.carts.length === 1, 'reads=' + h.reads.length + ' carts=' + h.carts.length + ' ' + show(h.bubbles()));
   const again = h.room().words();
   again.say('Anything else?'); again.close();
-  await sleep(600);
+  h.room().replyDone();
+  await sleep(100);
   check('a read that hands back a reply already drawn (the same id) draws nothing and adds nothing',
     h.reads.length === 2 && h.bubbles().filter(b => b === 'The drill is in stock.').length === 1 && h.carts.length === 1 &&
       h.spokenBubbles().length === 1, 'reads=' + h.reads.length + ' carts=' + h.carts.length);
@@ -475,7 +489,9 @@ async function boot(opts) {
   sheSays.say('Spoken answer'); sheSays.close();
   const over = h.room().words('visitor');
   over.say('Wait, one more thing'); over.close();
-  await sleep(600);
+  await sleep(10);
+  h.room().replyDone();
+  await sleep(100);
   const order = Array.from(h.root.querySelectorAll('.def-cc-message')).map(m => m.textContent.trim()).filter(Boolean);
   check('the written reply takes her spoken words\' place: the visitor\'s newer words stay below it',
     order.indexOf('Written answer.') !== -1 && order.indexOf('Written answer.') < order.indexOf('Wait, one more thing'), show(order));
@@ -485,8 +501,39 @@ async function boot(opts) {
   await h.start();
   const bye = h.room().words();
   bye.say('Goodbye.'); bye.close();
-  await sleep(600);
+  h.room().replyDone();
+  await sleep(100);
   check('the read says it has ended (her room message lost): the conversation ends', h.disconnects === 1 && h.orbRow().style.display === 'none');
+
+  // ── A words stream that errors, and a lost reply message ──
+  h = await boot({ readReply: { ended: false, reply: { id: 'r-c', content: 'Read anyway.', tool_outputs: [] } } });
+  await h.start();
+  const broken = h.room().words();
+  broken.say('Half a sen');
+  await sleep(10);
+  broken.fail();
+  await sleep(10);
+  check('her words stream fails: no read until the room says the reply is over', h.reads.length === 0);
+  h.room().replyDone();
+  await sleep(100);
+  check('…then read on the reply message all the same', h.reads.length === 1 && h.bubbles().indexOf('Read anyway.') !== -1, show(h.bubbles()));
+  h = await boot({ readReply: { ended: false, reply: { id: 'r-d', content: 'The last one.', tool_outputs: [] } } });
+  await h.start();
+  const lost = h.room().words();
+  lost.say('The last'); lost.close();
+  await sleep(20);
+  h.tap();   // the reply message never came
+  await sleep(100);
+  check('a lost reply message: the read at the end of the conversation draws it', h.reads.length === 1 && h.bubbles().indexOf('The last one.') !== -1, show(h.bubbles()));
+  h = await boot({ readReply: {} });
+  await h.start();
+  const unanswered = h.room().words('visitor');
+  unanswered.say('Hello? Anyone?'); unanswered.close();
+  await sleep(10);
+  h.tap();
+  await sleep(50);
+  check('the conversation ends before she answers: the visitor\'s spoken message is said then',
+    announced().filter(l => l.indexOf('Hello? Anyone?') !== -1).length === 1, show(announced()));
 
   // ── A typed stream that errors still opens the microphone again ──
   h = await boot();
@@ -552,8 +599,16 @@ async function boot(opts) {
         h.w.document.body.querySelectorAll('audio').length === 0,
       'mic=' + h.micStops + ' audio=' + h.closed + ' wake=' + h.wakeReleases);
   }
-  check('the loader tells the chat when it closes the panel',
-    /function closePanel\(\)[\s\S]*?DEFCustomerChat\.panelClosed\(\)[\s\S]*?\n\t}\n/.test(extract.customerChatLoader()));
+  check('the loader tells the chat when it closes the panel, and when it removes the widget',
+    /function closePanel\(\) \{[^]*?DEFCustomerChat\.panelClosed\(\)[^]*?\n\t}\n/.test(extract.customerChatLoader()) &&
+      /function destroy\(\) \{\n[^]*?DEFCustomerChat\.panelClosed\(\)[^]*?\n\t}\n/.test(extract.customerChatLoader()));
+  h = await boot({ conversation: false });
+  await h.start();
+  const before = h.recorderReleases || 0;
+  h.w.DEFCustomerChat.panelClosed();
+  await sleep(10);
+  check('today\'s hands-free voice: a closed panel releases the recorder and the mic rests, as a tap does',
+    (h.recorderReleases || 0) > before && h.mic().dataset.state === 'idle', 'releases=' + h.recorderReleases + ' mic=' + h.mic().dataset.state);
 
   // ── The visitor's line ──
   h = await boot({ lineBlocked: true });

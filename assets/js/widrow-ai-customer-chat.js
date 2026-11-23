@@ -1968,7 +1968,7 @@
 			body.speech_out = true;
 			if (lastUserText) body.audio_context = spokenContext();
 		} else if (talk) {
-			body.speech_out = true;   // a typed message in a conversation: its reply is spoken too (6d)
+			body.speech_out = true;   // a typed message in a conversation: its reply is spoken too
 		}
 
 		// Page Context Build Plan V1.1 Sub-PR C: splice the
@@ -2251,7 +2251,7 @@
 	// that changed the thread or left under five minutes, and after a refusal; a send
 	// with no fitting token, or one the platform refuses, goes through the site.
 	var streamToken = null;   // { token, exp, url, live, thread }
-	var minting = null;   // the mint in flight: a conversation waits on it (6d)
+	var minting = null;   // the mint in flight: a conversation waits on it
 	var mintEpoch = 0;
 
 	function mintStreamToken() {
@@ -2321,7 +2321,6 @@
 	var talkState = '';
 	var captionEl = null;      // the bubble her words fill as she says them
 	var spokenEls = [];        // her reply's bubbles so far: one per segment she speaks
-	var replyDue = false;      // her reply's words are done: read it once she stops speaking
 	var lastReplyId = '';      // a reply is drawn, and its add to cart carried out, once
 	var heardEl = null;        // the visitor's message, filled as they speak
 	var heardDone = '';        // its finished segments, until she answers
@@ -2369,7 +2368,8 @@
 
 	function showOrb() {
 		if (!els.orb) {
-			els.orb = el('div', 'def-cc-orb-row');
+			els.orb = document.createElement('div');   // no part: a site cannot hide the line with it
+			els.orb.className = 'def-cc-orb-row';
 			els.orbBall = els.orb.appendChild(el('div', 'def-cc-orb'));
 			els.orbLine = els.orb.appendChild(document.createElement('div'));   // no part: no theme reaches it
 			els.orbLine.className = 'def-cc-orb-line';
@@ -2390,12 +2390,12 @@
 	function startTalk() {
 		speaker.stop();
 		speaker.unlock();
-		// The page context as a typed turn sends it; the language only hints the turn's end.
-		var body = { thread_id: streamToken.thread, page_context: buildTurnRequest('', [], null).body.page_context,
-			cart_token: wcCartToken };
+		// The page context as a typed turn reads it; the language only hints the turn's end.
+		var body = { thread_id: streamToken.thread, cart_token: wcCartToken };
 		try { body.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone; } catch (e) {}
+		try { body.page_context = window.WidrowAiPageContextHelper.build(threadId || null); } catch (e) {}
 		if (navigator.language) body.language = navigator.language;
-		// Sent once the tap's own work is done (in conversation(), below), as the proof page does.
+		// Sent once the tap's own work is done (in conversation(), below).
 		var url = roomUrl(), token = streamToken.token;
 		var minted = Promise.resolve().then(function () {
 			return fetch(url, {
@@ -2429,7 +2429,7 @@
 				if (state === 'listening') {
 					try { localStorage.setItem(TALK_LINE_KEY, '1'); } catch (e) {}
 				}
-				if (state !== 'speaking') { playHeldSpeech(); readWhenDone(); }
+				if (state !== 'speaking') playHeldSpeech();
 			}),
 			onLevel: mine(function (heard, spoken) {
 				var level = talkState === 'speaking' ? spoken : heard;
@@ -2445,14 +2445,7 @@
 			}),
 			onCaption: mine(function (text, final) {
 				if (!captionEl) {
-					if (!spokenEls.length) {
-						// She answers: the visitor's message is whole, said once (as a spoken
-						// message is when its transcript fills it), and is that turn's for the history.
-						if (heardEl) announce(heardEl);
-						captionAsked = heardDone;
-						heardEl = null;
-						heardDone = '';
-					}
+					if (!spokenEls.length) answerStarts();
 					var msg = el('div', 'def-cc-message def-cc-message--assistant def-cc-message--spoken');
 					captionEl = msg.appendChild(el('div', 'def-cc-message-content'));
 					els.messages.appendChild(msg);
@@ -2461,12 +2454,10 @@
 				var follow = isAtEnd();
 				captionEl.textContent = text;   // her words as text, never markup
 				if (follow) scrollToBottom();
-				if (final) {
-					captionEl = null;
-					replyDue = true;
-					readWhenDone();
-				}
+				if (final) captionEl = null;
 			}),
+			// The room says her reply is over (spoken or cut off): the one read for it.
+			onReply: mine(function () { replyOver(); }),
 			onNotice: mine(function (kind) {
 				if (kind === 'not_understood') appendMessage('assistant', t('talkNotUnderstood'));
 			}),
@@ -2484,6 +2475,7 @@
 
 	// Every ending: back to the ordinary chat, the mic ready to start again.
 	function talkEnded() {
+		if (talkRoom) replyOver();   // in case the room's last reply message was lost
 		talkEpoch++;
 		talk = null;
 		talkRoom = '';
@@ -2491,19 +2483,26 @@
 		captionEl = heardEl = null;
 		heardDone = captionAsked = '';
 		spokenEls = [];
-		replyDue = false;
 		heldSpeech = [];
 		typedSpeaking = talkMuted = false;
 		if (els.orb) els.orb.style.display = 'none';
 		setMicState('idle');
 	}
 
-	// Once per reply: when her words are done and she has stopped speaking (a reply can come
-	// as several segments, a pause between them).
-	function readWhenDone() {
-		if (!replyDue || talkState === 'speaking') return;
-		replyDue = false;
+	// She answers (or the turn is over without her words): the visitor's message is whole,
+	// said once (as a spoken message is when its transcript fills it), and is that turn's
+	// for the history.
+	function answerStarts() {
+		if (heardEl) announce(heardEl);
+		captionAsked = heardDone;
+		heardEl = null;
+		heardDone = '';
+	}
+
+	function replyOver() {
+		if (!spokenEls.length) answerStarts();
 		readReply(spokenEls, talkRoom, captionAsked);
+		captionEl = null;
 		spokenEls = [];
 		captionAsked = '';
 	}
@@ -2579,7 +2578,8 @@
 	 * onState('connecting', then 'listening' whenever she is not speaking, 'speaking' while she
 	 * is, 'idle' once it is over), onLevel(in, out) each
 	 * frame, onCaption(text so far, final) for her words, onHeard(text so far, final) for the
-	 * visitor's own (optional), onNotice(kind) for `def.notice`,
+	 * visitor's own (optional), onReply() at `def.reply`, once per reply when its speech has
+	 * finished or was cut off (optional), onNotice(kind) for `def.notice`,
 	 * onEnded('goodbye' | 'stop_phrase' | 'silence' | 'refused' | 'unknown': her `def.ended`;
 	 * 'end': end() was called) and onError('mint' | 'connect' | 'microphone' | 'dropped');
 	 * exactly one of the last two, once, and nothing after it. The room token goes to the
@@ -2622,7 +2622,7 @@
 				if (over) lock.release(); else wakeLock = lock;
 			}, function () {});
 		}
-		// In the proof page's order, still inside the tap: the room made, its audio started.
+		// Still inside the tap, after the audio and the wake lock: the room made, its audio started.
 		var room = new LK.Room();
 		room.startAudio().catch(function () {});
 
@@ -2694,6 +2694,7 @@
 			if (track.kind === LK.Track.Kind.Audio) track.detach(publication.trackName === 'background_audio' ? workingAudio : herAudio);
 		});
 		room.on(RoomEvent.DataReceived, function (payload, participant, kind, topic) {
+			if (topic === 'def.reply') { if (cb.onReply) cb.onReply(); return; }
 			if (topic !== 'def.ended' && topic !== 'def.notice') return;
 			var data = {};
 			try { data = JSON.parse(new TextDecoder().decode(payload)) || {}; } catch (e) { /* unreadable: no reason */ }
@@ -2849,7 +2850,7 @@
 		// A line of the reply in the employee's own voice — or, when its synthesis failed
 		// server-side, the text alone for the device voice to read. A streamed line comes
 		// as parts of one seq, its closing part with no audio.
-		// A typed message's reply in a conversation (6d) is spoken too, by the same speaker.
+		// A typed message's reply in a conversation is spoken too, by the same speaker.
 		function speakFrame(evt) {
 			if (!speaker || !(spokenTurn || talk)) return;
 			var line = function () {
@@ -3429,7 +3430,7 @@
 			} catch (e) {}
 		}
 
-		// Save thread to localStorage. A reply read after a conversation's turn (6d) whose
+		// Save thread to localStorage. A reply read after a conversation's turn whose
 		// words the room did not give: null.
 		upsertThread(
 			threadId,
@@ -5436,7 +5437,8 @@
 		init: init,
 		destroy: destroy,
 		ask: ask,
-		// The loader closed the panel (it is inert, its controls out of reach): a conversation ends.
-		panelClosed: function () { if (talk) endConversation(); },
+		// The loader closed the panel or removed the widget: its controls are out of reach, so
+		// a conversation, or today's hands-free voice, ends as a tap on the mic ends it.
+		panelClosed: function () { if (conversationOn || talk) endConversation(); },
 	};
 })();

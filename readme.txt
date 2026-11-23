@@ -121,6 +121,7 @@ Chat messages, user display name, session context, and the visitor's IP address 
 
 = Unreleased =
 * Feature - Ready for the platform update that turns on conversation mode: in Customer Chat, a tap on the microphone starts a conversation that stays on, the visitor can talk over the employee, an orb shows whose turn it is, and typing still works. Where it is off or the browser cannot do it, the microphone works as before.
+* Fix - In Customer Chat, closing the chat panel, or a site removing the widget, now ends hands-free voice as a tap on the microphone does; before, the microphone could go on listening with no way to stop it.
 
 = 11.4.0 - 2026-11-20 =
 * Feature - Voice ends your turn as soon as the voice provider judges you have finished speaking, instead of always waiting for a pause, so the reply starts sooner. This works where the voice provider gives that signal; otherwise the turn ends after the pause, as before. Applies to Customer Chat's voice on your site and to Staff AI's voice in the Tenant Portal.
