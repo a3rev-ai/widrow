@@ -1310,6 +1310,13 @@ function t(key, fallback) {
 		if (micBtn && speaker) {
 			if (role && document.activeElement === micBtn) sendBtn.focus();   // focus is not dropped to the page
 			micBtn.hidden = !!role;
+			// In a conversation the hint names whichever control ends it: the button, or the mic
+			// while a typed reply streams (the button is Stop then).
+			if (micBtn.dataset.state === 'conversation') {
+				var hint = role ? t('talking', 'Speak, or type. Tap the button to end.') : t('talkingMic', 'Speak, or type — tap the mic to end');
+				micLabel.textContent = hint;
+				micBtn.setAttribute('aria-label', hint);
+			}
 		}
 	}
 

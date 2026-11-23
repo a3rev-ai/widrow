@@ -668,6 +668,8 @@ async function run(label, fn) {
 		await settle();
 		check('a typed reply streaming in a conversation: the button is Stop, and the mic shows as today\'s end control',
 			J(t.shows()) === J({ role: 'today', name: 'Stop', title: null, enabled: true, mic: true }), J(t.shows()));
+		const micHint = () => [t.document.getElementById('micLabel').textContent, t.document.getElementById('micBtn').getAttribute('aria-label')];
+		check('…and the mic\'s label and name say the mic ends it', J(micHint()) === J(['Speak, or type — tap the mic to end', 'Speak, or type — tap the mic to end']), J(micHint()));
 		t.press();
 		await settle();
 		check('…Stop stops the reply and keeps the conversation on', t.calls.some(c => /\/turns\/msg-1\/stop$/.test(c.url)) && t.last().ended === 0,
@@ -676,6 +678,7 @@ async function run(label, fn) {
 		live.close();
 		await settle();
 		check('…and the reply over, End voice is back and the mic hidden', J(t.shows()) === J({ role: 'end', name: 'End voice', title: 'End voice', enabled: true, mic: false }), J(t.shows()));
+		check('…its hint naming the button again', t.document.getElementById('micLabel').textContent === 'Speak, or type. Tap the button to end.', J(micHint()));
 	});
 	await run('mic ends while a typed reply streams', async () => {
 		const live = held();
