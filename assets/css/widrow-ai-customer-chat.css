@@ -882,9 +882,11 @@
 .def-cc-composer-mic[data-state="listening"],
 .def-cc-composer-mic[data-state="transcribing"],
 .def-cc-composer-mic[data-state="answering"],
+.def-cc-composer-mic[data-state="conversation"],
 .def-cc-composer-mic[data-state="listening"]:hover,
 .def-cc-composer-mic[data-state="transcribing"]:hover,
-.def-cc-composer-mic[data-state="answering"]:hover {
+.def-cc-composer-mic[data-state="answering"]:hover,
+.def-cc-composer-mic[data-state="conversation"]:hover {
 	background: var(--def-cc-primary);
 	color: var(--def-cc-primary-text);
 }
@@ -899,13 +901,48 @@
 }
 
 .def-cc-composer-mic .def-cc-mic-stop,
-.def-cc-composer-mic[data-state="answering"] .def-cc-mic-icon {
+.def-cc-composer-mic[data-state="answering"] .def-cc-mic-icon,
+.def-cc-composer-mic[data-state="conversation"] .def-cc-mic-icon {
 	display: none;
 }
 
-.def-cc-composer-mic[data-state="answering"] .def-cc-mic-stop {
+.def-cc-composer-mic[data-state="answering"] .def-cc-mic-stop,
+.def-cc-composer-mic[data-state="conversation"] .def-cc-mic-stop {
 	display: block;
 	fill: currentColor;
+}
+
+/* Conversation mode: the orb under the chat says whose turn it is. Grey while it
+   connects, blue while it listens (moving with the visitor's voice), orange while the
+   employee speaks (moving with hers), still when nobody speaks. */
+.def-cc-orb-row {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 8px;
+	padding: 12px 16px 4px;
+}
+
+.def-cc-orb {
+	width: 40px;
+	height: 40px;
+	border-radius: 50%;
+	background: #2563eb;
+	transition: transform 0.08s linear, background 0.2s ease;
+}
+
+.def-cc-orb[data-state="connecting"] {
+	background: #9ca3af;
+}
+
+.def-cc-orb[data-state="speaking"] {
+	background: #f97316;
+}
+
+.def-cc-orb-line {
+	font-size: 12px;
+	color: var(--def-cc-text-light);
+	text-align: center;
 }
 
 .def-cc-message--transcribing .def-cc-message-content {
@@ -1645,6 +1682,12 @@
 /* ─── Reduced Motion ────────────────────────────────────────────── */
 
 @media (prefers-reduced-motion: reduce) {
+	/* The orb keeps its colours; it does not move. */
+	.def-cc-orb {
+		transform: none !important;
+		transition: none;
+	}
+
 	.def-cc-panel,
 	.def-cc-trigger,
 	.def-cc-menu,

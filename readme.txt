@@ -119,6 +119,9 @@ Chat messages, user display name, session context, and the visitor's IP address 
 
 == Changelog ==
 
+= Unreleased =
+* Feature - Conversation mode in Customer Chat, ready for the platform update that turns it on for a tenancy. Where it is on and the visitor's browser can do it, a tap on the microphone starts a conversation that stays on: the visitor speaks and the employee answers, and the visitor can talk over the employee. An orb under the chat shows whose turn it is, the employee's words appear as they are spoken and are then replaced by the written reply with its product cards, the hand-off button and any add to cart. Typing during a conversation sends a typed message, and its reply is spoken too. The first time, the visitor is told: "Your voice is turned into text as [the employee's name] answers you. No audio recording is kept." Where the mode is off, the browser cannot do it, or the site's security settings block the voice media server, the microphone works as before. The plugin ships LiveKit's browser client (version 2.21.0, Apache License 2.0, in assets/js/vendor/livekit-client-2.21.0/ with its licence) and loads it only on sites where the mode is on.
+
 = 11.4.0 - 2026-11-20 =
 * Feature - Voice ends your turn as soon as the voice provider judges you have finished speaking, instead of always waiting for a pause, so the reply starts sooner. This works where the voice provider gives that signal; otherwise the turn ends after the pause, as before. Applies to Customer Chat's voice on your site and to Staff AI's voice in the Tenant Portal.
 
@@ -1158,6 +1161,17 @@ When the Customer Chat widget or Staff AI panel is used, chat messages are sent 
 * **When:** Only when a user or visitor actively sends a message via the chat interface.
 * **Chat outcomes:** After a visitor has chatted, the site's server reports when that visitor reaches a page (its path, without the query string), submits a form (the form plugin and form id), places an order, or sends the hand-off form — with the chat's reference and the time, and never a form's contents, an order number, a name or an email. The chat's reference is kept in the first-party cookie `def_chat_ref`, renewed for 30 days on each visit and removed by Clear conversation.
 * **Service URL:** Configured by the site administrator on the Connection tab (typically `https://api.defho.ai`).
+* **Service provider:** [DEFHO](https://defho.ai/) by a3rev Software.
+* **Terms of Service:** [https://defho.ai/terms](https://defho.ai/terms)
+* **Privacy Policy:** [https://defho.ai/privacy](https://defho.ai/privacy)
+
+= Voice media server =
+
+When a tenancy has Customer Chat's conversation mode turned on and a visitor taps the microphone to start a conversation, the visitor's browser joins an audio room on the platform's voice media server, using the bundled LiveKit client. This connection is required for conversation mode to function; without it the microphone works as ordinary voice.
+
+* **What is sent:** The visitor's microphone audio while the conversation is open, and the browser's network address (needed to carry the call). The employee's voice and her words as she speaks come back from it. No audio and no words are recorded at the voice media server; its connection log keeps the browser's network address and the room's name.
+* **When:** Only while a visitor has a conversation open; it ends at the employee's goodbye, a tap, or when the page is hidden.
+* **Service URL:** Given to the browser by the Digital Employee Framework API when the conversation starts; a site whose security headers restrict connections must allow it.
 * **Service provider:** [DEFHO](https://defho.ai/) by a3rev Software.
 * **Terms of Service:** [https://defho.ai/terms](https://defho.ai/terms)
 * **Privacy Policy:** [https://defho.ai/privacy](https://defho.ai/privacy)
