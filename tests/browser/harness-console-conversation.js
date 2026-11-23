@@ -36,7 +36,7 @@ const RELEASE = extract.release();
 const CSS = fs.readFileSync(require('path').join(extract.REPO, 'assets/css/staff-ai.css'), 'utf8');
 
 const DOOR = 'https://api.defho.test/api/tenant/acme/staff-ai';
-const SECRET = 'tok-SECRET-123';
+const GRANT = 'room-grant-value-123';   // the mint's room token: it must reach no log
 const ROOM_ADDR = 'wss://media.test/room';
 const json = (status, body) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 const frame = (seq, evt) => 'id: ' + seq + '\ndata: ' + JSON.stringify(Object.assign({ thread_id: 'th-1', turn_id: 'msg-' + seq }, evt)) + '\n\n';
@@ -118,7 +118,7 @@ function boot(opts) {
 			const own = route(url, init);
 			if (own) return Promise.resolve(own);
 			if (url === DOOR + '/status') return Promise.resolve(json(200, { voice_conversation: opts.status !== false, available_models: [{ id: 'm-fast', label: 'Fast' }, { id: 'm-deep', label: 'Deep' }] }));
-			if (url === DOOR + '/voice/room') return Promise.resolve(json(200, { url: ROOM_ADDR, token: SECRET, room: 'rm-1', thread_id: opts.thread || 'th-new' }));
+			if (url === DOOR + '/voice/room') return Promise.resolve(json(200, { url: ROOM_ADDR, token: GRANT, room: 'rm-1', thread_id: opts.thread || 'th-new' }));
 			if (url.indexOf(DOOR + '/voice/room/') === 0) return Promise.resolve(json(200, { ended: false, confirmations: opts.confirmations || [] }));
 			if (url.indexOf(DOOR + '/conversations/') === 0) return Promise.resolve(json(200, { messages: [
 				{ role: 'user', content: 'What is on today?' }, { role: 'assistant', content: 'The **written** reply' }] }));
@@ -203,7 +203,7 @@ async function run(label, fn) {
 			JSON.stringify(mint.body) === JSON.stringify({ thread_id: 'th-1', model_id: 'm-deep', language: 'en-AU' }), JSON.stringify(mint.body));
 		const minted = await t.talks[0].minted;
 		check('the host is handed the mint\'s answer {url, token, room, thread_id}',
-			minted.url === ROOM_ADDR && minted.token === SECRET && minted.room === 'rm-1', JSON.stringify(minted));
+			minted.url === ROOM_ADDR && minted.token === GRANT && minted.room === 'rm-1', JSON.stringify(minted));
 	});
 	await run('new chat mint', async () => {
 		const t = boot();
@@ -471,7 +471,7 @@ async function run(label, fn) {
 		await settle();
 		c.finish('dropped', true);
 		await settle();
-		const leak = t.logs.filter(l => l.indexOf(SECRET) > -1 || l.indexOf(ROOM_ADDR) > -1);
+		const leak = t.logs.filter(l => l.indexOf(GRANT) > -1 || l.indexOf(ROOM_ADDR) > -1);
 		check('no token or room address in any log', leak.length === 0, JSON.stringify(leak));
 	});
 
