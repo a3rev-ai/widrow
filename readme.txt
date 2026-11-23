@@ -4,7 +4,7 @@ Tags: ai, chat, digital employee, ai assistant, customer support
 Requires at least: 6.2
 Tested up to: 7.1
 Requires PHP: 8.0
-Stable tag: 11.4.0
+Stable tag: 11.5.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -118,6 +118,10 @@ Chat messages, user display name, session context, and the visitor's IP address 
 4. Admin Settings — Branding, Chat Settings, Escalation, and Connection tabs
 
 == Changelog ==
+
+= 11.5.0 - 2026-11-23 =
+* Feature - Ready for the platform update that turns on conversation mode: in Customer Chat, a tap on the microphone starts a conversation that stays on, the visitor can talk over the employee, an orb shows whose turn it is, and typing still works. Where it is off or the browser cannot do it, the microphone works as before.
+* Fix - In Customer Chat, closing the chat panel, or a site removing the widget, now ends hands-free voice as a tap on the microphone does; before, the microphone could go on listening with no way to stop it.
 
 = 11.4.0 - 2026-11-20 =
 * Feature - Voice ends your turn as soon as the voice provider judges you have finished speaking, instead of always waiting for a pause, so the reply starts sooner. This works where the voice provider gives that signal; otherwise the turn ends after the pause, as before. Applies to Customer Chat's voice on your site and to Staff AI's voice in the Tenant Portal.
@@ -1161,6 +1165,19 @@ When the Customer Chat widget or Staff AI panel is used, chat messages are sent 
 * **Service provider:** [DEFHO](https://defho.ai/) by a3rev Software.
 * **Terms of Service:** [https://defho.ai/terms](https://defho.ai/terms)
 * **Privacy Policy:** [https://defho.ai/privacy](https://defho.ai/privacy)
+
+= Voice media server =
+
+Customer Chat's conversation mode applies only when the site owner has turned it on for their tenancy and a visitor taps the microphone to start a conversation. The visitor's browser then joins an audio room on the platform's voice media server, using the bundled LiveKit client.
+
+* **What is sent:** The visitor's microphone audio while the conversation is open, and the browser's network address (needed to carry the call). From the media server the audio goes, through the Digital Employee Framework, to the voice provider the site owner chose, for its ordinary transcription and speech, as voice in the chat already does. The employee's voice and words come back the same way.
+* **What is kept:** No audio recording is kept. The words of the conversation are saved in the chat, as typed messages are. The media server keeps an ordinary connection log (the visitor's network address, a random conversation name and the participants' identities) for 30 days.
+* **When:** Only while a conversation is open. It ends at the employee's goodbye, a tap on the microphone, when the page is hidden or the chat is closed, after five silent minutes, and at two hours.
+* **Service URL:** Given to the browser by the Digital Employee Framework API when the conversation starts; a site whose security headers restrict connections must allow it.
+* **Service provider:** [DEFHO](https://defho.ai/) by a3rev Software.
+* **Terms of Service:** [https://defho.ai/terms](https://defho.ai/terms)
+* **Privacy Policy:** [https://defho.ai/privacy](https://defho.ai/privacy)
+* **The working sound** the employee makes while a reply is on its way: keyboard-typing.ogg by Anton -- https://freesound.org/s/137/ -- License: Attribution 4.0
 
 No data is sent to external services when the chat features are not in use. Site administrators can configure a Privacy Policy URL in Chat Settings to display an AI disclosure notice to visitors before they begin chatting.
 

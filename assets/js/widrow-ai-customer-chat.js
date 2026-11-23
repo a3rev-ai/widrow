@@ -31,6 +31,10 @@
 		answering: 'Answering\u2026 tap the mic to end',
 		voiceNeedsStreaming: 'Voice needs a browser that can stream replies.',
 		voiceLogEmpty: 'No voice events yet.',
+		talking: 'Speak, or type \u2014 tap the mic to end',
+		talkNotUnderstood: "I couldn't make that out. You can type your message below instead.",
+		talkLost: 'The conversation was cut off. Tap the mic to talk again.',
+		talkBusy: 'Conversations are busy right now, so the microphone works as usual.',
 		clearChat: 'Clear conversation & start fresh',
 		clearConfirmTitle: 'Clear conversation?',
 		clearConfirmDesc:
@@ -1964,6 +1968,8 @@
 			body.audio_seconds = voice.audio_seconds;
 			body.speech_out = true;
 			if (lastUserText) body.audio_context = spokenContext();
+		} else if (talk) {
+			body.speech_out = true;   // a typed message in a conversation: its reply is spoken too
 		}
 
 		// Page Context Build Plan V1.1 Sub-PR C: splice the
@@ -2024,7 +2030,10 @@
 				return res.ok ? res.json() : null;
 			})
 			.then(function (data) {
-				if (data && data.enabled === true && !destroyed) enableVoice();
+				if (!data || data.enabled !== true || destroyed) return;
+				enableVoice();
+				talkMode = data.conversation === true;
+				if (talkMode) loadRoomClient();
 			})
 			.catch(function () {
 				untrackAbort(controller);
@@ -2050,7 +2059,7 @@
 	// A tab you leave stops speaking and closes its mic — a reply link opens a new
 	// tab, and two tabs talking over each other is the alternative (W72).
 	function endVoiceWhenHidden() {
-		if (voiceRecorder && document.visibilityState === 'hidden' && (conversationOn || spokenTurn)) endConversation();
+		if (voiceRecorder && document.visibilityState === 'hidden' && (conversationOn || spokenTurn || talk)) endConversation();
 	}
 
 	// The mic's state paints the button; the composer placeholder says what is happening.
@@ -2087,7 +2096,7 @@
 		if (pressShown) { pressShown = false; return; }   // the click that ends a long press is not a tap
 		if (!voiceRecorder || destroyed) return;
 		if (voiceRecorder.isRecording()) { finishRecording(); return; }
-		if (conversationOn) { endConversation(); return; }   // it is answering or speaking
+		if (conversationOn || talk) { endConversation(); return; }   // it is answering or speaking
 		if (isComposerDisabled) return;
 		if (els.input.classList.contains('def-cc-suggestion-text')) {
 			// A ghost suggestion would hide the mic's status (the placeholder).
@@ -2101,6 +2110,7 @@
 			appendMessage('assistant', t('micBlockedBySite'));
 			return;
 		}
+		if (canTalk()) { startTalk(); return; }
 		speaker.stop();
 		speaker.unlock();   // inside the tap: iOS lets audio start only from a gesture
 		conversationOn = true;
@@ -2132,6 +2142,7 @@
 	}
 
 	function endConversation(message) {
+		if (talk) { var open = talk; talkEnded(); open.end(); }
 		conversationOn = false;
 		spokenTurn = false;   // nothing more of this turn is read aloud
 		if (voiceRecorder) voiceRecorder.release();
@@ -2241,15 +2252,15 @@
 	// that changed the thread or left under five minutes, and after a refusal; a send
 	// with no fitting token, or one the platform refuses, goes through the site.
 	var streamToken = null;   // { token, exp, url, live, thread }
-	var minting = false;
+	var minting = null;   // the mint in flight: a conversation waits on it
 	var mintEpoch = 0;
 
 	function mintStreamToken() {
-		if (!config.streamTokenUrl || minting || destroyed) return;
-		minting = true;
+		if (!config.streamTokenUrl || destroyed) return Promise.resolve();
+		if (minting) return minting;
 		var epoch = mintEpoch;
 		var thread = threadId || '';
-		fetch(config.streamTokenUrl, {
+		minting = fetch(config.streamTokenUrl, {
 			method: 'POST',
 			credentials: 'same-origin',
 			headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': config.nonce || '' },
@@ -2258,11 +2269,12 @@
 			.then(function (res) { return res.ok ? res.json() : null; })
 			.catch(function () { return null; })
 			.then(function (data) {
-				minting = false;
+				minting = null;
 				if (epoch !== mintEpoch) return;   // dropped while it was minted (a login, a logout)
 				streamToken = data && data.token && data.stream_url
 					? { token: data.token, exp: data.exp, url: data.stream_url, live: data.live_url, thread: thread } : null;
 			});
+		return minting;
 	}
 
 	function dropStreamToken() {
@@ -2291,6 +2303,455 @@
 		return streamTokenLeft() >= 30000
 			? { url: streamToken.live, token: streamToken.token, thread: streamToken.thread, context: spokenContext() }
 			: null;
+	}
+
+	// ─── 6d. CONVERSATION MODE ───────────────────────────────────
+	// Where the tenancy has it on (the voice status says `conversation`), the browser has
+	// WebRTC and the site allows the microphone, a tap opens a conversation that stays on:
+	// an audio room on the platform's voice media server, joined with LiveKit's client.
+	// The room hears the visitor, ends each turn and lets them talk over the employee; the
+	// widget shows whose turn it is (the orb), her words as she says them, then the written
+	// reply with its tool outputs, read from the platform after it. A typed message goes as
+	// a typed message and its reply is spoken too. Otherwise, or when a room cannot connect,
+	// the mic is the voice above.
+	var talkMode = false;      // the status said `conversation: true`
+	var talkFailed = false;    // a room could not connect: the voice above for the page's life
+	var talk = null;           // the open conversation: { end, mute }
+	var talkEpoch = 0;         // a callback from an ended conversation is ignored
+	var talkRoom = '';
+	var talkState = '';
+	var captionEl = null;      // the bubble her words fill as she says them
+	var spokenEls = [];        // her reply's bubbles so far: one per segment she speaks
+	var lastReplyId = '';      // a reply is drawn, and its add to cart carried out, once
+	var heardEl = null;        // the visitor's message, filled as they speak
+	var heardDone = '';        // its finished segments, until she answers
+	var captionAsked = '';     // the visitor's words her reply in progress answers
+	var heldSpeech = [];       // a typed reply's lines, waiting for her spoken reply to finish
+	var typedSpeaking = false; // a typed reply's lines are arriving
+	var talkMuted = false;
+	var TALK_LINE_KEY = 'def:talk_line_shown';
+	// What a visitor is told at their first conversation. It comes outside the strings a site
+	// can filter (config.talkLine) and is drawn with no part, so a site cannot hide or reword it.
+	var TALK_LINE = 'Your voice is turned into text as %s answers you. No audio recording is kept.';
+	// The reasons the room gives for an ending it announces; any other reads as 'unknown'.
+	var ENDINGS = ['goodbye', 'stop_phrase', 'silence', 'refused'];
+
+	// Loaded when the status says the mode is on, never inside the tap: an iPhone may no
+	// longer count a tap that waited on a download as the tap that unlocks its audio.
+	// It runs in the site's own page and can read what the page can: see its folder's README.md.
+	function loadRoomClient() {
+		if (window.LivekitClient || !config.liveKitUrl || !window.RTCPeerConnection) return;
+		var script = document.createElement('script');
+		script.src = config.liveKitUrl;
+		document.head.appendChild(script);
+	}
+
+	// The room mint sits beside the stream route the token was minted for.
+	function roomUrl() {
+		var m = streamToken && /^(.*)\/api\/chat\/stream$/.exec(streamToken.url);
+		return m ? m[1] + '/api/customer/voice/room' : '';
+	}
+
+	// The mint binds the room to the token's chat, so it needs a fresh token for the chat open.
+	function canTalk() {
+		return talkMode && !talkFailed && !!window.RTCPeerConnection && !!window.LivekitClient &&
+			streamTokenLeft() >= 30000 && !!roomUrl();
+	}
+
+	// A room that made a new chat is read, and typed into, on a token for that chat.
+	function tokenForThread() {
+		if (streamTokenLeft() >= 30000) return Promise.resolve(true);
+		return mintStreamToken().then(function () {
+			// The mint that was in flight may have been for the chat before.
+			return streamTokenLeft() >= 30000 || mintStreamToken().then(function () { return streamTokenLeft() > 0; });
+		});
+	}
+
+	function showOrb() {
+		if (!els.orb) {
+			els.orb = document.createElement('div');   // no part: a site cannot hide the line with it
+			els.orb.className = 'def-cc-orb-row';
+			els.orbBall = els.orb.appendChild(el('div', 'def-cc-orb'));
+			els.orbLine = els.orb.appendChild(document.createElement('div'));   // no part: no theme reaches it
+			els.orbLine.className = 'def-cc-orb-line';
+			els.messages.parentNode.insertBefore(els.orb, els.messages.nextSibling);
+		}
+		// Shown until a conversation has reached the visitor once (the flag is set at listening).
+		var shown = null;
+		try { shown = localStorage.getItem(TALK_LINE_KEY); } catch (e) {}
+		els.orbLine.textContent = shown ? '' : (config.talkLine || TALK_LINE).replace('%s', config.assistantName || config.displayName || '');
+		els.orbLine.style.display = shown ? 'none' : '';
+		els.orbBall.dataset.state = 'connecting';
+		els.orbBall.style.transform = '';
+		els.orb.style.display = '';
+	}
+
+	// Inside the tap: the speaker is unlocked for a typed reply's voice, and the room
+	// unlocks its own audio before the mint is awaited.
+	function startTalk() {
+		speaker.stop();
+		speaker.unlock();
+		// The page context as a typed turn reads it; the language only hints the turn's end.
+		var body = { thread_id: streamToken.thread, cart_token: wcCartToken };
+		try { body.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone; } catch (e) {}
+		try { body.page_context = window.WidrowAiPageContextHelper.build(threadId || null); } catch (e) {}
+		if (navigator.language) body.language = navigator.language;
+		// Sent once the tap's own work is done (in conversation(), below).
+		var url = roomUrl(), token = streamToken.token;
+		var minted = Promise.resolve().then(function () {
+			return fetch(url, {
+				method: 'POST',
+				credentials: 'omit',
+				headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+				body: JSON.stringify(body),
+			});
+		}).then(function (res) {
+			window.DefVoice.note('conversation mint ' + res.status);
+			if (!res.ok) throw new Error('refused');
+			return res.json();
+		}).then(function (m) {
+			talkRoom = String(m.room || '');
+			if (m.thread_id && m.thread_id !== threadId) {   // the room made a new chat
+				storeThread(String(m.thread_id));
+				tokenForThread();
+			}
+			return m;
+		});
+		var epoch = ++talkEpoch;
+		var mine = function (fn) {
+			return function (a, b) { if (epoch === talkEpoch) fn(a, b); };
+		};
+		showOrb();
+		setMicState('conversation', t('talking'));
+		talk = conversation(minted, {
+			onState: mine(function (state) {
+				talkState = state;
+				els.orbBall.dataset.state = state;
+				if (state === 'listening') {
+					try { localStorage.setItem(TALK_LINE_KEY, '1'); } catch (e) {}
+				}
+				if (state !== 'speaking') playHeldSpeech();
+			}),
+			onLevel: mine(function (heard, spoken) {
+				var level = talkState === 'speaking' ? spoken : heard;
+				els.orbBall.style.transform = level ? 'scale(' + (1 + 0.6 * Math.min(level, 1)) + ')' : '';
+			}),
+			// The visitor's words: one message until she answers, however many segments.
+			onHeard: mine(function (text, final) {
+				if (!heardEl) heardEl = appendUserMessage('', [], true);
+				var words = (heardDone ? heardDone + ' ' : '') + text;
+				heardEl.textContent = words;   // as text, never markup
+				if (final) heardDone = words;
+				scrollToBottom();
+			}),
+			onCaption: mine(function (text, final) {
+				if (!captionEl) {
+					if (!spokenEls.length) answerStarts();
+					var msg = el('div', 'def-cc-message def-cc-message--assistant def-cc-message--spoken');
+					captionEl = msg.appendChild(el('div', 'def-cc-message-content'));
+					els.messages.appendChild(msg);
+					spokenEls.push(captionEl);
+				}
+				var follow = isAtEnd();
+				captionEl.textContent = text;   // her words as text, never markup
+				if (follow) scrollToBottom();
+				if (final) captionEl = null;
+			}),
+			// The room says her reply is over (spoken or cut off): the one read for it.
+			onReply: mine(function () { replyOver(); }),
+			onNotice: mine(function (kind) {
+				if (kind === 'not_understood') appendMessage('assistant', t('talkNotUnderstood'));
+			}),
+			onEnded: mine(function () { talkEnded(); }),
+			onError: mine(function (kind) {
+				talkEnded();
+				if (kind === 'dropped') { appendMessage('assistant', t('talkLost')); return; }
+				if (kind === 'busy') appendMessage('assistant', t('talkBusy'));   // this tap only: the next tries again
+				if (kind === 'connect') talkFailed = true;
+				// Never reached the room: this tap goes on as the voice above.
+				conversationOn = true;
+				listen(true);
+			}),
+		});
+	}
+
+	// Every ending: back to the ordinary chat, the mic ready to start again.
+	function talkEnded() {
+		if (talkRoom) replyOver();   // in case the room's last reply message was lost
+		talkEpoch++;
+		talk = null;
+		talkRoom = '';
+		talkState = '';
+		captionEl = heardEl = null;
+		heardDone = captionAsked = '';
+		spokenEls = [];
+		heldSpeech = [];
+		typedSpeaking = talkMuted = false;
+		if (els.orb) els.orb.style.display = 'none';
+		setMicState('idle');
+	}
+
+	// She answers (or the turn is over without her words): the visitor's message is whole,
+	// said once (as a spoken message is when its transcript fills it), and is that turn's
+	// for the history.
+	function answerStarts() {
+		if (heardEl) announce(heardEl);
+		captionAsked = heardDone;
+		heardEl = null;
+		heardDone = '';
+	}
+
+	function replyOver() {
+		if (!spokenEls.length) answerStarts();
+		readReply(spokenEls, talkRoom, captionAsked);
+		captionEl = null;
+		spokenEls = [];
+		captionAsked = '';
+	}
+
+	// After her reply, its written form and tool outputs take the place of the words she
+	// spoke, rendered as a typed reply's are (cards, the hand-off button, an add to cart).
+	function readReply(spoken, room, asked) {
+		tokenForThread().then(function (ok) {
+			return ok ? fetch(roomUrl() + '/' + encodeURIComponent(room), {
+				method: 'GET',
+				credentials: 'omit',
+				headers: { 'Authorization': 'Bearer ' + streamToken.token },
+			}) : null;
+		}).then(function (res) {
+			return res && res.ok ? res.json() : null;
+		}).catch(function () {
+			return null;
+		}).then(function (data) {
+			if (!data || destroyed) return;
+			if (data.reply && !(data.reply.id && data.reply.id === lastReplyId)) {
+				lastReplyId = data.reply.id || '';
+				if (window.DefResultCards) window.DefResultCards.resetTurn();
+				var typing = isComposerDisabled;
+				var before = els.messages.lastChild;
+				processChatResponseMeta({ thread_id: threadId, choices: [{ message: { content: data.reply.content || '' } }],
+					tool_outputs: data.reply.tool_outputs }, asked || null, false);
+				if (typing) setComposerDisabled(true);   // a typed message still streaming keeps the composer
+				// In place: after a talk-over, newer words stay below it.
+				var place = spoken[0] && spoken[0].parentNode;
+				if (place && place.parentNode === els.messages) {
+					for (var node = before ? before.nextSibling : els.messages.firstChild, next; node; node = next) {
+						next = node.nextSibling;
+						els.messages.insertBefore(node, place);
+					}
+				}
+				spoken.forEach(function (content) { if (content.parentNode) content.parentNode.remove(); });
+			}
+			// Her goodbye's room message can be lost; the read says so too.
+			if (data.ended && talk && room === talkRoom) endConversation();
+		});
+	}
+
+	// A typed reply's voice plays after any spoken reply still sounding, with the room's
+	// microphone muted, so the room does not hear her from the loudspeaker as the visitor.
+	function speakTyped(line) {
+		typedSpeaking = true;
+		if (!talkMuted) { talkMuted = true; talk.mute(true); }
+		heldSpeech.push(line);
+		playHeldSpeech();
+	}
+
+	function playHeldSpeech() {
+		if (!talk || talkState === 'speaking') return;
+		while (heldSpeech.length) heldSpeech.shift()();
+		if (!talkMuted || typedSpeaking) return;
+		speaker.whenIdle().then(function () {
+			if (talk && talkMuted && !typedSpeaking && !heldSpeech.length) { talkMuted = false; talk.mute(false); }
+		});
+	}
+
+	function afterTypedSpeech() {
+		if (!typedSpeaking) return;
+		typedSpeaking = false;
+		speaker.end();   // a line whose closing frame the stream never brought
+		playHeldSpeech();
+	}
+
+	/**
+	 * The room, in the shape the portal's console host gives its conversations:
+	 * conversation(minted, callbacks) → { end(), mute(on) }. `minted` is the mint's reply
+	 * {url, token, room, thread_id}, or a promise of it: called inside the tap, what an
+	 * iPhone allows only there runs before the mint is awaited. Callbacks:
+	 * onState('connecting', then 'listening' whenever she is not speaking, 'speaking' while she
+	 * is, 'idle' once it is over), onLevel(in, out) each
+	 * frame, onCaption(text so far, final) for her words, onHeard(text so far, final) for the
+	 * visitor's own (optional), onReply() at `def.reply`, once per reply when its speech has
+	 * finished or was cut off (optional), onNotice(kind) for `def.notice`,
+	 * onEnded('goodbye' | 'stop_phrase' | 'silence' | 'refused' | 'unknown': her `def.ended`;
+	 * 'end': end() was called) and onError('mint' | 'connect' | 'microphone' | 'dropped' |
+	 * 'busy': no employee joined in time);
+	 * exactly one of the last two, once, and nothing after it. The room token goes to the
+	 * client and nowhere else; the log carries kinds and error names, never words or URLs
+	 * with their query.
+	 */
+	function conversation(minted, cb) {
+		var LK = window.LivekitClient;
+		var RoomEvent = LK.RoomEvent;
+		var over = false, state = '', stage = 'mint', announced = '', wakeLock = null, muted = false;
+		// The client sets isSpeaking and audioLevel from the server's speaker updates, in
+		// steps; a side stays speaking across a gap this long.
+		var HOLD_MS = 400;
+		// A room the platform minted but no employee joined (the service is at its load): given
+		// up after this long. She joined within about three seconds on real devices; a new copy
+		// of the service starting takes longer.
+		var EMPLOYEE_WAIT_MS = 10000;
+		var waiting = null;
+		var sides = { her: { at: -1e9, level: 0 }, you: { at: -1e9, level: 0 } };
+		// Her voice and the working sound (the agent framework's track name) each play in
+		// an element of their own: the client keeps one audio track per element.
+		var herAudio = document.body.appendChild(document.createElement('audio'));
+		var workingAudio = document.body.appendChild(document.createElement('audio'));
+		var Context = window.AudioContext || window.webkitAudioContext;
+		var audio = Context ? new Context() : null;
+		var note = function (line) { window.DefVoice.note('conversation ' + line); };
+
+		// Inside the tap: the context unlocked with one silent sample (iOS starts it
+		// suspended), and both elements primed by playing a silent stream from it, so each
+		// may play its track when it is attached after the awaits.
+		if (audio) {
+			var silence = audio.createBufferSource();
+			silence.buffer = audio.createBuffer(1, 1, 22050);
+			silence.connect(audio.destination);
+			silence.start(0);
+			audio.resume().catch(function () {});
+			[herAudio, workingAudio].forEach(function (element) {
+				element.srcObject = audio.createMediaStreamDestination().stream;
+				element.play().catch(function () {});
+			});
+		}
+		// A phone that dims mid-reply would hide the page, and a hidden page ends it.
+		if (navigator.wakeLock) {
+			navigator.wakeLock.request('screen').then(function (lock) {
+				if (over) lock.release(); else wakeLock = lock;
+			}, function () {});
+		}
+		// Still inside the tap, after the audio and the wake lock: the room made, its audio started.
+		var room = new LK.Room();
+		room.startAudio().catch(function () {});
+
+		// A site's page policy that blocks the media host shows here, not in the error.
+		function blocked(e) {
+			note('policy blocked ' + String(e.blockedURI).split('?')[0] + ' (' + e.effectiveDirective + ')');
+		}
+		document.addEventListener('securitypolicyviolation', blocked);
+
+		function moveTo(next) {
+			if (next !== state) { state = next; cb.onState(next); }
+		}
+
+		function finish(reason, kind) {
+			if (over) return;
+			moveTo('idle');
+			over = true;
+			clearTimeout(waiting);
+			// The microphone is let go of now, whatever the room does next.
+			var mic = room.localParticipant.getTrackPublication(LK.Track.Source.Microphone);
+			if (mic && mic.track) mic.track.stop();
+			document.removeEventListener('securitypolicyviolation', blocked);
+			if (wakeLock) wakeLock.release();
+			if (audio) audio.close();
+			herAudio.remove();
+			workingAudio.remove();
+			if (kind) cb.onError(kind); else cb.onEnded(reason);
+			if (room.state !== LK.ConnectionState.Disconnected) room.disconnect();
+		}
+
+		function speaking(side, participant, now) {
+			if (participant && participant.isSpeaking) { side.at = now; side.level = participant.audioLevel; }
+			return now - side.at < HOLD_MS;
+		}
+
+		function watch() {
+			if (over) return;
+			var now = performance.now();
+			var first = room.remoteParticipants.values().next();
+			var herOn = speaking(sides.her, first.done ? null : first.value, now);
+			var youOn = speaking(sides.you, room.localParticipant, now);
+			moveTo(herOn ? 'speaking' : 'listening');
+			cb.onLevel(youOn ? sides.you.level : 0, herOn ? sides.her.level : 0);
+			requestAnimationFrame(watch);
+		}
+
+		// Her words go to onCaption, the visitor's own (sent as the local participant) to onHeard.
+		room.registerTextStreamHandler('lk.transcription', function (reader, from) {
+			var mine = from.identity === room.localParticipant.identity;
+			var say = mine ? cb.onHeard || function () {} : cb.onCaption;
+			var text = '';
+			var pieces = reader[Symbol.asyncIterator]();
+			(function next() {
+				pieces.next().then(function (r) {
+					if (over) return;
+					if (r.done) { say(text, true); return; }
+					text += String(r.value);
+					say(text, false);
+					next();
+				}, function (e) {
+					note('words stream failed (' + (e && e.name) + ')');
+					if (!over && text) say(text, true);
+				});
+			})();
+		});
+		room.on(RoomEvent.TrackSubscribed, function (track, publication) {
+			if (track.kind === LK.Track.Kind.Audio) track.attach(publication.trackName === 'background_audio' ? workingAudio : herAudio);
+		});
+		room.on(RoomEvent.TrackUnsubscribed, function (track, publication) {
+			if (track.kind === LK.Track.Kind.Audio) track.detach(publication.trackName === 'background_audio' ? workingAudio : herAudio);
+		});
+		room.on(RoomEvent.DataReceived, function (payload, participant, kind, topic) {
+			if (topic === 'def.reply') { if (cb.onReply) cb.onReply(); return; }
+			if (topic !== 'def.ended' && topic !== 'def.notice') return;
+			var data = {};
+			try { data = JSON.parse(new TextDecoder().decode(payload)) || {}; } catch (e) { /* unreadable: no reason */ }
+			if (topic === 'def.notice') cb.onNotice(String(data.kind || '').slice(0, 32));
+			else announced = ENDINGS.indexOf(data.reason) !== -1 ? data.reason : 'unknown';
+		});
+		// She announces an ending before the room is closed; any other close is a fault.
+		room.on(RoomEvent.Disconnected, function (reason) {
+			note('disconnected (' + LK.DisconnectReason[reason] + ')');
+			if (announced || reason === LK.DisconnectReason.CLIENT_INITIATED) finish(announced || 'end');
+			else finish('', stage === 'live' ? 'dropped' : stage);
+		});
+
+		moveTo('connecting');
+		Promise.resolve(minted).then(function (m) {
+			if (over) return;
+			if (!m || !m.url || !m.token) throw new Error('no room in the mint');
+			stage = 'connect';
+			if (!/^wss:/.test(m.url)) throw new Error('not a secure address');
+			return room.connect(m.url, m.token).then(function () {
+				if (over) return;
+				waiting = setTimeout(function () {
+					if (room.remoteParticipants.size) return;
+					note('no employee joined');
+					finish('', 'busy');
+				}, EMPLOYEE_WAIT_MS);
+				stage = 'microphone';
+				return room.localParticipant.setMicrophoneEnabled(true,
+					{ echoCancellation: true, noiseSuppression: true, autoGainControl: true });
+			}).then(function () {
+				if (over) return;
+				stage = 'live';
+				if (muted) room.localParticipant.setMicrophoneEnabled(false).catch(function () {});
+				moveTo('listening');
+				watch();
+			});
+		}).catch(function (e) {
+			note(stage + ' failed (' + (e && e.name) + ')');
+			finish('', stage === 'live' ? 'dropped' : stage);
+		});
+
+		return {
+			end: function () { finish('end'); },
+			mute: function (on) {
+				muted = !!on;
+				if (stage === 'live') room.localParticipant.setMicrophoneEnabled(!muted).catch(function () {});
+			},
+		};
 	}
 
 	/**
@@ -2403,12 +2864,16 @@
 		// A line of the reply in the employee's own voice — or, when its synthesis failed
 		// server-side, the text alone for the device voice to read. A streamed line comes
 		// as parts of one seq, its closing part with no audio.
+		// A typed message's reply in a conversation is spoken too, by the same speaker.
 		function speakFrame(evt) {
-			if (spokenTurn && speaker) {
+			if (!speaker || !(spokenTurn || talk)) return;
+			var line = function () {
 				speaker.speak(evt.text || '', evt.audio_base64 || evt.part > 0
 					? { base64: evt.audio_base64 || '', mime: evt.mime, seq: evt.seq, part: evt.part, last: evt.last }
 					: null, evt.step);
-			}
+			};
+			if (spokenTurn) line();
+			else speakTyped(line);
 		}
 
 		// A `speech` frame goes to the speaker as it arrives, never through the paced queue:
@@ -2419,7 +2884,7 @@
 			for (var i = 0; i < events.length; i++) {
 				if (events[i].type === 'speech') speakFrame(events[i]);
 				else {
-					if (events[i].type === 'step_superseded' && spokenTurn && speaker) speaker.discard(events[i].step);
+					if (events[i].type === 'step_superseded' && (spokenTurn || talk) && speaker) speaker.discard(events[i].step);
 					eventQueue.push(events[i]);
 				}
 			}
@@ -2837,7 +3302,22 @@
 				dropUnfilledTranscript();
 				handleChatError(err, thinkingEl);
 			})
+			.then(afterTypedSpeech)
 			.then(afterStreamTurn);
+	}
+
+	// The chat this tab is in, kept across reloads. Fresh thread started — clear the
+	// cleared-session marker so it doesn't accumulate as dead weight in localStorage. The
+	// marker only exists to suppress adoption between Clear and the next real message; once
+	// we have a thread id, the !threadId guard in adoptMostRecentThreadIfNone() takes over.
+	function storeThread(id) {
+		setThreadId(id);
+		try {
+			localStorage.setItem(THREAD_KEY, threadId);
+			setChatRefCookie(threadId);
+			localStorage.removeItem('def:cleared_session');
+		} catch (e) {}
+		isContinuing = true;
 	}
 
 	/**
@@ -2851,20 +3331,7 @@
 		}
 
 		// Store thread ID.
-		if (data.thread_id) {
-			setThreadId(data.thread_id);
-			try {
-				localStorage.setItem(THREAD_KEY, threadId);
-				setChatRefCookie(threadId);
-				// Fresh thread started — clear the cleared-session marker so it
-				// doesn't accumulate as dead weight in localStorage. The marker
-				// only exists to suppress adoption between Clear and the next
-				// real message; once we have a thread id, the !threadId guard
-				// in adoptMostRecentThreadIfNone() takes over.
-				localStorage.removeItem('def:cleared_session');
-			} catch (e) {}
-			isContinuing = true;
-		}
+		if (data.thread_id) storeThread(data.thread_id);
 
 		// Extract reply.
 		var reply = '';
@@ -2926,17 +3393,7 @@
 		}
 
 		// Store thread ID.
-		if (data.thread_id) {
-			setThreadId(data.thread_id);
-			try {
-				localStorage.setItem(THREAD_KEY, threadId);
-				setChatRefCookie(threadId);
-				// Fresh thread started — clear the cleared-session marker. See
-				// processChatResponse for the rationale.
-				localStorage.removeItem('def:cleared_session');
-			} catch (e) {}
-			isContinuing = true;
-		}
+		if (data.thread_id) storeThread(data.thread_id);
 
 		// Extract reply for metadata (upsertThread).
 		var reply = '';
@@ -2987,10 +3444,11 @@
 			} catch (e) {}
 		}
 
-		// Save thread to localStorage.
+		// Save thread to localStorage. A reply read after a conversation's turn whose
+		// words the room did not give: null.
 		upsertThread(
 			threadId,
-			text || 'Please analyze the attached file(s).',
+			text === null ? '' : text || 'Please analyze the attached file(s).',
 			reply,
 			data.tool_outputs
 		);
@@ -4618,7 +5076,7 @@
 		if (els.input) els.input.disabled = disabled;
 		if (els.sendBtn) els.sendBtn.disabled = disabled;
 		if (els.attachBtn) els.attachBtn.disabled = disabled;
-		if (els.micBtn) els.micBtn.disabled = disabled && !conversationOn;
+		if (els.micBtn) els.micBtn.disabled = disabled && !conversationOn && !talk;
 		// Welcome chips share the composer's disabled state — without this,
 		// taps during sending would silently no-op (chips look tappable
 		// but the click handler early-returns).
@@ -4836,7 +5294,7 @@
 
 	function destroy() {
 		destroyed = true;
-		if (conversationOn) endConversation();
+		if (conversationOn || talk) endConversation();
 		voiceRecorder = null;
 		speaker = null;
 		transcribingEl = null;
@@ -4993,5 +5451,8 @@
 		init: init,
 		destroy: destroy,
 		ask: ask,
+		// The loader closed the panel or removed the widget: its controls are out of reach, so
+		// a conversation, or today's hands-free voice, ends as a tap on the mic ends it.
+		panelClosed: function () { if (conversationOn || talk) endConversation(); },
 	};
 })();

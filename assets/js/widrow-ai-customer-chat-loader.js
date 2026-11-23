@@ -734,6 +734,8 @@
 		panel.toggleAttribute('inert', true);
 		paintKeyboardStrip(false);
 		unlockPageScroll();
+		// An open conversation, or hands-free voice, ends with the panel: inert, its stop control is out of reach.
+		if (window.DEFCustomerChat && typeof window.DEFCustomerChat.panelClosed === 'function') window.DEFCustomerChat.panelClosed();
 
 		// Hide backdrop.
 		if (isDrawer && backdrop) {
@@ -1155,6 +1157,8 @@
 	// ─── Destroy (for SPA cleanup) ──────────────────────────────────
 
 	function destroy() {
+		// The same ending as a closed panel: no open microphone outlives the widget.
+		if (window.DEFCustomerChat && typeof window.DEFCustomerChat.panelClosed === 'function') window.DEFCustomerChat.panelClosed();
 		if (abortController) {
 			abortController.abort();
 			abortController = null;
