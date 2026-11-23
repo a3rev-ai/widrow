@@ -1180,6 +1180,7 @@ final class Widrow_AI {
 			'talking'              => __( 'Speak, or type — tap the mic to end', 'widrow-ai' ),
 			'talkNotUnderstood'    => __( "I couldn't make that out. You can type your message below instead.", 'widrow-ai' ),
 			'talkLost'             => __( 'The conversation was cut off. Tap the mic to talk again.', 'widrow-ai' ),
+			'talkBusy'             => __( 'Conversations are busy right now, so the microphone works as usual.', 'widrow-ai' ),
 		);
 
 		// Per-site overrides for the hand-off form copy (5.6.0): the same form

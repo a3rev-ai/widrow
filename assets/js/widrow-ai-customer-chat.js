@@ -34,6 +34,7 @@
 		talking: 'Speak, or type \u2014 tap the mic to end',
 		talkNotUnderstood: "I couldn't make that out. You can type your message below instead.",
 		talkLost: 'The conversation was cut off. Tap the mic to talk again.',
+		talkBusy: 'Conversations are busy right now, so the microphone works as usual.',
 		clearChat: 'Clear conversation & start fresh',
 		clearConfirmTitle: 'Clear conversation?',
 		clearConfirmDesc:
@@ -2465,6 +2466,7 @@
 			onError: mine(function (kind) {
 				talkEnded();
 				if (kind === 'dropped') { appendMessage('assistant', t('talkLost')); return; }
+				if (kind === 'busy') appendMessage('assistant', t('talkBusy'));   // this tap only: the next tries again
 				if (kind === 'connect') talkFailed = true;
 				// Never reached the room: this tap goes on as the voice above.
 				conversationOn = true;
@@ -2581,7 +2583,8 @@
 	 * visitor's own (optional), onReply() at `def.reply`, once per reply when its speech has
 	 * finished or was cut off (optional), onNotice(kind) for `def.notice`,
 	 * onEnded('goodbye' | 'stop_phrase' | 'silence' | 'refused' | 'unknown': her `def.ended`;
-	 * 'end': end() was called) and onError('mint' | 'connect' | 'microphone' | 'dropped');
+	 * 'end': end() was called) and onError('mint' | 'connect' | 'microphone' | 'dropped' |
+	 * 'busy': no employee joined in time);
 	 * exactly one of the last two, once, and nothing after it. The room token goes to the
 	 * client and nowhere else; the log carries kinds and error names, never words or URLs
 	 * with their query.
@@ -2593,6 +2596,11 @@
 		// The client sets isSpeaking and audioLevel from the server's speaker updates, in
 		// steps; a side stays speaking across a gap this long.
 		var HOLD_MS = 400;
+		// A room the platform minted but no employee joined (the service is at its load): given
+		// up after this long. She joined within about three seconds on real devices; a new copy
+		// of the service starting takes longer.
+		var EMPLOYEE_WAIT_MS = 10000;
+		var waiting = null;
 		var sides = { her: { at: -1e9, level: 0 }, you: { at: -1e9, level: 0 } };
 		// Her voice and the working sound (the agent framework's track name) each play in
 		// an element of their own: the client keeps one audio track per element.
@@ -2640,6 +2648,7 @@
 			if (over) return;
 			moveTo('idle');
 			over = true;
+			clearTimeout(waiting);
 			// The microphone is let go of now, whatever the room does next.
 			var mic = room.localParticipant.getTrackPublication(LK.Track.Source.Microphone);
 			if (mic && mic.track) mic.track.stop();
@@ -2716,6 +2725,11 @@
 			if (!/^wss:/.test(m.url)) throw new Error('not a secure address');
 			return room.connect(m.url, m.token).then(function () {
 				if (over) return;
+				waiting = setTimeout(function () {
+					if (room.remoteParticipants.size) return;
+					note('no employee joined');
+					finish('', 'busy');
+				}, EMPLOYEE_WAIT_MS);
 				stage = 'microphone';
 				return room.localParticipant.setMicrophoneEnabled(true,
 					{ echoCancellation: true, noiseSuppression: true, autoGainControl: true });

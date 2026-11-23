@@ -73,7 +73,8 @@ function fakeLiveKit(w, h) {
         return h.micFails ? Promise.reject(Object.assign(new Error('no'), { name: 'NotAllowedError' })) : Promise.resolve();
       } };
     r.her = { identity: 'agent', isSpeaking: false, audioLevel: 0 };
-    r.remoteParticipants = new Map([['agent', r.her]]);
+    // No employee yet when a check says so; h.join() brings her in.
+    r.remoteParticipants = new Map(h.noEmployee ? [] : [['agent', r.her]]);
     r.on = (event, fn) => { r.handlers[event] = fn; return r; };
     r.emit = (event, ...args) => r.handlers[event] && r.handlers[event](...args);
     r.startAudio = () => { h.order.push('startAudio'); return Promise.resolve(); };
@@ -116,12 +117,13 @@ async function boot(opts) {
   const w = dom.window;
   extract.stubMatchMedia(w);
   const realST = w.setTimeout.bind(w);
-  w.setTimeout = (fn, ms) => realST(fn, (ms || 0) >= 1000 ? ms : Math.min(ms || 0, 1));
+  // opts.clock: a second of the module's is 10 ms here, so its ten-second wait can be run.
+  w.setTimeout = (fn, ms) => realST(fn, (ms || 0) >= 1000 ? (opts.clock ? ms / 100 : ms) : Math.min(ms || 0, 1));
   for (const src of VENDOR) w.eval(src);
   w.ReadableStream = function () {};
   for (const k of Object.keys(opts.storage || {})) w.localStorage.setItem(k, opts.storage[k]);
   w.WidrowAiPageContextHelper = { build: thread => ({ canonical_path: '/', for: thread }), markShipped() {} };
-  const h = { w, order: [], rooms: [], mints: [], roomMints: [], reads: [], typed: [], carts: [], starts: [], spoken: [],
+  const h = { w, noEmployee: !!opts.noEmployee, order: [], rooms: [], mints: [], roomMints: [], reads: [], typed: [], carts: [], starts: [], spoken: [],
     notes: [], disconnects: 0, micStops: 0, wakeReleases: 0, busy: null, readReply: opts.readReply || CARD_REPLY, roomStatus: 200, typedEvents: null };
   if (opts.webrtc !== false) w.RTCPeerConnection = function () {};
   w.AudioContext = function () {
@@ -158,7 +160,7 @@ async function boot(opts) {
     if (url === ROOM) {
       h.order.push('mint');
       h.roomMints.push({ body: JSON.parse(init.body), auth: init.headers.Authorization, credentials: init.credentials });
-      if (h.roomStatus !== 200) return res({ error: 'rooms_full' }, h.roomStatus);
+      if (h.roomStatus !== 200) return res({ error: 'refused' }, h.roomStatus);
       if (h.mintReply) return res(h.mintReply, 200);
       const body = JSON.parse(init.body);
       return res({ url: 'wss://media.test', token: 'room-tok', room: 'r' + h.roomMints.length,
@@ -621,6 +623,35 @@ async function boot(opts) {
   await h.start();
   check('the line comes from its own field, not the site\'s filterable strings', h.line().textContent === 'Translated: Joe answers.', h.line().textContent);
   check('a conversation that never listened leaves the line to show next time', h.w.localStorage.getItem('def:talk_line_shown') === null);
+
+  // ── A room no employee joins (the service at its load) ──
+  h = await boot({ clock: true, noEmployee: true });
+  await h.start();
+  await sleep(10);
+  check('no employee within the wait: nothing yet before it', h.orbRow().style.display === '' && h.starts.length === 0);
+  await sleep(150);
+  check('no employee within ten seconds: busy, released once, today\'s voice for this tap, said in the widget\'s words',
+    h.orbRow().style.display === 'none' && h.micStops === 1 && h.closed === 1 && h.wakeReleases === 1 && h.disconnects === 1 &&
+      h.starts.length === 1 && h.bubbles().indexOf('Conversations are busy right now, so the microphone works as usual.') !== -1 &&
+      h.notes.indexOf('conversation no employee joined') !== -1,
+    'mic=' + h.micStops + ' audio=' + h.closed + ' starts=' + h.starts.length + ' ' + show(h.notes));
+  h.noEmployee = false;
+  h.tap(); await sleep(10);   // ends today's voice
+  await h.start();
+  check('…and the next tap tries a conversation again', h.rooms.length === 2 && h.orbRow().style.display === '');
+  h = await boot({ clock: true, noEmployee: true });
+  await h.start();
+  await sleep(50);   // about nine of the module's seconds after the connect
+  h.room().remoteParticipants.set('agent', h.room().her);
+  await sleep(150);
+  check('the employee joins at about nine seconds: no busy, the conversation stays', h.orbRow().style.display === '' &&
+    h.micStops === 0 && h.starts.length === 0);
+  h = await boot({ clock: true, noEmployee: true });
+  await h.start();
+  h.tap();
+  await sleep(150);
+  check('end() before the wait is over cancels it: one release, no busy line, no today\'s voice',
+    h.micStops === 1 && h.closed === 1 && h.starts.length === 0 && h.bubbles().indexOf('Conversations are busy right now, so the microphone works as usual.') === -1);
 
   // ── The mint's own refusals ──
   h = await boot();
