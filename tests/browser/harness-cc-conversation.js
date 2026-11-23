@@ -70,17 +70,21 @@ function fakeLiveKit(w, h) {
     h.order.push('room');
     Object.assign(r, { handlers: {}, text: {}, state: 'disconnected', mic: [] });
     r.localParticipant = { identity: 'visitor', isSpeaking: false, audioLevel: 0,
+      micTrack: { side: 'you' },   // replaced when a check restarts the microphone
       getTrackPublication: source => (source === 'microphone' && r.mic.length ?
-        { track: { mediaStreamTrack: { side: 'you' }, stop() { h.micStops++; } } } : undefined),
+        { track: { mediaStreamTrack: r.localParticipant.micTrack, stop() { h.micStops++; } } } : undefined),
       setMicrophoneEnabled: (on, opts) => {
         r.mic.push(opts ? { on, opts } : on);
-        return h.micFails ? Promise.reject(Object.assign(new Error('no'), { name: 'NotAllowedError' })) : Promise.resolve();
+        // h.micGate: the browser's permission prompt still open.
+        return h.micFails ? Promise.reject(Object.assign(new Error('no'), { name: 'NotAllowedError' })) : (h.micGate || Promise.resolve());
       } };
     // Ready to hear unless a check says otherwise (her session's `lk.agent.state`).
     r.her = { identity: 'agent', isSpeaking: false, audioLevel: 0,
       attributes: h.herState === null ? {} : { 'lk.agent.state': h.herState || 'listening' } };
     // Her voice's track subscribed, as the client announces it.
-    r.herTrack = () => r.emit('trackSubscribed', { kind: 'audio', mediaStreamTrack: { side: 'her' }, attach() {} }, { trackName: 'agent_voice' });
+    const voice = { kind: 'audio', mediaStreamTrack: { side: 'her' }, attach() {}, detach() {} };
+    r.herTrack = () => r.emit('trackSubscribed', voice, { trackName: 'agent_voice' });
+    r.herTrackGone = () => r.emit('trackUnsubscribed', voice, { trackName: 'agent_voice' });
     // No employee yet when a check says so; h.join() brings her in.
     r.remoteParticipants = new Map(h.noEmployee ? [] : [['agent', r.her]]);
     r.on = (event, fn) => { r.handlers[event] = fn; return r; };
@@ -136,17 +140,23 @@ async function boot(opts) {
   w.WidrowAiPageContextHelper = { build: thread => ({ canonical_path: '/', for: thread }), markShipped() {} };
   const h = { w, noEmployee: !!opts.noEmployee, order: [], rooms: [], mints: [], roomMints: [], reads: [], typed: [], carts: [], starts: [], spoken: [],
     notes: [], disconnects: 0, micStops: 0, wakeReleases: 0, busy: null, readReply: opts.readReply || CARD_REPLY, roomStatus: 200, typedEvents: null,
-    holdReads: false, held: [], levels: {}, herState: opts.herState };
+    holdReads: false, held: [], levels: {}, herState: opts.herState, sources: [] };
+  if (opts.reducedMotion) w.reducedMotion = 'reduce';
   if (opts.webrtc !== false) w.RTCPeerConnection = function () {};
   w.AudioContext = function () {
     h.order.push('unlock');
     Object.assign(this, { state: 'running', destination: {},
       createBufferSource: () => ({ connect() {}, start() { h.order.push('silence'); } }),
       createBuffer: () => ({}), resume: () => Promise.resolve(),
-      createMediaStreamDestination: () => ({ stream: {} }), close: () => { h.closed = (h.closed || 0) + 1; return Promise.resolve(); },
-      // Each side's analyser fills its bins with h.levels[side] (0 to 255).
-      createMediaStreamSource: stream => ({ side: stream.tracks[0].side,
-        connect(node) { node.side = this.side; }, disconnect() { h.meterStops = (h.meterStops || 0) + 1; } }),
+      createMediaStreamDestination: () => ({ stream: {} }),
+      close: () => { this.state = 'closed'; h.closed = (h.closed || 0) + 1; return Promise.resolve(); },
+      // Each side's analyser fills its bins with h.levels[side] (0 to 255). A closed context throws, as a browser's does.
+      createMediaStreamSource: stream => {
+        if (this.state === 'closed') throw new Error('InvalidStateError');
+        h.sources.push(stream.tracks[0].side);
+        return { side: stream.tracks[0].side,
+        connect(node) { node.side = this.side; }, disconnect() { h.meterStops = (h.meterStops || 0) + 1; } };
+      },
       createAnalyser: () => ({ frequencyBinCount: 8, getByteFrequencyData(bins) { bins.fill(h.levels[this.side] || 0); } }) });
   };
   w.MediaStream = function (tracks) { this.tracks = tracks; };
@@ -954,6 +964,64 @@ async function boot(opts) {
   check('reduced motion: the orb keeps its colours and does not move',
     /@media \(prefers-reduced-motion: reduce\) \{[^}]*\.def-cc-orb \{\s*transform: none !important;/.test(
       fs.readFileSync(path.join(extract.REPO, 'assets/css/widrow-ai-customer-chat.css'), 'utf8')));
+
+  // ── The permission prompt left open; talk-over then the end; the meters' lives ──
+  h = await boot({ clock: true });
+  let allow;
+  h.micGate = new Promise(r => { allow = r; });
+  h.tap();
+  await sleep(200);   // twenty of the module's seconds on the microphone prompt, the employee ready
+  check('the microphone prompt left open for twenty seconds with a ready employee: no busy, still connecting',
+    h.orbRow().style.display === '' && h.starts.length === 0 && h.orb().dataset.state === 'connecting',
+    h.orb().dataset.state + ' starts=' + h.starts.length + ' ' + show(h.notes));
+  allow();
+  await sleep(60);
+  check('…allowed: listening', h.orb().dataset.state === 'listening', h.orb().dataset.state);
+
+  h = await boot({ readReply: { ended: false, reply: { id: 'w1', content: 'We open at nine.', tool_outputs: [] } } });
+  await h.start();
+  await h.utter('U1', 'When do you open?');
+  const cutOff = h.her('A1');
+  cutOff.say('We open at');
+  await sleep(5);
+  await h.utter('U2', 'And on Sundays?');
+  cutOff.close();
+  h.room().replyDone();   // she is cut off: the reply is over
+  await sleep(40);
+  h.tap();                // then the conversation ends; the last read hands back the same reply
+  await sleep(60);
+  const kept2 = JSON.parse(h.w.localStorage.getItem('a3rev_threads'))[0].messages.map(m => m.role + ': ' + m.content);
+  check('talked over her, the reply over, then the end: the visitor\'s words said once and in the history',
+    announced().filter(l => l === 'And on Sundays?').length === 1 &&
+      show(kept2) === show(['user: When do you open?', 'assistant: We open at nine.', 'user: And on Sundays?']), show(announced()) + ' ' + show(kept2));
+
+  h = await boot();
+  await h.start();
+  h.tap();
+  await sleep(10);
+  let threw = null;
+  try { h.room().herTrack(); } catch (e) { threw = e; }
+  check('her track subscribed after the end: nothing measured on the closed audio', !threw && h.sources.indexOf('her') === -1, String(threw));
+  h = await boot();
+  await h.start();
+  h.room().herTrack();
+  h.room().herTrackGone();
+  await sleep(10);
+  check('her track unsubscribed: her meter released', h.meterStops === 1, 'stops=' + h.meterStops);
+  h.room().localParticipant.micTrack = { side: 'you' };   // the client restarted the microphone
+  h.levels = { you: 64 };
+  h.room().localParticipant.isSpeaking = true;
+  await sleep(300);
+  check('a restarted microphone track: the visitor\'s meter follows it and the orb still moves',
+    h.sources.filter(x => x === 'you').length === 2 && /^scale\(1\.20\d\)$/.test(h.orb().style.transform), show(h.sources) + ' ' + h.orb().style.transform);
+  h = await boot({ reducedMotion: true });
+  await h.start();
+  h.room().herTrack();
+  h.levels = { you: 255 };
+  h.room().localParticipant.isSpeaking = true;
+  await sleep(60);
+  check('reduced motion: nothing measured, the orb still', h.sources.length === 0 && h.orb().style.transform === '' &&
+    h.orb().dataset.state === 'listening', show(h.sources) + ' ' + h.orb().style.transform);
 
   console.log('harness-cc-conversation: ' + pass + ' passed, ' + fail + ' failed');
   console.log(results.join('\n'));

@@ -635,6 +635,7 @@ function stubMatchMedia(w) {
 		if (m[1] === 'max-width') return w.innerWidth <= +m[2];
 		if (m[1] === 'max-height') return w.innerHeight <= +m[2];
 		if (m[1] === 'pointer') return w.pointer === m[2];
+		if (m[1] === 'prefers-reduced-motion') return (w.reducedMotion || 'no-preference') === m[2];
 		throw new Error('stubMatchMedia: no feature ' + m[1]);
 	};
 	w.matchMedia = q => ({ media: q, matches: q.split(',').some(part => part.split(/\band\b/).every(holds)) });

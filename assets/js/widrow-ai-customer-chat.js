@@ -2492,10 +2492,15 @@
 	// Every ending: back to the ordinary chat, the mic ready to start again.
 	function talkEnded() {
 		if (talkRoom) {
-			var read = replyOver();   // in case the room's last reply message was lost
-			// Words said over her last reply: said once now, and kept after it.
+			// A last read, in case the room's last reply message was lost. Words said since her
+			// last reply are said once now, and kept: after the reply in progress, or as the
+			// words a newly drawn reply answers, or else on their own.
+			var last = reply;
+			reply = null;
 			var left = answerStarts();
-			if (left.length) read.then(function () { if (!destroyed) upsertThread(threadId, said(left), '', null); });
+			readReply(last ? last.bubbles : [], talkRoom, last ? last.asked : left).then(function (drawn) {
+				if (left.length && !destroyed && (last || !drawn)) upsertThread(threadId, said(left), '', null);
+			});
 		}
 		talkEpoch++;
 		talk = null;
@@ -2529,11 +2534,12 @@
 	function replyOver() {
 		var over = reply || { bubbles: [], asked: answerStarts() };
 		reply = null;
-		return readReply(over.bubbles, talkRoom, over.asked);
+		readReply(over.bubbles, talkRoom, over.asked);
 	}
 
 	// After her reply, its written form and tool outputs take the place of the words she
 	// spoke, rendered as a typed reply's are (cards, the hand-off button, an add to cart).
+	// Resolves true when it drew a reply.
 	function readReply(spoken, room, asked) {
 		return tokenForThread().then(function (ok) {
 			return ok ? fetch(roomUrl() + '/' + encodeURIComponent(room), {
@@ -2549,6 +2555,7 @@
 			if (!data || destroyed) return;
 			if (data.reply && !(data.reply.id && data.reply.id === lastReplyId)) {
 				lastReplyId = data.reply.id || '';
+				var drawn = true;
 				if (window.DefResultCards) window.DefResultCards.resetTurn();
 				var typing = isComposerDisabled;
 				var before = els.messages.lastChild;
@@ -2567,6 +2574,7 @@
 			}
 			// Her goodbye's room message can be lost; the read says so too.
 			if (data.ended && talk && room === talkRoom) endConversation();
+			return drawn;
 		});
 	}
 
@@ -2626,6 +2634,8 @@
 		var waiting = null;
 		var sides = { her: { at: -1e9 }, you: { at: -1e9 } };
 		var meters = {};   // each side's level, from its own audio track
+		// With reduced motion the orb does not move, so nothing is measured.
+		var still = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
 		// Her voice and the working sound (the agent framework's track name) each play in
 		// an element of their own: the client keeps one audio track per element.
 		var herAudio = document.body.appendChild(document.createElement('audio'));
@@ -2697,8 +2707,8 @@
 		// suspended outside a tap. The track feeds its audio element and the analyser alike,
 		// as with the client's helper (it does not clone the track either).
 		function meter(side, track) {
-			if (!audio || !window.MediaStream || !track || !track.mediaStreamTrack) return;
-			if (meters[side]) meters[side].stop();
+			if (over || still || !audio || !window.MediaStream || !track || !track.mediaStreamTrack) return;
+			unmeter(side);
 			var source = audio.createMediaStreamSource(new MediaStream([track.mediaStreamTrack]));
 			var node = audio.createAnalyser();
 			node.minDecibels = -100;
@@ -2715,28 +2725,38 @@
 					return Math.sqrt(sum / bins.length);
 				},
 				stop: function () { source.disconnect(); },
+				track: track.mediaStreamTrack,
 			};
+		}
+
+		function unmeter(side) {
+			if (meters[side]) meters[side].stop();
+			delete meters[side];
+		}
+
+		// She can hear once her session has started: her `lk.agent.state` is there and not
+		// "initializing", or she speaks. Words sent before that are lost.
+		function herReady() {
+			var her = room.remoteParticipants.values().next().value;
+			var agent = her && her.attributes && her.attributes['lk.agent.state'];
+			return !!her && (her.isSpeaking || (!!agent && agent !== 'initializing'));
 		}
 
 		function level(side, on) {
 			return on && meters[side] ? meters[side].level() : 0;
 		}
 
-		// Each frame. She can hear once her session has started: until her `lk.agent.state`
-		// attribute says so (or she speaks), it stays connecting, as words sent before that
-		// are lost.
+		// Each frame: connecting until she can hear. The visitor's meter follows a microphone
+		// track the client restarted (an iPhone's interruption, another device).
 		function watch() {
 			if (over) return;
 			var now = performance.now();
 			var first = room.remoteParticipants.values().next();
-			var her = first.done ? null : first.value;
-			var herOn = speaking(sides.her, her, now);
+			var herOn = speaking(sides.her, first.done ? null : first.value, now);
 			var youOn = speaking(sides.you, room.localParticipant, now);
-			if (!ready) {
-				var agent = her && her.attributes && her.attributes['lk.agent.state'];
-				ready = herOn || (!!agent && agent !== 'initializing');
-				if (ready) clearTimeout(waiting);
-			}
+			if (!ready && herReady()) { ready = true; clearTimeout(waiting); }
+			var mic = room.localParticipant.getTrackPublication(LK.Track.Source.Microphone);
+			if (mic && mic.track && (!meters.you || meters.you.track !== mic.track.mediaStreamTrack)) meter('you', mic.track);
 			if (ready) {
 				moveTo(herOn ? 'speaking' : 'listening');
 				cb.onLevel(level('you', youOn), level('her', herOn));
@@ -2770,7 +2790,10 @@
 			if (!working) meter('her', track);
 		});
 		room.on(RoomEvent.TrackUnsubscribed, function (track, publication) {
-			if (track.kind === LK.Track.Kind.Audio) track.detach(publication.trackName === 'background_audio' ? workingAudio : herAudio);
+			if (track.kind !== LK.Track.Kind.Audio) return;
+			var working = publication.trackName === 'background_audio';
+			track.detach(working ? workingAudio : herAudio);
+			if (!working) unmeter('her');
 		});
 		room.on(RoomEvent.DataReceived, function (payload, participant, kind, topic) {
 			if (topic === 'def.reply') { if (cb.onReply) cb.onReply(); return; }
@@ -2797,7 +2820,7 @@
 				if (over) return;
 				// Given up unless she is ready to hear in time, not merely in the room.
 				waiting = setTimeout(function () {
-					if (ready) return;
+					if (ready || herReady()) return;   // her readiness, whether or not the tick has begun
 					note(room.remoteParticipants.size ? 'employee not ready' : 'no employee joined');
 					finish('', 'busy');
 				}, EMPLOYEE_WAIT_MS);
@@ -2808,8 +2831,6 @@
 				if (over) return;
 				stage = 'live';
 				if (muted) room.localParticipant.setMicrophoneEnabled(false).catch(function () {});
-				var mic = room.localParticipant.getTrackPublication(LK.Track.Source.Microphone);
-				meter('you', mic && mic.track);
 				watch();
 			});
 		}).catch(function (e) {
