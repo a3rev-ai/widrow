@@ -919,8 +919,8 @@
 	display: flex;
 	flex-direction: column;
 	align-items: center;
-	gap: 8px;
-	padding: 12px 16px 4px;
+	gap: 12px;
+	padding: 12px 16px;   /* room for the orb at its largest (1.4x: 8px each side) */
 }
 
 .def-cc-orb {

@@ -2320,12 +2320,15 @@
 	var talkEpoch = 0;         // a callback from an ended conversation is ignored
 	var talkRoom = '';
 	var talkState = '';
-	var captionEl = null;      // the bubble her words fill as she says them
-	var spokenEls = [];        // her reply's bubbles so far: one per segment she speaks
+	var orbScale = 1;
+	// Each segment of words is bound, when it starts, to what it fills: the room may deliver a
+	// segment more than once (an utterance comes twice, each copy closed), and the streams of
+	// one moment arrive in any order, so nothing is written to "the current bubble".
+	var segments = Object.create(null);   // a segment's id → the visitor's message or her bubble it fills
+	var heard = null;          // the visitor's message being filled: { el, ids, texts }
+	var unanswered = [];       // their messages since her last reply began
+	var reply = null;          // her reply in progress: { bubbles, asked: the visitor's messages it answers }
 	var lastReplyId = '';      // a reply is drawn, and its add to cart carried out, once
-	var heardEl = null;        // the visitor's message, filled as they speak
-	var heardDone = '';        // its finished segments, until she answers
-	var captionAsked = '';     // the visitor's words her reply in progress answers
 	var heldSpeech = [];       // a typed reply's lines, waiting for her spoken reply to finish
 	var typedSpeaking = false; // a typed reply's lines are arriving
 	var talkMuted = false;
@@ -2383,6 +2386,7 @@
 		els.orbLine.style.display = shown ? 'none' : '';
 		els.orbBall.dataset.state = 'connecting';
 		els.orbBall.style.transform = '';
+		orbScale = 1;
 		els.orb.style.display = '';
 	}
 
@@ -2419,7 +2423,7 @@
 		});
 		var epoch = ++talkEpoch;
 		var mine = function (fn) {
-			return function (a, b) { if (epoch === talkEpoch) fn(a, b); };
+			return function (a, b, c) { if (epoch === talkEpoch) fn(a, b, c); };
 		};
 		showOrb();
 		setMicState('conversation', t('talking'));
@@ -2432,30 +2436,40 @@
 				}
 				if (state !== 'speaking') playHeldSpeech();
 			}),
+			// Ordinary speech moves it clearly, eased so it does not jitter; at most 1.4, where
+			// it would reach the line under it.
 			onLevel: mine(function (heard, spoken) {
 				var level = talkState === 'speaking' ? spoken : heard;
-				els.orbBall.style.transform = level ? 'scale(' + (1 + 0.6 * Math.min(level, 1)) + ')' : '';
+				orbScale += (1 + Math.min(0.4, 0.8 * level) - orbScale) * 0.35;
+				els.orbBall.style.transform = orbScale > 1.005 ? 'scale(' + orbScale.toFixed(3) + ')' : '';
 			}),
-			// The visitor's words: one message until she answers, however many segments.
-			onHeard: mine(function (text, final) {
-				if (!heardEl) heardEl = appendUserMessage('', [], true);
-				var words = (heardDone ? heardDone + ' ' : '') + text;
-				heardEl.textContent = words;   // as text, never markup
-				if (final) heardDone = words;
+			// The visitor's words: one message until a bubble of hers comes after it, however
+			// many segments; a segment delivered again replaces its own words.
+			onHeard: mine(function (text, id) {
+				var msg = segments[id];
+				if (!msg) {
+					if (!heard) unanswered.push(heard = { el: appendUserMessage('', [], true), ids: [], texts: {} });
+					msg = segments[id] = heard;
+					msg.ids.push(id);
+				}
+				msg.texts[id] = text;
+				msg.el.textContent = msg.ids.map(function (i) { return msg.texts[i]; }).filter(Boolean).join(' ');   // as text, never markup
 				scrollToBottom();
 			}),
-			onCaption: mine(function (text, final) {
-				if (!captionEl) {
-					if (!spokenEls.length) answerStarts();
+			// Her words: a bubble per segment, in the reply in progress when the segment starts.
+			onCaption: mine(function (text, id) {
+				var bubble = segments[id];
+				if (!bubble) {
+					if (!reply) reply = { bubbles: [], asked: answerStarts() };
 					var msg = el('div', 'def-cc-message def-cc-message--assistant def-cc-message--spoken');
-					captionEl = msg.appendChild(el('div', 'def-cc-message-content'));
+					bubble = segments[id] = msg.appendChild(el('div', 'def-cc-message-content'));
 					els.messages.appendChild(msg);
-					spokenEls.push(captionEl);
+					reply.bubbles.push(bubble);
+					heard = null;   // the visitor's next words go below it
 				}
 				var follow = isAtEnd();
-				captionEl.textContent = text;   // her words as text, never markup
+				bubble.textContent = text;   // her words as text, never markup
 				if (follow) scrollToBottom();
-				if (final) captionEl = null;
 			}),
 			// The room says her reply is over (spoken or cut off): the one read for it.
 			onReply: mine(function () { replyOver(); }),
@@ -2477,42 +2491,57 @@
 
 	// Every ending: back to the ordinary chat, the mic ready to start again.
 	function talkEnded() {
-		if (talkRoom) replyOver();   // in case the room's last reply message was lost
+		if (talkRoom) {
+			// A last read, in case the room's last reply message was lost. Words said since her
+			// last reply are said once now, and kept: after the reply in progress, or as the
+			// words a newly drawn reply answers, or else on their own.
+			var last = reply;
+			reply = null;
+			var left = answerStarts();
+			readReply(last ? last.bubbles : [], talkRoom, last ? last.asked : left).then(function (drawn) {
+				if (left.length && !destroyed && (last || !drawn)) upsertThread(threadId, said(left), '', null);
+			});
+		}
 		talkEpoch++;
 		talk = null;
 		talkRoom = '';
 		talkState = '';
-		captionEl = heardEl = null;
-		heardDone = captionAsked = '';
-		spokenEls = [];
+		segments = Object.create(null);
+		heard = reply = null;
+		unanswered = [];
 		heldSpeech = [];
 		typedSpeaking = talkMuted = false;
 		if (els.orb) els.orb.style.display = 'none';
 		setMicState('idle');
 	}
 
-	// She answers (or the turn is over without her words): the visitor's message is whole,
-	// said once (as a spoken message is when its transcript fills it), and is that turn's
-	// for the history.
+	// She answers (or the turn is over without her words): the visitor's messages since her
+	// last reply are said once each (as a spoken message is when its transcript fills it),
+	// and are that turn's for the history, their words read when it is written.
 	function answerStarts() {
-		if (heardEl) announce(heardEl);
-		captionAsked = heardDone;
-		heardEl = null;
-		heardDone = '';
+		var asked = unanswered;
+		asked.forEach(function (msg) { announce(msg.el); });
+		unanswered = [];
+		heard = null;
+		return asked;
 	}
 
+	function said(msgs) {
+		return msgs.map(function (msg) { return msg.el.textContent; }).join(' ');
+	}
+
+	// The read is for this reply: bound to its bubbles now, before anything newer arrives.
 	function replyOver() {
-		if (!spokenEls.length) answerStarts();
-		readReply(spokenEls, talkRoom, captionAsked);
-		captionEl = null;
-		spokenEls = [];
-		captionAsked = '';
+		var over = reply || { bubbles: [], asked: answerStarts() };
+		reply = null;
+		readReply(over.bubbles, talkRoom, over.asked);
 	}
 
 	// After her reply, its written form and tool outputs take the place of the words she
 	// spoke, rendered as a typed reply's are (cards, the hand-off button, an add to cart).
+	// Resolves true when it drew a reply.
 	function readReply(spoken, room, asked) {
-		tokenForThread().then(function (ok) {
+		return tokenForThread().then(function (ok) {
 			return ok ? fetch(roomUrl() + '/' + encodeURIComponent(room), {
 				method: 'GET',
 				credentials: 'omit',
@@ -2526,11 +2555,12 @@
 			if (!data || destroyed) return;
 			if (data.reply && !(data.reply.id && data.reply.id === lastReplyId)) {
 				lastReplyId = data.reply.id || '';
+				var drawn = true;
 				if (window.DefResultCards) window.DefResultCards.resetTurn();
 				var typing = isComposerDisabled;
 				var before = els.messages.lastChild;
 				processChatResponseMeta({ thread_id: threadId, choices: [{ message: { content: data.reply.content || '' } }],
-					tool_outputs: data.reply.tool_outputs }, asked || null, false);
+					tool_outputs: data.reply.tool_outputs }, said(asked) || null, false);
 				if (typing) setComposerDisabled(true);   // a typed message still streaming keeps the composer
 				// In place: after a talk-over, newer words stay below it.
 				var place = spoken[0] && spoken[0].parentNode;
@@ -2544,6 +2574,7 @@
 			}
 			// Her goodbye's room message can be lost; the read says so too.
 			if (data.ended && talk && room === talkRoom) endConversation();
+			return drawn;
 		});
 	}
 
@@ -2577,11 +2608,11 @@
 	 * conversation(minted, callbacks) → { end(), mute(on) }. `minted` is the mint's reply
 	 * {url, token, room, thread_id}, or a promise of it: called inside the tap, what an
 	 * iPhone allows only there runs before the mint is awaited. Callbacks:
-	 * onState('connecting', then 'listening' whenever she is not speaking, 'speaking' while she
-	 * is, 'idle' once it is over), onLevel(in, out) each
-	 * frame, onCaption(text so far, final) for her words, onHeard(text so far, final) for the
-	 * visitor's own (optional), onReply() at `def.reply`, once per reply when its speech has
-	 * finished or was cut off (optional), onNotice(kind) for `def.notice`,
+	 * onState('connecting' until she can hear, then 'listening' whenever she is not speaking,
+	 * 'speaking' while she is, 'idle' once it is over), onLevel(in, out) each frame (0 to 1), onCaption(text so far, segment id) for her words, onHeard(text so far, segment id)
+	 * for the visitor's own (optional; a segment may come more than once),
+	 * onReply() at `def.reply`, once per reply when its speech has finished or was cut off
+	 * (optional), onNotice(kind) for `def.notice`,
 	 * onEnded('goodbye' | 'stop_phrase' | 'silence' | 'refused' | 'unknown': her `def.ended`;
 	 * 'end': end() was called) and onError('mint' | 'connect' | 'microphone' | 'dropped' |
 	 * 'busy': no employee joined in time);
@@ -2592,7 +2623,7 @@
 	function conversation(minted, cb) {
 		var LK = window.LivekitClient;
 		var RoomEvent = LK.RoomEvent;
-		var over = false, state = '', stage = 'mint', announced = '', wakeLock = null, muted = false;
+		var over = false, state = '', stage = 'mint', announced = '', wakeLock = null, muted = false, ready = false;
 		// The client sets isSpeaking and audioLevel from the server's speaker updates, in
 		// steps; a side stays speaking across a gap this long.
 		var HOLD_MS = 400;
@@ -2601,7 +2632,10 @@
 		// of the service starting takes longer.
 		var EMPLOYEE_WAIT_MS = 10000;
 		var waiting = null;
-		var sides = { her: { at: -1e9, level: 0 }, you: { at: -1e9, level: 0 } };
+		var sides = { her: { at: -1e9 }, you: { at: -1e9 } };
+		var meters = {};   // each side's level, from its own audio track
+		// With reduced motion the orb does not move, so nothing is measured.
+		var still = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
 		// Her voice and the working sound (the agent framework's track name) each play in
 		// an element of their own: the client keeps one audio track per element.
 		var herAudio = document.body.appendChild(document.createElement('audio'));
@@ -2649,6 +2683,7 @@
 			moveTo('idle');
 			over = true;
 			clearTimeout(waiting);
+			Object.keys(meters).forEach(function (side) { meters[side].stop(); });
 			// The microphone is let go of now, whatever the room does next.
 			var mic = room.localParticipant.getTrackPublication(LK.Track.Source.Microphone);
 			if (mic && mic.track) mic.track.stop();
@@ -2662,18 +2697,70 @@
 		}
 
 		function speaking(side, participant, now) {
-			if (participant && participant.isSpeaking) { side.at = now; side.level = participant.audioLevel; }
+			if (participant && participant.isSpeaking) side.at = now;
 			return now - side.at < HOLD_MS;
 		}
 
+		// A side's loudness, 0 to 1, as the client's own createAudioAnalyser measures it (the
+		// root mean square of an analyser's bins between -100 and -80 dB), on the context the
+		// tap unlocked: the client's helper makes a context of its own, which an iPhone starts
+		// suspended outside a tap. The track feeds its audio element and the analyser alike,
+		// as with the client's helper (it does not clone the track either).
+		function meter(side, track) {
+			if (over || still || !audio || !window.MediaStream || !track || !track.mediaStreamTrack) return;
+			unmeter(side);
+			var source = audio.createMediaStreamSource(new MediaStream([track.mediaStreamTrack]));
+			var node = audio.createAnalyser();
+			node.minDecibels = -100;
+			node.maxDecibels = -80;
+			node.fftSize = 2048;
+			node.smoothingTimeConstant = 0.8;
+			source.connect(node);
+			var bins = new Uint8Array(node.frequencyBinCount);
+			meters[side] = {
+				level: function () {
+					node.getByteFrequencyData(bins);
+					var sum = 0;
+					for (var i = 0; i < bins.length; i++) sum += (bins[i] / 255) * (bins[i] / 255);
+					return Math.sqrt(sum / bins.length);
+				},
+				stop: function () { source.disconnect(); },
+				track: track.mediaStreamTrack,
+			};
+		}
+
+		function unmeter(side) {
+			if (meters[side]) meters[side].stop();
+			delete meters[side];
+		}
+
+		// She can hear once her session has started: her `lk.agent.state` is there and not
+		// "initializing", or she speaks. Words sent before that are lost.
+		function herReady() {
+			var her = room.remoteParticipants.values().next().value;
+			var agent = her && her.attributes && her.attributes['lk.agent.state'];
+			return !!her && (her.isSpeaking || (!!agent && agent !== 'initializing'));
+		}
+
+		function level(side, on) {
+			return on && meters[side] ? meters[side].level() : 0;
+		}
+
+		// Each frame: connecting until she can hear. The visitor's meter follows a microphone
+		// track the client restarted (an iPhone's interruption, another device).
 		function watch() {
 			if (over) return;
 			var now = performance.now();
 			var first = room.remoteParticipants.values().next();
 			var herOn = speaking(sides.her, first.done ? null : first.value, now);
 			var youOn = speaking(sides.you, room.localParticipant, now);
-			moveTo(herOn ? 'speaking' : 'listening');
-			cb.onLevel(youOn ? sides.you.level : 0, herOn ? sides.her.level : 0);
+			if (!ready && herReady()) { ready = true; clearTimeout(waiting); }
+			var mic = room.localParticipant.getTrackPublication(LK.Track.Source.Microphone);
+			if (mic && mic.track && (!meters.you || meters.you.track !== mic.track.mediaStreamTrack)) meter('you', mic.track);
+			if (ready) {
+				moveTo(herOn ? 'speaking' : 'listening');
+				cb.onLevel(level('you', youOn), level('her', herOn));
+			}
 			requestAnimationFrame(watch);
 		}
 
@@ -2681,26 +2768,32 @@
 		room.registerTextStreamHandler('lk.transcription', function (reader, from) {
 			var mine = from.identity === room.localParticipant.identity;
 			var say = mine ? cb.onHeard || function () {} : cb.onCaption;
+			var id = (reader.info.attributes || {})['lk.segment_id'] || reader.info.id;
 			var text = '';
 			var pieces = reader[Symbol.asyncIterator]();
 			(function next() {
 				pieces.next().then(function (r) {
 					if (over) return;
-					if (r.done) { say(text, true); return; }
+					if (r.done) return;
 					text += String(r.value);
-					say(text, false);
+					say(text, id);
 					next();
 				}, function (e) {
 					note('words stream failed (' + (e && e.name) + ')');
-					if (!over && text) say(text, true);
 				});
 			})();
 		});
 		room.on(RoomEvent.TrackSubscribed, function (track, publication) {
-			if (track.kind === LK.Track.Kind.Audio) track.attach(publication.trackName === 'background_audio' ? workingAudio : herAudio);
+			if (track.kind !== LK.Track.Kind.Audio) return;
+			var working = publication.trackName === 'background_audio';
+			track.attach(working ? workingAudio : herAudio);
+			if (!working) meter('her', track);
 		});
 		room.on(RoomEvent.TrackUnsubscribed, function (track, publication) {
-			if (track.kind === LK.Track.Kind.Audio) track.detach(publication.trackName === 'background_audio' ? workingAudio : herAudio);
+			if (track.kind !== LK.Track.Kind.Audio) return;
+			var working = publication.trackName === 'background_audio';
+			track.detach(working ? workingAudio : herAudio);
+			if (!working) unmeter('her');
 		});
 		room.on(RoomEvent.DataReceived, function (payload, participant, kind, topic) {
 			if (topic === 'def.reply') { if (cb.onReply) cb.onReply(); return; }
@@ -2725,9 +2818,10 @@
 			if (!/^wss:/.test(m.url)) throw new Error('not a secure address');
 			return room.connect(m.url, m.token).then(function () {
 				if (over) return;
+				// Given up unless she is ready to hear in time, not merely in the room.
 				waiting = setTimeout(function () {
-					if (room.remoteParticipants.size) return;
-					note('no employee joined');
+					if (ready || herReady()) return;   // her readiness, whether or not the tick has begun
+					note(room.remoteParticipants.size ? 'employee not ready' : 'no employee joined');
 					finish('', 'busy');
 				}, EMPLOYEE_WAIT_MS);
 				stage = 'microphone';
@@ -2737,7 +2831,6 @@
 				if (over) return;
 				stage = 'live';
 				if (muted) room.localParticipant.setMicrophoneEnabled(false).catch(function () {});
-				moveTo('listening');
 				watch();
 			});
 		}).catch(function (e) {

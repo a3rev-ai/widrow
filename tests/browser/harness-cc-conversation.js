@@ -15,7 +15,10 @@
  * typed message keeps the room, asks for speech and mutes the room's microphone while
  * its reply plays, after her spoken reply; `not_understood` offers typing; each ending;
  * a rejected mint and a room that cannot connect fall back, the second for the page's
- * life with its cause in the voice log; nothing arrives after the end.
+ * life with its cause in the voice log; nothing arrives after the end. Each segment of
+ * words fills the bubble bound when it starts: an utterance the room delivers twice shows
+ * once, and at a talk-over, in any order of arrival, each read's reply lands in its own
+ * reply's place and the screen keeps the order things were said.
  *
  * Bite check: CC_MODULE=<a scratch copy of the widget> runs it against that file.
  */
@@ -67,12 +70,21 @@ function fakeLiveKit(w, h) {
     h.order.push('room');
     Object.assign(r, { handlers: {}, text: {}, state: 'disconnected', mic: [] });
     r.localParticipant = { identity: 'visitor', isSpeaking: false, audioLevel: 0,
-      getTrackPublication: source => (source === 'microphone' && r.mic.length ? { track: { stop() { h.micStops++; } } } : undefined),
+      micTrack: { side: 'you' },   // replaced when a check restarts the microphone
+      getTrackPublication: source => (source === 'microphone' && r.mic.length ?
+        { track: { mediaStreamTrack: r.localParticipant.micTrack, stop() { h.micStops++; } } } : undefined),
       setMicrophoneEnabled: (on, opts) => {
         r.mic.push(opts ? { on, opts } : on);
-        return h.micFails ? Promise.reject(Object.assign(new Error('no'), { name: 'NotAllowedError' })) : Promise.resolve();
+        // h.micGate: the browser's permission prompt still open.
+        return h.micFails ? Promise.reject(Object.assign(new Error('no'), { name: 'NotAllowedError' })) : (h.micGate || Promise.resolve());
       } };
-    r.her = { identity: 'agent', isSpeaking: false, audioLevel: 0 };
+    // Ready to hear unless a check says otherwise (her session's `lk.agent.state`).
+    r.her = { identity: 'agent', isSpeaking: false, audioLevel: 0,
+      attributes: h.herState === null ? {} : { 'lk.agent.state': h.herState || 'listening' } };
+    // Her voice's track subscribed, as the client announces it.
+    const voice = { kind: 'audio', mediaStreamTrack: { side: 'her' }, attach() {}, detach() {} };
+    r.herTrack = () => r.emit('trackSubscribed', voice, { trackName: 'agent_voice' });
+    r.herTrackGone = () => r.emit('trackUnsubscribed', voice, { trackName: 'agent_voice' });
     // No employee yet when a check says so; h.join() brings her in.
     r.remoteParticipants = new Map(h.noEmployee ? [] : [['agent', r.her]]);
     r.on = (event, fn) => { r.handlers[event] = fn; return r; };
@@ -94,14 +106,17 @@ function fakeLiveKit(w, h) {
     r.close = () => { r.closed = true; r.state = 'disconnected'; r.emit('disconnected', DisconnectReason.UNKNOWN_REASON); };
     r.replyDone = () => r.data('def.reply', { type: 'reply' });
     r.data = (topic, obj) => r.emit('dataReceived', new w.TextEncoder().encode(JSON.stringify(obj)), r.her, 0, topic);
-    // Her words as a text stream: say() a piece, close() the segment.
-    r.words = from => {
+    // Her words as a text stream: say() a piece, close() the segment. `attributes` as the
+    // room stamps them (lk.segment_id, lk.transcription_final); none, as the older checks send.
+    r.words = (from, attributes) => {
       const queue = [], waiting = [];
       const feed = v => (waiting.length ? waiting.shift()(v) : queue.push(v));
-      r.text['lk.transcription']({ [Symbol.asyncIterator]: () => ({
-        next: () => (queue.length ? Promise.resolve(queue.shift()) : new Promise(res => waiting.push(res))) }) },
-        { identity: from || 'agent' });
-      return { say: t => feed({ done: false, value: t }), close: () => feed({ done: true }),
+      const reader = { info: { id: 'TS_' + (h.streams = (h.streams || 0) + 1), attributes: attributes || {} },
+        [Symbol.asyncIterator]: () => ({
+          next: () => (queue.length ? Promise.resolve(queue.shift()) : new Promise(res => waiting.push(res))) }) };
+      r.text['lk.transcription'](reader, { identity: from || 'agent' });
+      return { say: t => feed({ done: false, value: t }),
+        close: () => feed({ done: true }),
         fail: () => (waiting.length ? waiting.shift() : () => {})(Promise.reject(Object.assign(new Error('x'), { name: 'NetworkError' }))) };
     };
   }
@@ -124,15 +139,27 @@ async function boot(opts) {
   for (const k of Object.keys(opts.storage || {})) w.localStorage.setItem(k, opts.storage[k]);
   w.WidrowAiPageContextHelper = { build: thread => ({ canonical_path: '/', for: thread }), markShipped() {} };
   const h = { w, noEmployee: !!opts.noEmployee, order: [], rooms: [], mints: [], roomMints: [], reads: [], typed: [], carts: [], starts: [], spoken: [],
-    notes: [], disconnects: 0, micStops: 0, wakeReleases: 0, busy: null, readReply: opts.readReply || CARD_REPLY, roomStatus: 200, typedEvents: null };
+    notes: [], disconnects: 0, micStops: 0, wakeReleases: 0, busy: null, readReply: opts.readReply || CARD_REPLY, roomStatus: 200, typedEvents: null,
+    holdReads: false, held: [], levels: {}, herState: opts.herState, sources: [] };
+  if (opts.reducedMotion) w.reducedMotion = 'reduce';
   if (opts.webrtc !== false) w.RTCPeerConnection = function () {};
   w.AudioContext = function () {
     h.order.push('unlock');
     Object.assign(this, { state: 'running', destination: {},
       createBufferSource: () => ({ connect() {}, start() { h.order.push('silence'); } }),
       createBuffer: () => ({}), resume: () => Promise.resolve(),
-      createMediaStreamDestination: () => ({ stream: {} }), close: () => { h.closed = (h.closed || 0) + 1; return Promise.resolve(); } });
+      createMediaStreamDestination: () => ({ stream: {} }),
+      close: () => { this.state = 'closed'; h.closed = (h.closed || 0) + 1; return Promise.resolve(); },
+      // Each side's analyser fills its bins with h.levels[side] (0 to 255). A closed context throws, as a browser's does.
+      createMediaStreamSource: stream => {
+        if (this.state === 'closed') throw new Error('InvalidStateError');
+        h.sources.push(stream.tracks[0].side);
+        return { side: stream.tracks[0].side,
+        connect(node) { node.side = this.side; }, disconnect() { h.meterStops = (h.meterStops || 0) + 1; } };
+      },
+      createAnalyser: () => ({ frequencyBinCount: 8, getByteFrequencyData(bins) { bins.fill(h.levels[this.side] || 0); } }) });
   };
+  w.MediaStream = function (tracks) { this.tracks = tracks; };
   w.HTMLMediaElement.prototype.play = function () { h.order.push('prime'); return Promise.resolve(); };
   Object.defineProperty(w.navigator, 'wakeLock', { configurable: true,
     value: { request: () => { h.order.push('wakeLock'); return Promise.resolve({ release() { h.wakeReleased = true; h.wakeReleases++; } }); } } });
@@ -168,6 +195,8 @@ async function boot(opts) {
     }
     if (url.indexOf(ROOM + '/') === 0) {
       h.reads.push({ url, auth: init.headers.Authorization, mintsBefore: h.mints.slice() });
+      // h.holdReads: each read waits until a check answers it, h.answer(n, body), in any order.
+      if (h.holdReads) return new Promise(done => h.held.push(body => done(res(body, 200))));
       return res(h.readReply, 200);
     }
     if (url === DIRECT || url === CC.chatStreamUrl) {
@@ -205,6 +234,20 @@ async function boot(opts) {
     scripts: () => Array.from(w.document.head.querySelectorAll('script')).map(s => s.src),
     loadClient: () => { w.LivekitClient = fakeLiveKit(w, h); },
     tap: () => h.mic().click(),
+    // The log as it reads, top to bottom: whose message, and its words.
+    log: () => Array.from(root.querySelectorAll('.def-cc-message')).filter(m => !h.opening.has(m)).map(m =>
+      (m.classList.contains('def-cc-message--user') ? 'you: ' : 'her: ') + m.textContent.trim()),
+    // One of the visitor's utterances as the room delivers it: the segment twice, each closed,
+    // the same id, first not final then final.
+    utter: async (id, text) => {
+      for (const final of ['false', 'true']) {
+        const s = h.room().words('visitor', { 'lk.segment_id': id, 'lk.transcription_final': final });
+        s.say(text); s.close();
+        await sleep(5);
+      }
+    },
+    her: id => h.room().words('agent', { 'lk.segment_id': id, 'lk.transcription_final': 'false' }),
+    answer: (n, id, content) => h.held[n]({ ended: false, reply: { id, content, tool_outputs: [] } }),
     // A tap, then the mint, the connect and the microphone settle.
     start: async () => { h.tap(); await sleep(40); },
     send: async text => {
@@ -216,6 +259,7 @@ async function boot(opts) {
   w.eval(MODULE);
   w.DEFCustomerChat.init(root, Object.assign({}, CC, opts.config || {}));
   await sleep(40);
+  h.opening = new Set(root.querySelectorAll('.def-cc-message'));   // the greeting, before any conversation
   if (opts.load !== false) h.loadClient();
   return h;
 }
@@ -279,16 +323,20 @@ async function boot(opts) {
   // ── The orb ──
   check('blue from the moment it listens', h.orb().dataset.state === 'listening', h.orb().dataset.state);
   check('the line-shown flag is written once it listens', h.w.localStorage.getItem('def:talk_line_shown') === '1');
-  h.room().localParticipant.isSpeaking = true; h.room().localParticipant.audioLevel = 0.5;
-  await sleep(40);
-  check('the visitor speaks: listening, moving with their voice', h.orb().dataset.state === 'listening' && /scale\(1\.3/.test(h.orb().style.transform),
-    h.orb().dataset.state + ' ' + h.orb().style.transform);
+  // The levels come from each side's own track, measured as the client's analyser helper does.
+  h.room().herTrack();
+  h.levels = { you: 64, her: 0 };   // about a quarter of full scale
+  h.room().localParticipant.isSpeaking = true;
+  await sleep(400);
+  check('the visitor speaks: listening, moving with their own microphone\'s level (eased to 1 + 0.8 x level)',
+    h.orb().dataset.state === 'listening' && /^scale\(1\.20\d\)$/.test(h.orb().style.transform), h.orb().dataset.state + ' ' + h.orb().style.transform);
   h.room().localParticipant.isSpeaking = false;
-  h.room().her.isSpeaking = true; h.room().her.audioLevel = 1;
-  await sleep(40);
-  check('she speaks: orange (speaking), moving with hers', h.orb().dataset.state === 'speaking' && /scale\(1\.6/.test(h.orb().style.transform),
-    h.orb().dataset.state + ' ' + h.orb().style.transform);
-  h.room().her.isSpeaking = false;
+  h.levels = { you: 0, her: 255 };
+  h.room().her.isSpeaking = true;
+  await sleep(400);
+  check('she speaks: orange (speaking), moving with her own track\'s level, at most 1.4', h.orb().dataset.state === 'speaking' &&
+    h.orb().style.transform === 'scale(1.400)', h.orb().dataset.state + ' ' + h.orb().style.transform);
+  h.room().her.isSpeaking = false; h.levels = {};
   await sleep(500);
   check('nobody speaks: still listening (blue, no movement); idle is only for the end', h.orb().dataset.state === 'listening' && h.orb().style.transform === '',
     h.orb().dataset.state + ' ' + h.orb().style.transform);
@@ -641,10 +689,10 @@ async function boot(opts) {
   check('…and the next tap tries a conversation again', h.rooms.length === 2 && h.orbRow().style.display === '');
   h = await boot({ clock: true, noEmployee: true });
   await h.start();
-  await sleep(50);   // about nine of the module's seconds after the connect
+  await sleep(30);   // about seven of the module's seconds after the connect
   h.room().remoteParticipants.set('agent', h.room().her);
   await sleep(150);
-  check('the employee joins at about nine seconds: no busy, the conversation stays', h.orbRow().style.display === '' &&
+  check('the employee joins, ready, at about seven seconds: no busy, the conversation stays', h.orbRow().style.display === '' &&
     h.micStops === 0 && h.starts.length === 0);
   h = await boot({ clock: true, noEmployee: true });
   await h.start();
@@ -674,6 +722,306 @@ async function boot(opts) {
   h = await boot({ language: '' });
   await h.start();
   check('an empty browser language sends no language field', !!h.roomMints[0] && !('language' in h.roomMints[0].body), show(h.roomMints[0]));
+
+  // ── Each utterance and each reply in its own bubble, bound when it starts ──
+  // The room's real order: the visitor's utterance comes as one segment delivered twice, each
+  // closed; at a talk-over their words, the end of her reply (`def.reply`) and the close of her
+  // words arrive together, in any order, and the read answers once her next reply has begun.
+  h = await boot();
+  await h.start();
+  await h.utter('U1', 'What time do you open?');
+  check('one utterance delivered as two closed segments with one id: its words shown once',
+    show(h.log()) === show(['you: What time do you open?']), show(h.log()));
+  h = await boot({ readReply: { ended: false, reply: { id: 'w1', content: 'At nine.', tool_outputs: [] } } });
+  await h.start();
+  const first = h.room().words('visitor', { 'lk.segment_id': 'U1', 'lk.transcription_final': 'false' });
+  first.say('What time do you open?'); first.close();
+  await sleep(5);
+  const starts = h.her('A1');
+  starts.say('At');
+  await sleep(5);
+  const second = h.room().words('visitor', { 'lk.segment_id': 'U1', 'lk.transcription_final': 'true' });
+  second.say('What time do you open?'); second.close();
+  await sleep(5);
+  starts.say(' nine.'); starts.close();
+  await sleep(5);
+  h.room().replyDone();
+  await sleep(40);
+  check('the final copy of an utterance arriving after she began: still once, in its own bubble, and once in the history',
+    show(h.log()) === show(['you: What time do you open?', 'her: At nine.']) &&
+      JSON.parse(h.w.localStorage.getItem('a3rev_threads'))[0].messages[0].content === 'What time do you open?', show(h.log()));
+
+  const together = {
+    words: async x => { await x.utter('U2', 'Sorry, and on Sundays?'); },
+    replyOver: async x => { x.room().replyDone(); await sleep(5); },
+    closed: async x => { x.cut.close(); await sleep(5); },
+  };
+  const orders = [['words', 'replyOver', 'closed'], ['words', 'closed', 'replyOver'], ['replyOver', 'words', 'closed'],
+    ['replyOver', 'closed', 'words'], ['closed', 'words', 'replyOver'], ['closed', 'replyOver', 'words']];
+  for (const order of orders) {
+    h = await boot();
+    h.holdReads = true;
+    await h.start();
+    await h.utter('U1', 'What time do you open?');
+    h.cut = h.her('A1');
+    h.cut.say('We open at nine and');
+    await sleep(5);
+    for (const step of order) await together[step](h);
+    const next = h.her('A2');
+    next.say('Of course,');
+    await sleep(5);
+    h.answer(0, 'w1', 'We open at nine and close at five.');
+    await sleep(20);
+    const midway = h.log();
+    next.say(' on Sundays too.'); next.close();
+    await sleep(5);
+    h.room().replyDone();
+    await sleep(20);
+    if (h.held[1]) h.answer(1, 'w2', 'We open on Sundays too.');
+    await sleep(20);
+    check('talk-over (' + order.join(', ') + '): the written reply in the cut reply\'s own bubble, their words after it, her next reply after that',
+      show(midway) === show(['you: What time do you open?', 'her: We open at nine and close at five.', 'you: Sorry, and on Sundays?', 'her: Of course,']) &&
+        show(h.log()) === show(['you: What time do you open?', 'her: We open at nine and close at five.', 'you: Sorry, and on Sundays?', 'her: We open on Sundays too.']) &&
+        h.spokenBubbles().length === 0,
+      show(midway) + ' then ' + show(h.log()));
+  }
+
+  h = await boot();
+  h.holdReads = true;
+  await h.start();
+  await h.utter('Q', 'Tell me about the courses.');
+  const long = h.her('A1');
+  long.say('There are three courses');
+  await sleep(5);
+  await h.utter('H1', 'The first one.');
+  await h.utter('H2', 'And the price.');
+  await h.utter('H3', 'And the dates.');
+  long.say(' on offer.'); long.close();
+  await sleep(5);
+  h.room().replyDone();
+  await sleep(5);
+  h.answer(0, 'w1', 'There are three courses on offer.');
+  await sleep(20);
+  const all = h.her('A2');
+  all.say('The first costs ten and starts in May.'); all.close();
+  await sleep(5);
+  h.room().replyDone();
+  await sleep(5);
+  h.answer(1, 'w2', 'The first costs ten and starts in May.');
+  await sleep(20);
+  const kept = JSON.parse(h.w.localStorage.getItem('a3rev_threads'))[0].messages;
+  check('three utterances held while she speaks, then one reply: their words once each, in order, in their own message, then the reply',
+    show(h.log()) === show(['you: Tell me about the courses.', 'her: There are three courses on offer.',
+      'you: The first one. And the price. And the dates.', 'her: The first costs ten and starts in May.']) &&
+      kept[2].content === 'The first one. And the price. And the dates.', show(h.log()) + ' ' + show(kept));
+
+  h = await boot();
+  await h.start();
+  await h.utter('Q', 'Tell me about the courses.');
+  const part = h.her('A1');
+  part.say('There are three.'); part.close();
+  await sleep(5);
+  await h.utter('H1', 'The first one.');
+  const more = h.her('A1b');
+  more.say('Each runs a term.'); more.close();
+  await sleep(5);
+  await h.utter('H2', 'And the price.');
+  check('while she speaks: on screen in the order said, never the visitor\'s words above words of hers said before them',
+    show(h.log()) === show(['you: Tell me about the courses.', 'her: There are three.', 'you: The first one.', 'her: Each runs a term.', 'you: And the price.']),
+    show(h.log()));
+
+  h = await boot();
+  h.holdReads = true;
+  await h.start();
+  await h.utter('Q1', 'Is there parking?');
+  const one = h.her('A1');
+  one.say('Yes, behind the hall.'); one.close();
+  await sleep(5);
+  h.room().replyDone();
+  await sleep(5);
+  await h.utter('Q2', 'Is it free?');
+  const two = h.her('A2');
+  two.say('Yes, it is free.'); two.close();
+  await sleep(5);
+  h.room().replyDone();
+  await sleep(5);
+  h.answer(1, 'w2', 'Yes, parking is free.');
+  await sleep(20);
+  h.answer(0, 'w1', 'Yes, there is parking behind the hall.');
+  await sleep(20);
+  check('two reads answering out of order: each written reply in its own reply\'s place',
+    show(h.log()) === show(['you: Is there parking?', 'her: Yes, there is parking behind the hall.', 'you: Is it free?', 'her: Yes, parking is free.']),
+    show(h.log()));
+
+  for (const late of [false, true]) {
+    h = await boot();
+    h.holdReads = true;
+    await h.start();
+    await h.utter('Q1', 'Is there parking?');
+    const one = h.her('A1');
+    one.say('Yes, behind the hall.');
+    if (!late) one.close();
+    await sleep(5);
+    h.room().replyDone();
+    await sleep(5);
+    if (late) { one.close(); await sleep(5); }   // her words' close after the reply message
+    h.answer(0, 'w1', 'Yes, there is parking behind the hall.');
+    await sleep(20);
+    await h.utter('Q2', 'Thanks, that is all.');
+    const bye = h.her('A2');
+    bye.say('You are welcome, good');   // cut off mid-word: the room closes
+    await sleep(5);
+    h.room().data('def.ended', { type: 'ended', reason: 'goodbye' });
+    h.room().close();
+    await sleep(20);
+    h.held[1]({ ended: true, reason: 'goodbye', reply: { id: 'bye', content: 'You are welcome, goodbye.', tool_outputs: [] } });
+    await sleep(20);
+    check('the goodbye' + (late ? ', after a reply whose words closed after its reply message' : '') +
+      ': the end\'s read puts the whole written reply in the goodbye\'s bubble, after the words it answers',
+      show(h.log()) === show(['you: Is there parking?', 'her: Yes, there is parking behind the hall.', 'you: Thanks, that is all.', 'her: You are welcome, goodbye.']) &&
+        h.spokenBubbles().length === 0, show(h.log()));
+  }
+
+  // ── Words over her last reply, and the final words, kept ──
+  h = await boot({ readReply: { ended: false, reply: { id: 'w1', content: 'We open at nine.', tool_outputs: [] } } });
+  await h.start();
+  await h.utter('U1', 'When do you open?');
+  const last = h.her('A1');
+  last.say('We open at');
+  await sleep(5);
+  await h.utter('U2', 'And on Sundays?');
+  h.tap();   // the conversation ends while her reply is on screen
+  await sleep(60);
+  const thread = JSON.parse(h.w.localStorage.getItem('a3rev_threads') || '[{"messages":[]}]')[0].messages.map(m => m.role + ': ' + m.content);
+  check('words said over her last reply, then the end: said once to a screen reader and kept in the history after the reply',
+    announced().filter(l => l === 'And on Sundays?').length === 1 &&
+      show(thread) === show(['user: When do you open?', 'assistant: We open at nine.', 'user: And on Sundays?']), show(announced()) + ' ' + show(thread));
+
+  h = await boot({ readReply: { ended: false, reply: { id: 'w1', content: 'At nine.', tool_outputs: [] } } });
+  await h.start();
+  const interim = h.room().words('visitor', { 'lk.segment_id': 'U1', 'lk.transcription_final': 'false' });
+  interim.say('What time do you'); interim.close();
+  await sleep(5);
+  const begun = h.her('A1');
+  begun.say('At nine.');
+  await sleep(5);
+  const finalCopy = h.room().words('visitor', { 'lk.segment_id': 'U1', 'lk.transcription_final': 'true' });
+  finalCopy.say('What time do you open?'); finalCopy.close();
+  begun.close();
+  await sleep(5);
+  h.room().replyDone();
+  await sleep(40);
+  check('the final copy differs from the interim and comes after her first words: the bubble and the history hold the final words',
+    show(h.log()) === show(['you: What time do you open?', 'her: At nine.']) &&
+      JSON.parse(h.w.localStorage.getItem('a3rev_threads'))[0].messages[0].content === 'What time do you open?', show(h.log()));
+
+  // ── Listening only once she can hear ──
+  h = await boot({ herState: null });
+  await h.start();
+  h.levels = { you: 255 };
+  h.room().localParticipant.isSpeaking = true;
+  await sleep(60);
+  const noState = h.orb().dataset.state + ' ' + h.orb().style.transform;
+  h.room().her.attributes = { 'lk.agent.state': 'initializing' };
+  await sleep(60);
+  const initializing = h.orb().dataset.state + ' ' + h.orb().style.transform;
+  check('the employee in the room with no state, then "initializing": still connecting, grey and still, the line-shown flag not written',
+    noState === 'connecting ' && initializing === 'connecting ' && h.w.localStorage.getItem('def:talk_line_shown') === null, noState + ' / ' + initializing);
+  h.room().her.attributes = { 'lk.agent.state': 'listening' };
+  await sleep(60);
+  check('…her state says listening: listening, moving with the visitor\'s voice, the flag written',
+    h.orb().dataset.state === 'listening' && /scale/.test(h.orb().style.transform) && h.w.localStorage.getItem('def:talk_line_shown') === '1',
+    h.orb().dataset.state + ' ' + h.orb().style.transform);
+  h = await boot({ noEmployee: true });
+  await h.start();
+  await sleep(60);
+  check('no employee in the room yet: connecting', h.orb().dataset.state === 'connecting', h.orb().dataset.state);
+  h = await boot({ herState: null });
+  await h.start();
+  h.room().her.isSpeaking = true;
+  await sleep(60);
+  check('she speaks before her state arrives: she can be heard, speaking', h.orb().dataset.state === 'speaking', h.orb().dataset.state);
+  h = await boot({ clock: true, herState: null });
+  await h.start();
+  await sleep(150);
+  check('an employee who joins and is never ready: busy at ten seconds, today\'s voice for this tap',
+    h.orbRow().style.display === 'none' && h.starts.length === 1 && h.notes.indexOf('conversation employee not ready') !== -1, show(h.notes));
+  h = await boot({ clock: true, herState: null });
+  await h.start();
+  await sleep(30);
+  h.room().her.attributes = { 'lk.agent.state': 'listening' };
+  await sleep(150);
+  check('one who is ready in time: no busy, listening', h.orbRow().style.display === '' && h.starts.length === 0 &&
+    h.orb().dataset.state === 'listening', h.orb().dataset.state);
+
+  // ── The orb's levels: released at the end; still under reduced motion ──
+  h = await boot();
+  await h.start();
+  h.room().herTrack();
+  h.tap();
+  await sleep(20);
+  check('both sides\' level meters are released at the end', h.meterStops === 2, 'stops=' + h.meterStops);
+  check('reduced motion: the orb keeps its colours and does not move',
+    /@media \(prefers-reduced-motion: reduce\) \{[^}]*\.def-cc-orb \{\s*transform: none !important;/.test(
+      fs.readFileSync(path.join(extract.REPO, 'assets/css/widrow-ai-customer-chat.css'), 'utf8')));
+
+  // ── The permission prompt left open; talk-over then the end; the meters' lives ──
+  h = await boot({ clock: true });
+  let allow;
+  h.micGate = new Promise(r => { allow = r; });
+  h.tap();
+  await sleep(200);   // twenty of the module's seconds on the microphone prompt, the employee ready
+  check('the microphone prompt left open for twenty seconds with a ready employee: no busy, still connecting',
+    h.orbRow().style.display === '' && h.starts.length === 0 && h.orb().dataset.state === 'connecting',
+    h.orb().dataset.state + ' starts=' + h.starts.length + ' ' + show(h.notes));
+  allow();
+  await sleep(60);
+  check('…allowed: listening', h.orb().dataset.state === 'listening', h.orb().dataset.state);
+
+  h = await boot({ readReply: { ended: false, reply: { id: 'w1', content: 'We open at nine.', tool_outputs: [] } } });
+  await h.start();
+  await h.utter('U1', 'When do you open?');
+  const cutOff = h.her('A1');
+  cutOff.say('We open at');
+  await sleep(5);
+  await h.utter('U2', 'And on Sundays?');
+  cutOff.close();
+  h.room().replyDone();   // she is cut off: the reply is over
+  await sleep(40);
+  h.tap();                // then the conversation ends; the last read hands back the same reply
+  await sleep(60);
+  const kept2 = JSON.parse(h.w.localStorage.getItem('a3rev_threads'))[0].messages.map(m => m.role + ': ' + m.content);
+  check('talked over her, the reply over, then the end: the visitor\'s words said once and in the history',
+    announced().filter(l => l === 'And on Sundays?').length === 1 &&
+      show(kept2) === show(['user: When do you open?', 'assistant: We open at nine.', 'user: And on Sundays?']), show(announced()) + ' ' + show(kept2));
+
+  h = await boot();
+  await h.start();
+  h.tap();
+  await sleep(10);
+  let threw = null;
+  try { h.room().herTrack(); } catch (e) { threw = e; }
+  check('her track subscribed after the end: nothing measured on the closed audio', !threw && h.sources.indexOf('her') === -1, String(threw));
+  h = await boot();
+  await h.start();
+  h.room().herTrack();
+  h.room().herTrackGone();
+  await sleep(10);
+  check('her track unsubscribed: her meter released', h.meterStops === 1, 'stops=' + h.meterStops);
+  h.room().localParticipant.micTrack = { side: 'you' };   // the client restarted the microphone
+  h.levels = { you: 64 };
+  h.room().localParticipant.isSpeaking = true;
+  await sleep(300);
+  check('a restarted microphone track: the visitor\'s meter follows it and the orb still moves',
+    h.sources.filter(x => x === 'you').length === 2 && /^scale\(1\.20\d\)$/.test(h.orb().style.transform), show(h.sources) + ' ' + h.orb().style.transform);
+  h = await boot({ reducedMotion: true });
+  await h.start();
+  h.room().herTrack();
+  h.levels = { you: 255 };
+  h.room().localParticipant.isSpeaking = true;
+  await sleep(60);
+  check('reduced motion: nothing measured, the orb still', h.sources.length === 0 && h.orb().style.transform === '' &&
+    h.orb().dataset.state === 'listening', show(h.sources) + ' ' + h.orb().style.transform);
 
   console.log('harness-cc-conversation: ' + pass + ' passed, ' + fail + ' failed');
   console.log(results.join('\n'));
