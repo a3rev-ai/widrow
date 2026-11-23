@@ -2321,6 +2321,9 @@
 	var talkRoom = '';
 	var talkState = '';
 	var captionEl = null;      // the bubble her words fill as she says them
+	var heardEl = null;        // the visitor's message, filled as they speak
+	var heardDone = '';        // its finished segments, until she answers
+	var captionAsked = '';     // the visitor's words her reply in progress answers
 	var heldSpeech = [];       // a typed reply's lines, waiting for her spoken reply to finish
 	var typedSpeaking = false; // a typed reply's lines are arriving
 	var talkMuted = false;
@@ -2430,8 +2433,20 @@
 				var level = talkState === 'speaking' ? spoken : talkState === 'listening' ? heard : 0;
 				els.orbBall.style.transform = level ? 'scale(' + (1 + 0.6 * Math.min(level, 1)) + ')' : '';
 			}),
+			// The visitor's words: one message until she answers, however many segments.
+			onHeard: mine(function (text, final) {
+				if (!heardEl) heardEl = appendUserMessage('', [], true);
+				var words = (heardDone ? heardDone + ' ' : '') + text;
+				heardEl.textContent = words;   // as text, never markup
+				if (final) heardDone = words;
+				scrollToBottom();
+			}),
 			onCaption: mine(function (text, final) {
 				if (!captionEl) {
+					// She answers: the visitor's message is that turn's, for the history.
+					captionAsked = heardDone;
+					heardEl = null;
+					heardDone = '';
 					var msg = el('div', 'def-cc-message def-cc-message--assistant def-cc-message--spoken');
 					captionEl = msg.appendChild(el('div', 'def-cc-message-content'));
 					els.messages.appendChild(msg);
@@ -2440,7 +2455,7 @@
 				captionEl.textContent = text;   // her words as text, never markup
 				if (follow) scrollToBottom();
 				if (final) {
-					readReply(captionEl, talkRoom);
+					readReply(captionEl, talkRoom, captionAsked);
 					captionEl = null;
 				}
 			}),
@@ -2465,7 +2480,8 @@
 		talk = null;
 		talkRoom = '';
 		talkState = '';
-		captionEl = null;
+		captionEl = heardEl = null;
+		heardDone = captionAsked = '';
 		heldSpeech = [];
 		typedSpeaking = talkMuted = false;
 		if (els.orb) els.orb.style.display = 'none';
@@ -2474,7 +2490,7 @@
 
 	// After her reply, its written form and tool outputs replace the words she spoke,
 	// rendered as a typed reply's are (cards, the hand-off button, an add to cart).
-	function readReply(spoken, room) {
+	function readReply(spoken, room, asked) {
 		tokenForThread().then(function (ok) {
 			return ok ? fetch(roomUrl() + '/' + encodeURIComponent(room), {
 				method: 'GET',
@@ -2492,7 +2508,7 @@
 				if (window.DefResultCards) window.DefResultCards.resetTurn();
 				var typing = isComposerDisabled;
 				processChatResponseMeta({ thread_id: threadId, choices: [{ message: { content: data.reply.content || '' } }],
-					tool_outputs: data.reply.tool_outputs }, null, false);
+					tool_outputs: data.reply.tool_outputs }, asked || null, false);
 				if (typing) setComposerDisabled(true);   // a typed message still streaming keeps the composer
 			}
 			// Her goodbye's room message can be lost; the read says so too.
@@ -2531,7 +2547,8 @@
 	 * {url, token, room, thread_id}, or a promise of it: called inside the tap, what an
 	 * iPhone allows only there runs before the mint is awaited. Callbacks:
 	 * onState('connecting' | 'listening' | 'speaking' | 'idle'), onLevel(in, out) each
-	 * frame, onCaption(text so far, final) for her words, onNotice(kind) for `def.notice`,
+	 * frame, onCaption(text so far, final) for her words, onHeard(text so far, final) for the
+	 * visitor's own (optional), onNotice(kind) for `def.notice`,
 	 * onEnded('goodbye' | 'stop_phrase' | 'silence' | 'refused' | 'unknown': her `def.ended`;
 	 * 'end': end() was called) and onError('load' | 'mint' | 'connect' | 'microphone' |
 	 * 'dropped'); exactly one of the last two, once, and nothing after it. The room token goes to the
@@ -2620,20 +2637,22 @@
 			requestAnimationFrame(watch);
 		}
 
+		// Her words go to onCaption, the visitor's own (sent as the local participant) to onHeard.
 		room.registerTextStreamHandler('lk.transcription', function (reader, from) {
-			if (from.identity === room.localParticipant.identity) return;   // the chat shows her words, not the visitor's
+			var mine = from.identity === room.localParticipant.identity;
+			var say = mine ? cb.onHeard || function () {} : cb.onCaption;
 			var text = '';
 			var pieces = reader[Symbol.asyncIterator]();
 			(function next() {
 				pieces.next().then(function (r) {
 					if (over) return;
-					if (r.done) { cb.onCaption(text, true); return; }
+					if (r.done) { say(text, true); return; }
 					text += String(r.value);
-					cb.onCaption(text, false);
+					say(text, false);
 					next();
 				}, function (e) {
 					note('words stream failed (' + (e && e.name) + ')');
-					if (!over && text) cb.onCaption(text, true);
+					if (!over && text) say(text, true);
 				});
 			})();
 		});
@@ -3386,8 +3405,8 @@
 			} catch (e) {}
 		}
 
-		// Save thread to localStorage. A reply read after a conversation's turn (6d) has
-		// no typed words: null.
+		// Save thread to localStorage. A reply read after a conversation's turn (6d) whose
+		// words the room did not give: null.
 		upsertThread(
 			threadId,
 			text === null ? '' : text || 'Please analyze the attached file(s).',

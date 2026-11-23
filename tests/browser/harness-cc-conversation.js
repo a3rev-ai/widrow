@@ -10,6 +10,7 @@
  * unlocked, both elements primed, the wake lock asked, the room made and its audio
  * started before the mint is sent; the mint's address and body; a room that made a new
  * chat gets a token for it before the read; the orb's states; the visitor's line once;
+ * the visitor's own words as their message, joined until she answers and kept in the history;
  * her words as text, then the read's written reply, product card and add to cart; a
  * typed message keeps the room, asks for speech and mutes the room's microphone while
  * its reply plays, after her spoken reply; `not_understood` offers typing; each ending;
@@ -277,6 +278,22 @@ async function boot(opts) {
 
   // ── Captions, then the read: a new chat ──
   check('the room made a new chat: the widget takes its id and mints a token for it', h.mints.indexOf('thr-new') !== -1, show(h.mints));
+  // The visitor's own words: two segments before she answers, one message.
+  const heard = h.room().words('visitor');
+  heard.say('Do you have ');
+  await sleep(10);
+  const userBubble = () => Array.from(h.root.querySelectorAll('.def-cc-message--user .def-cc-message-content')).map(b => b.textContent);
+  check('the visitor\'s words appear as they say them, as their own message', show(userBubble()) === show(['Do you have ']), show(userBubble()));
+  heard.say('the <b onclick="window.pwned=1">drill</b>?');
+  heard.close();
+  await sleep(10);
+  const heard2 = h.room().words('visitor');
+  heard2.say('A cordless one.');
+  heard2.close();
+  await sleep(10);
+  check('a second segment before she answers joins the same message; a tag in it is text',
+    show(userBubble()) === show(['Do you have the <b onclick="window.pwned=1">drill</b>? A cordless one.']) &&
+      !h.root.querySelector('.def-cc-message--user b'), show(userBubble()));
   const words = h.room().words();
   words.say('The drill ');
   await sleep(10);
@@ -286,7 +303,8 @@ async function boot(opts) {
   check('her words appear as she says them, as text: a tag in them is not markup',
     !!spoken && spoken.textContent.trim() === 'The drill <img src=x onerror="window.pwned=1">is in stock.' &&
       !spoken.querySelector('img') && !h.w.pwned, spoken && spoken.innerHTML);
-  check('the visitor\'s own words from the room are not drawn', (() => { h.room().words('visitor').say('hello'); return h.spokenBubbles().length === 1; })());
+  check('her captions are not the visitor\'s: one spoken bubble, the visitor\'s message unchanged',
+    h.spokenBubbles().length === 1 && userBubble().length === 1, show(userBubble()));
   words.close();
   await sleep(80);
   const read = h.reads[0];
@@ -300,9 +318,11 @@ async function boot(opts) {
     show(h.carts) === show([{ id: 5, quantity: 1 }]) && !!h.root.querySelector('.cc-toast') && h.bubbles().indexOf('Here is a link to your cart: View cart') !== -1,
     show(h.carts));
   const history = JSON.parse(h.w.localStorage.getItem('a3rev_threads') || '[]');
-  check('the local history: the chat, its written reply and its card (no add-to-cart replay)',
-    history.length === 1 && history[0].id === 'thr-new' && history[0].messages.length === 1 &&
-      history[0].messages[0].content === 'The **drill** is in stock.' && history[0].messages[0].tool_outputs.length === 1 &&
+  const asked = 'Do you have the <b onclick="window.pwned=1">drill</b>? A cordless one.';
+  check('the local history: both sides, as a typed turn writes them; the chat titled by the visitor\'s words; its card (no add-to-cart replay)',
+    history.length === 1 && history[0].id === 'thr-new' && history[0].messages.length === 2 && history[0].title === asked.substring(0, 50) &&
+      history[0].messages[0].role === 'user' && history[0].messages[0].content === asked &&
+      history[0].messages[1].content === 'The **drill** is in stock.' && history[0].messages[1].tool_outputs.length === 1 &&
       h.w.localStorage.getItem('a3rev_thread_id') === 'thr-new', show(history));
 
   // ── A typed message during the conversation ──
@@ -336,12 +356,15 @@ async function boot(opts) {
   check('the second conversation: a new room on the chat it made, the visitor\'s line not shown again',
     h.rooms.length === 2 && h.roomMints[1].body.thread_id === 'thr-new' && h.line().style.display === 'none');
   const late = h.room().words();
+  const lateHeard = h.room().words('visitor');
   h.tap();
   await sleep(10);
   late.say('Too late.');
+  lateHeard.say('Too late too.');
   await sleep(20);
   check('a tap ends it, the room left, the mic rests', h.disconnects === 1 && h.orbRow().style.display === 'none' && h.mic().dataset.state === 'idle');
   check('a caption after the end draws nothing', h.spokenBubbles().length === 0 && h.bubbles().indexOf('Too late.') === -1);
+  check('the visitor\'s words after the end draw nothing', !h.root.textContent.includes('Too late too.'));
   await h.start();
   check('after an ending, the mic starts a conversation again', h.rooms.length === 3 && h.starts.length === 0);
 
