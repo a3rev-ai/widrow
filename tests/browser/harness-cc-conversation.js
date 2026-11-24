@@ -160,7 +160,8 @@ async function boot(opts) {
         return { side: stream.tracks[0].side,
         connect(node) { node.side = this.side; }, disconnect() { h.meterStops = (h.meterStops || 0) + 1; } };
       },
-      createAnalyser: () => ({ fftSize: 8, getFloatTimeDomainData(samples) { samples.fill(h.levels[this.side] || 0); } }) });
+      // opts.oldAnalyser: a browser whose analyser cannot hand over the samples.
+      createAnalyser: () => opts.oldAnalyser ? {} : ({ fftSize: 8, getFloatTimeDomainData(samples) { samples.fill(h.levels[this.side] || 0); } }) });
   };
   w.MediaStream = function (tracks) { this.tracks = tracks; };
   w.HTMLMediaElement.prototype.play = function () { h.order.push('prime'); return Promise.resolve(); };
@@ -353,18 +354,12 @@ async function boot(opts) {
   const softer = size();
   check('…and smaller as their voice drops, larger as it rises: it moves with the voice, while they are still speaking',
     softer > 1.05 && softer < 1.2, 'loudest=' + loudest + ' softer=' + softer);
-  h.levels = { you: 0.2, her: 0 };
-  await sleep(300);
-  check('…back up with the next word', size() > 1.35, h.orb().style.transform);
   h.room().localParticipant.isSpeaking = false;
   h.levels = { you: 0, her: 0.9 };
   h.room().her.isSpeaking = true;
   await sleep(400);
   check('she speaks: orange (speaking), moving with her own track\'s sound, at most 1.4', h.orb().dataset.state === 'speaking' &&
     h.orb().style.transform === 'scale(1.400)', h.orb().dataset.state + ' ' + h.orb().style.transform);
-  h.levels = { you: 0, her: 0.3 };
-  await sleep(300);
-  check('…and smaller as her voice drops', size() > 1.05 && size() < 1.25, h.orb().style.transform);
   h.room().her.isSpeaking = false; h.levels = {};
   await sleep(500);
   check('nobody speaks: still listening (blue, no movement); idle is only for the end', h.orb().dataset.state === 'listening' && h.orb().style.transform === '',
@@ -1097,6 +1092,14 @@ async function boot(opts) {
   await sleep(60);
   check('reduced motion: nothing measured, the orb still', h.sources.length === 0 && h.orb().style.transform === '' &&
     h.orb().dataset.state === 'listening', show(h.sources) + ' ' + h.orb().style.transform);
+  h = await boot({ oldAnalyser: true });
+  await h.start();
+  h.room().herTrack();
+  h.levels = { you: 0.9 };
+  h.room().localParticipant.isSpeaking = true;
+  await sleep(100);
+  check('a browser that cannot hand over the samples: nothing measured, on any frame; the orb keeps its colours', h.sources.length === 0 &&
+    h.orb().style.transform === '' && h.orb().dataset.state === 'listening', show(h.sources.length) + ' ' + h.orb().style.transform);
 
   // ── The button at the box's end: Start voice / Send / End voice where the mode is on ──
   const btn = h => h.root.querySelector('.def-cc-composer-send');

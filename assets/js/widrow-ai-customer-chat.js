@@ -2106,6 +2106,7 @@
 			showVoiceLog(e);
 		});
 		btn.addEventListener('touchstart', function () {
+			pressShown = false;   // a press whose click never came does not swallow this tap
 			if (when && !when()) return;
 			pressTimer = setTimeout(function () { pressTimer = null; pressShown = true; showVoiceLog(); }, 650);
 		}, { passive: true });
@@ -2757,9 +2758,9 @@
 		function meter(side, track) {
 			if (over || still || !audio || !window.MediaStream || !track || !track.mediaStreamTrack) return;
 			unmeter(side);
-			var source = audio.createMediaStreamSource(new MediaStream([track.mediaStreamTrack]));
 			var node = audio.createAnalyser();
-			if (!node.getFloatTimeDomainData) return;   // a browser too old to hand over the samples: the orb keeps its colours
+			if (!node.getFloatTimeDomainData) { still = true; return; }   // a browser too old to hand over the samples: nothing is measured, the orb keeps its colours
+			var source = audio.createMediaStreamSource(new MediaStream([track.mediaStreamTrack]));
 			source.connect(node);
 			var samples = new Float32Array(node.fftSize), loudest = 0;
 			meters[side] = {
