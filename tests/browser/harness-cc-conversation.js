@@ -182,9 +182,12 @@ async function boot(opts) {
     url = String(url); init = init || {};
     if (url === CC.streamTokenUrl) {
       h.mints.push(JSON.parse(init.body).thread);
-      // h.tokenLife: the seconds a token lasts; h.tokenStatus: the site's answer to a token request.
+      // h.tokenLife: the seconds a token lasts; h.tokenStatus: the site's answer to a token request;
+      // h.tokenGate: the answer held until a check releases it.
       if (h.tokenStatus !== 200) return res({}, h.tokenStatus);
-      return res({ token: 'tok-' + h.mints.length, exp: Math.floor(Date.now() / 1000) + h.tokenLife, stream_url: DIRECT, live_url: 'wss://x' }, 200);
+      const n = h.mints.length;
+      return (h.tokenGate || Promise.resolve()).then(() =>
+        res({ token: 'tok-' + n, exp: Math.floor(Date.now() / 1000) + h.tokenLife, stream_url: DIRECT, live_url: 'wss://x' }, 200));
     }
     if (url === CC.wpRestUrl + 'chat/voice') return res({ enabled: true, conversation: opts.conversation !== false }, 200);
     if (url === ROOM) {
@@ -511,6 +514,19 @@ async function boot(opts) {
   await h.start();
   check('…and the next tap, with no token held at all, starts a conversation', h.roomMints.length === 1 && h.starts.length === 1 &&
     h.orb().dataset.state === 'listening', 'roomMints=' + h.roomMints.length + ' starts=' + h.starts.length);
+
+  h = await boot({ tokenLife: 20 });
+  h.tokenLife = 600;
+  let renewed;
+  h.tokenGate = new Promise(done => { renewed = done; });
+  h.tap();
+  await sleep(5);
+  h.tap();   // ends it while the token is still being renewed
+  renewed();
+  await sleep(40);
+  check('ended while the token was being renewed: no room is asked for, everything released once, no voice started',
+    h.mints.length === 2 && h.roomMints.length === 0 && h.orbRow().style.display === 'none' && h.closed === 1 && h.starts.length === 0,
+    'mints=' + h.mints.length + ' roomMints=' + h.roomMints.length + ' closed=' + h.closed + ' starts=' + h.starts.length);
 
   // ── A room that cannot connect (a page policy blocking the media host) ──
   h = await boot();

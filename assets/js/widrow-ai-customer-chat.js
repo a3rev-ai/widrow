@@ -2434,7 +2434,9 @@
 		speaker.unlock();
 		// Sent once the tap's own work is done (in conversation(), below). The mint binds the
 		// room to the token's chat: a token that ran out while the chat sat open is renewed first.
+		var epoch = ++talkEpoch;
 		var minted = Promise.resolve().then(tokenForThread).then(function (ok) {
+			if (epoch !== talkEpoch) throw new Error('ended');   // ended while the token was renewed: no room is asked for
 			if (!ok || !roomUrl()) throw new Error('refused');
 			// The page context as a typed turn reads it; the language only hints the turn's end.
 			var body = { thread_id: streamToken.thread, cart_token: wcCartToken };
@@ -2459,7 +2461,6 @@
 			}
 			return m;
 		});
-		var epoch = ++talkEpoch;
 		var mine = function (fn) {
 			return function (a, b, c) { if (epoch === talkEpoch) fn(a, b, c); };
 		};
