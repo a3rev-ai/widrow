@@ -2212,7 +2212,7 @@ html {
 	flex-shrink: 0;
 	width: 40px;
 	height: 40px;
-	margin: 8px auto 4px;
+	margin: 12px auto;   /* room for its largest size (1.6): the composer below is drawn over anything past it */
 	border-radius: 50%;
 	background: #9ca3af;   /* connecting, or nothing yet: grey and still */
 	transition: transform 0.08s linear, background 0.2s ease;

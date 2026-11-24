@@ -264,6 +264,13 @@ async function run(label, fn) {
 		check('colours: grey connecting (and before any state), blue listening, orange speaking; it does not move under reduced motion',
 			/#9ca3af/.test(rule('.talk-orb')) && /#2563eb/.test(rule('.talk-orb[data-state="listening"]')) &&
 			/#f97316/.test(rule('.talk-orb[data-state="speaking"]')) && reduced);
+		c.cb.onLevel(0.5, 1);
+		const largest = parseFloat(t.orb().style.transform.slice(6));
+		const height = parseFloat(/[\s;]height:\s*([\d.]+)px/.exec(rule('.talk-orb'))[1]);
+		const margin = /margin:\s*([\d.]+)px auto(?:\s+([\d.]+)px)?;/.exec(rule('.talk-orb'));
+		const room = Math.min(+margin[1], +(margin[2] || margin[1])), grows = Math.round(height * (largest - 1) * 50) / 100;
+		check('at the loudest the whole orb shows: its margin holds what it grows by, above and below',
+			largest > 1 && room >= grows, JSON.stringify({ largest, room, grows }));
 	});
 
 	await run('text', async () => {
