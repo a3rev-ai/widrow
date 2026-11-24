@@ -140,7 +140,8 @@ async function boot(opts) {
   w.WidrowAiPageContextHelper = { build: thread => ({ canonical_path: '/', for: thread }), markShipped() {} };
   const h = { w, noEmployee: !!opts.noEmployee, order: [], rooms: [], mints: [], roomMints: [], reads: [], typed: [], carts: [], starts: [], spoken: [],
     notes: [], disconnects: 0, micStops: 0, wakeReleases: 0, busy: null, readReply: opts.readReply || CARD_REPLY, roomStatus: 200, typedEvents: null,
-    holdReads: false, held: [], levels: {}, herState: opts.herState, sources: [] };
+    holdReads: false, held: [], levels: {}, herState: opts.herState, sources: [],
+    tokenLife: opts.tokenLife || 600, tokenStatus: 200 };
   if (opts.reducedMotion) w.reducedMotion = 'reduce';
   if (opts.webrtc !== false) w.RTCPeerConnection = function () {};
   w.AudioContext = function () {
@@ -181,7 +182,9 @@ async function boot(opts) {
     url = String(url); init = init || {};
     if (url === CC.streamTokenUrl) {
       h.mints.push(JSON.parse(init.body).thread);
-      return res({ token: 'tok-' + h.mints.length, exp: Math.floor(Date.now() / 1000) + 600, stream_url: DIRECT, live_url: 'wss://x' }, 200);
+      // h.tokenLife: the seconds a token lasts; h.tokenStatus: the site's answer to a token request.
+      if (h.tokenStatus !== 200) return res({}, h.tokenStatus);
+      return res({ token: 'tok-' + h.mints.length, exp: Math.floor(Date.now() / 1000) + h.tokenLife, stream_url: DIRECT, live_url: 'wss://x' }, 200);
     }
     if (url === CC.wpRestUrl + 'chat/voice') return res({ enabled: true, conversation: opts.conversation !== false }, 200);
     if (url === ROOM) {
@@ -482,6 +485,32 @@ async function boot(opts) {
   await sleep(10);
   await h.start();
   check('after a refused mint the next tap tries a room again', h.roomMints.length === 2 && h.rooms.length === 2);
+
+  // ── The chat left open until its token ran out ──
+  h = await boot({ tokenLife: 20 });   // under the half minute a room is minted on
+  h.tokenLife = 600;
+  h.tap();
+  const staleTap = h.order.slice();
+  check('the chat\'s token ran out while it sat open: the tap still starts a conversation, and asks for nothing inside the tap',
+    show(staleTap.filter(s => s !== 'speakerUnlock')) === show(['unlock', 'silence', 'prime', 'prime', 'wakeLock', 'room', 'startAudio']) &&
+      h.mints.length === 1 && h.orbRow().style.display === '' && h.starts.length === 0, show(staleTap) + ' mints=' + h.mints.length + ' starts=' + h.starts.length);
+  await sleep(40);
+  check('…the token renewed after the tap, and the room minted on the new one', h.mints[1] === '' && h.roomMints.length === 1 &&
+    h.roomMints[0].auth === 'Bearer tok-2' && h.orb().dataset.state === 'listening' && h.starts.length === 0,
+    show(h.mints) + ' ' + show(h.roomMints[0]) + ' starts=' + h.starts.length);
+
+  h = await boot({ tokenLife: 20 });
+  h.tokenStatus = 403;
+  await h.start();
+  check('the site refuses a new token: no room asked for, everything released, and this tap goes on as today\'s voice',
+    h.roomMints.length === 0 && h.starts.length === 1 && h.orbRow().style.display === 'none' && h.closed === 1 && h.wakeReleased === true,
+    'roomMints=' + h.roomMints.length + ' starts=' + h.starts.length + ' closed=' + h.closed);
+  h.tokenStatus = 200;
+  h.tap();   // ends today's voice, listening since that tap
+  await sleep(10);
+  await h.start();
+  check('…and the next tap, with no token held at all, starts a conversation', h.roomMints.length === 1 && h.starts.length === 1 &&
+    h.orb().dataset.state === 'listening', 'roomMints=' + h.roomMints.length + ' starts=' + h.starts.length);
 
   // ── A room that cannot connect (a page policy blocking the media host) ──
   h = await boot();
