@@ -2128,7 +2128,7 @@
 			appendMessage('assistant', t('micBlockedBySite'));
 			return;
 		}
-		if (canTalk()) { startTalk(); return; }
+		if (talkOn()) { startTalk(); return; }
 		speaker.stop();
 		speaker.unlock();   // inside the tap: iOS lets audio start only from a gesture
 		conversationOn = true;
@@ -2380,11 +2380,6 @@
 		return talkMode && !talkFailed && !!window.RTCPeerConnection && !!window.LivekitClient;
 	}
 
-	// The mint binds the room to the token's chat, so it needs a fresh token for the chat open.
-	function canTalk() {
-		return talkOn() && streamTokenLeft() >= 30000 && !!roomUrl();
-	}
-
 	// Where the mode is on, Send is the one button to talk with, and the mic is not shown: with
 	// the box empty it starts a conversation ('start') or ends the one on ('end'); with words or
 	// files in it, it is Send ('send'). '' is today's Send and mic: the mode off or failed, or a
@@ -2437,18 +2432,21 @@
 	function startTalk() {
 		speaker.stop();
 		speaker.unlock();
-		// The page context as a typed turn reads it; the language only hints the turn's end.
-		var body = { thread_id: streamToken.thread, cart_token: wcCartToken };
-		try { body.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone; } catch (e) {}
-		try { body.page_context = window.WidrowAiPageContextHelper.build(threadId || null); } catch (e) {}
-		if (navigator.language) body.language = navigator.language;
-		// Sent once the tap's own work is done (in conversation(), below).
-		var url = roomUrl(), token = streamToken.token;
-		var minted = Promise.resolve().then(function () {
-			return fetch(url, {
+		// Sent once the tap's own work is done (in conversation(), below). The mint binds the
+		// room to the token's chat: a token that ran out while the chat sat open is renewed first.
+		var epoch = ++talkEpoch;
+		var minted = Promise.resolve().then(tokenForThread).then(function (ok) {
+			if (epoch !== talkEpoch) throw new Error('ended');   // ended while the token was renewed: no room is asked for
+			if (!ok || !roomUrl()) throw new Error('refused');
+			// The page context as a typed turn reads it; the language only hints the turn's end.
+			var body = { thread_id: streamToken.thread, cart_token: wcCartToken };
+			try { body.timezone = Intl.DateTimeFormat().resolvedOptions().timeZone; } catch (e) {}
+			try { body.page_context = window.WidrowAiPageContextHelper.build(threadId || null); } catch (e) {}
+			if (navigator.language) body.language = navigator.language;
+			return fetch(roomUrl(), {
 				method: 'POST',
 				credentials: 'omit',
-				headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+				headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + streamToken.token },
 				body: JSON.stringify(body),
 			});
 		}).then(function (res) {
@@ -2463,7 +2461,6 @@
 			}
 			return m;
 		});
-		var epoch = ++talkEpoch;
 		var mine = function (fn) {
 			return function (a, b, c) { if (epoch === talkEpoch) fn(a, b, c); };
 		};
