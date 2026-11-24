@@ -141,24 +141,27 @@ async function boot(opts) {
   const h = { w, noEmployee: !!opts.noEmployee, order: [], rooms: [], mints: [], roomMints: [], reads: [], typed: [], carts: [], starts: [], spoken: [],
     notes: [], disconnects: 0, micStops: 0, wakeReleases: 0, busy: null, readReply: opts.readReply || CARD_REPLY, roomStatus: 200, typedEvents: null,
     holdReads: false, held: [], levels: {}, herState: opts.herState, sources: [],
-    tokenLife: opts.tokenLife || 600, tokenStatus: 200 };
+    tokenLife: opts.tokenLife || 600, tokenStatus: 200, contexts: [], resumes: 0 };
   if (opts.reducedMotion) w.reducedMotion = 'reduce';
   if (opts.webrtc !== false) w.RTCPeerConnection = function () {};
   w.AudioContext = function () {
     h.order.push('unlock');
+    h.contexts.push(this);
     Object.assign(this, { state: 'running', destination: {},
       createBufferSource: () => ({ connect() {}, start() { h.order.push('silence'); } }),
-      createBuffer: () => ({}), resume: () => Promise.resolve(),
+      createBuffer: () => ({}), resume: () => { h.resumes++; this.state = 'running'; return Promise.resolve(); },
       createMediaStreamDestination: () => ({ stream: {} }),
       close: () => { this.state = 'closed'; h.closed = (h.closed || 0) + 1; return Promise.resolve(); },
-      // Each side's analyser fills its bins with h.levels[side] (0 to 255). A closed context throws, as a browser's does.
+      // Each side's analyser hands back that side's sound as samples of h.levels[side] (0 to 1: a steady sound
+      // that loud). A closed context throws, as a browser's does.
       createMediaStreamSource: stream => {
         if (this.state === 'closed') throw new Error('InvalidStateError');
         h.sources.push(stream.tracks[0].side);
         return { side: stream.tracks[0].side,
         connect(node) { node.side = this.side; }, disconnect() { h.meterStops = (h.meterStops || 0) + 1; } };
       },
-      createAnalyser: () => ({ frequencyBinCount: 8, getByteFrequencyData(bins) { bins.fill(h.levels[this.side] || 0); } }) });
+      // opts.oldAnalyser: a browser whose analyser cannot hand over the samples.
+      createAnalyser: () => opts.oldAnalyser ? {} : ({ fftSize: 8, getFloatTimeDomainData(samples) { samples.fill(h.levels[this.side] || 0); } }) });
   };
   w.MediaStream = function (tracks) { this.tracks = tracks; };
   w.HTMLMediaElement.prototype.play = function () { h.order.push('prime'); return Promise.resolve(); };
@@ -337,23 +340,37 @@ async function boot(opts) {
   // ── The orb ──
   check('blue from the moment it listens', h.orb().dataset.state === 'listening', h.orb().dataset.state);
   check('the line-shown flag is written once it listens', h.w.localStorage.getItem('def:talk_line_shown') === '1');
-  // The levels come from each side's own track, measured as the client's analyser helper does.
+  // The size follows each side's own sound: how loud it is now, as a share of the loudest it has been lately.
+  const size = () => parseFloat((/scale\(([\d.]+)\)/.exec(h.orb().style.transform) || [0, '1'])[1]);
   h.room().herTrack();
-  h.levels = { you: 64, her: 0 };   // about a quarter of full scale
+  h.levels = { you: 0.2, her: 0 };
   h.room().localParticipant.isSpeaking = true;
   await sleep(400);
-  check('the visitor speaks: listening, moving with their own microphone\'s level (eased to 1 + 0.8 x level)',
-    h.orb().dataset.state === 'listening' && /^scale\(1\.20\d\)$/.test(h.orb().style.transform), h.orb().dataset.state + ' ' + h.orb().style.transform);
+  const loudest = size();
+  check('the visitor speaks: listening, the orb at its largest (1.4) at their loudest', h.orb().dataset.state === 'listening' && loudest > 1.38 && loudest <= 1.4,
+    h.orb().dataset.state + ' ' + h.orb().style.transform);
+  h.levels = { you: 0.05, her: 0 };   // a quarter as loud: between two words
+  await sleep(300);
+  const softer = size();
+  check('…and smaller as their voice drops, larger as it rises: it moves with the voice, while they are still speaking',
+    softer > 1.05 && softer < 1.2, 'loudest=' + loudest + ' softer=' + softer);
   h.room().localParticipant.isSpeaking = false;
-  h.levels = { you: 0, her: 255 };
+  h.levels = { you: 0, her: 0.9 };
   h.room().her.isSpeaking = true;
   await sleep(400);
-  check('she speaks: orange (speaking), moving with her own track\'s level, at most 1.4', h.orb().dataset.state === 'speaking' &&
+  check('she speaks: orange (speaking), moving with her own track\'s sound, at most 1.4', h.orb().dataset.state === 'speaking' &&
     h.orb().style.transform === 'scale(1.400)', h.orb().dataset.state + ' ' + h.orb().style.transform);
   h.room().her.isSpeaking = false; h.levels = {};
   await sleep(500);
   check('nobody speaks: still listening (blue, no movement); idle is only for the end', h.orb().dataset.state === 'listening' && h.orb().style.transform === '',
     h.orb().dataset.state + ' ' + h.orb().style.transform);
+  // The phone pauses the audio the levels are measured on (an iPhone does when the microphone opens).
+  const measured = h.contexts[h.contexts.length - 1], resumedBefore = h.resumes;
+  measured.state = 'interrupted';
+  measured.onstatechange();
+  check('the phone pauses the audio the orb is measured on: it is started again, and the voice log says so',
+    h.resumes === resumedBefore + 1 && measured.state === 'running' && h.notes.indexOf('conversation context interrupted') !== -1,
+    'resumes=' + (h.resumes - resumedBefore) + ' ' + show(h.notes.slice(-3)));
 
   // ── The visitor's line ──
   check('the visitor\'s line, with the employee\'s name, under the orb at the first conversation',
@@ -971,7 +988,7 @@ async function boot(opts) {
   // ── Listening only once she can hear ──
   h = await boot({ herState: null });
   await h.start();
-  h.levels = { you: 255 };
+  h.levels = { you: 0.9 };
   h.room().localParticipant.isSpeaking = true;
   await sleep(60);
   const noState = h.orb().dataset.state + ' ' + h.orb().style.transform;
@@ -1062,19 +1079,27 @@ async function boot(opts) {
   await sleep(10);
   check('her track unsubscribed: her meter released', h.meterStops === 1, 'stops=' + h.meterStops);
   h.room().localParticipant.micTrack = { side: 'you' };   // the client restarted the microphone
-  h.levels = { you: 64 };
+  h.levels = { you: 0.01 };   // a quiet talker
   h.room().localParticipant.isSpeaking = true;
   await sleep(300);
-  check('a restarted microphone track: the visitor\'s meter follows it and the orb still moves',
-    h.sources.filter(x => x === 'you').length === 2 && /^scale\(1\.20\d\)$/.test(h.orb().style.transform), show(h.sources) + ' ' + h.orb().style.transform);
+  check('a restarted microphone track: the visitor\'s meter follows it and the orb still moves, as far for a quiet voice as for a loud one',
+    h.sources.filter(x => x === 'you').length === 2 && /^scale\(1\.(39\d|400)\)$/.test(h.orb().style.transform), show(h.sources) + ' ' + h.orb().style.transform);
   h = await boot({ reducedMotion: true });
   await h.start();
   h.room().herTrack();
-  h.levels = { you: 255 };
+  h.levels = { you: 0.9 };
   h.room().localParticipant.isSpeaking = true;
   await sleep(60);
   check('reduced motion: nothing measured, the orb still', h.sources.length === 0 && h.orb().style.transform === '' &&
     h.orb().dataset.state === 'listening', show(h.sources) + ' ' + h.orb().style.transform);
+  h = await boot({ oldAnalyser: true });
+  await h.start();
+  h.room().herTrack();
+  h.levels = { you: 0.9 };
+  h.room().localParticipant.isSpeaking = true;
+  await sleep(100);
+  check('a browser that cannot hand over the samples: nothing measured, on any frame; the orb keeps its colours', h.sources.length === 0 &&
+    h.orb().style.transform === '' && h.orb().dataset.state === 'listening', show(h.sources.length) + ' ' + h.orb().style.transform);
 
   // ── The button at the box's end: Start voice / Send / End voice where the mode is on ──
   const btn = h => h.root.querySelector('.def-cc-composer-send');
@@ -1097,6 +1122,24 @@ async function boot(opts) {
   box(h).dispatchEvent(new h.w.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
   await sleep(20);
   check('Enter in the empty box: nothing sent and no conversation, as today', h.typed.length === 0 && h.rooms.length === 0);
+  // What the phone did with the voice, where the mic that showed it is not shown.
+  const logShown = () => h.bubbles().filter(b => b.indexOf('noted by the phone') !== -1).length;
+  h.notes.push('noted by the phone');
+  btn(h).dispatchEvent(new h.w.Event('touchstart'));
+  await sleep(10);   // the long press (650 ms; a moment here)
+  btn(h).dispatchEvent(new h.w.Event('touchend'));
+  btn(h).click();    // the click a phone sends when the press is let go
+  await sleep(20);
+  check('a long press on Start voice shows the voice log, and letting go starts no conversation', logShown() === 1 && h.rooms.length === 0,
+    'shown=' + logShown() + ' rooms=' + h.rooms.length);
+  box(h).value = 'Hello';
+  box(h).dispatchEvent(new h.w.Event('input', { bubbles: true }));
+  btn(h).dispatchEvent(new h.w.Event('touchstart'));
+  await sleep(10);
+  btn(h).dispatchEvent(new h.w.Event('touchend'));
+  check('…but not on Send: with words typed the press shows nothing', logShown() === 1 && shows(h).role === 'send', 'shown=' + logShown() + ' ' + shows(h).role);
+  box(h).value = '';
+  box(h).dispatchEvent(new h.w.Event('input', { bubbles: true }));
   btn(h).click();
   const tapOrder = h.order.slice();
   check('a tap on Start voice starts the conversation inside the tap: unlock, both elements primed, wake lock, room, startAudio; the mint only after',
