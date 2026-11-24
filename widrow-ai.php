@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Widrow AI
  * Description: AI-powered Digital Employees for your WordPress site. Customer Chat for visitors, Content AI and the website tools for your team (Staff AI itself runs in the Tenant Portal), and an intelligent Setup Assistant — all connected to the Digital Employee Framework.
- * Version: 11.5.5
+ * Version: 11.5.6
  * Author: a3rev
  * Author URI: https://a3rev.com/
  * Text Domain: widrow-ai
@@ -29,7 +29,7 @@ if ( ! defined( 'WIDROW_AI_KEY' ) ) {
 	define( 'WIDROW_AI_KEY', 'widrow-ai' );
 }
 if ( ! defined( 'WIDROW_AI_VERSION' ) ) {
-	define( 'WIDROW_AI_VERSION', '11.5.5' );
+	define( 'WIDROW_AI_VERSION', '11.5.6' );
 }
 
 define( 'WIDROW_AI_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );

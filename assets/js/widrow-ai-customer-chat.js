@@ -2066,6 +2066,8 @@
 		});
 		if (els.micBtn) {
 			bindVoiceLog(els.micBtn);
+			// Where the button at the box's end is the way to talk, the mic is not shown: the same press on it.
+			bindVoiceLog(els.sendBtn, function () { return /^(start|end)$/.test(talkButton()); });
 			els.micBtn.style.display = '';
 		}
 		// The same function each time, so a widget opened twice listens once.
@@ -2089,7 +2091,7 @@
 		if (talkMode) updateSendButton();
 	}
 
-	// A long press (or right-click) on the mic shows what the phone did with the voice —
+	// A long press (or right-click) on the mic, or on Start voice and End voice, shows what the phone did with the voice —
 	// the canary's own account, on the device; Android fires contextmenu itself at ~500 ms.
 	var pressTimer = null, pressShown = false;
 	function showVoiceLog(e) {
@@ -2097,12 +2099,14 @@
 		var lines = window.DefVoice ? window.DefVoice.log().slice(-14) : [];
 		appendMessage('assistant', lines.length ? lines.join(' \u00b7 ') : t('voiceLogEmpty'));
 	}
-	function bindVoiceLog(btn) {
+	function bindVoiceLog(btn, when) {
 		btn.addEventListener('contextmenu', function (e) {
+			if (when && !when()) return;
 			if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
 			showVoiceLog(e);
 		});
 		btn.addEventListener('touchstart', function () {
+			if (when && !when()) return;
 			pressTimer = setTimeout(function () { pressTimer = null; pressShown = true; showVoiceLog(); }, 650);
 		}, { passive: true });
 		['touchend', 'touchcancel', 'touchmove'].forEach(function (name) {
@@ -2475,11 +2479,11 @@
 				}
 				if (state !== 'speaking') playHeldSpeech();
 			}),
-			// Ordinary speech moves it clearly, eased so it does not jitter; at most 1.4, where
-			// it would reach the line under it.
+			// It moves with the voice, eased so it does not jitter; at most 1.4, where it would
+			// reach the line under it.
 			onLevel: mine(function (heard, spoken) {
 				var level = talkState === 'speaking' ? spoken : heard;
-				orbScale += (1 + Math.min(0.4, 0.8 * level) - orbScale) * 0.35;
+				orbScale += (1 + 0.4 * level - orbScale) * 0.35;
 				els.orbBall.style.transform = orbScale > 1.005 ? 'scale(' + orbScale.toFixed(3) + ')' : '';
 			}),
 			// The visitor's words: one message until a bubble of hers comes after it, however
@@ -2692,6 +2696,11 @@
 			silence.connect(audio.destination);
 			silence.start(0);
 			audio.resume().catch(function () {});
+			// An iPhone may pause it when the microphone opens: started again, or the orb stops moving.
+			audio.onstatechange = function () {
+				note('context ' + audio.state);
+				if (!over && audio.state !== 'running') audio.resume().catch(function () {});
+			};
 			[herAudio, workingAudio].forEach(function (element) {
 				element.srcObject = audio.createMediaStreamDestination().stream;
 				element.play().catch(function () {});
@@ -2740,28 +2749,27 @@
 			return now - side.at < HOLD_MS;
 		}
 
-		// A side's loudness, 0 to 1, as the client's own createAudioAnalyser measures it (the
-		// root mean square of an analyser's bins between -100 and -80 dB), on the context the
-		// tap unlocked: the client's helper makes a context of its own, which an iPhone starts
-		// suspended outside a tap. The track feeds its audio element and the analyser alike,
-		// as with the client's helper (it does not clone the track either).
+		// A side's loudness, 0 to 1: the sound's own strength now (the root mean square of its
+		// latest samples) as a share of the loudest it has been lately, so a quiet voice moves the
+		// orb as far as a loud one and each word shows. Measured on the context the tap unlocked
+		// (one made outside a tap starts suspended on an iPhone). The track feeds its audio
+		// element and the analyser alike.
 		function meter(side, track) {
 			if (over || still || !audio || !window.MediaStream || !track || !track.mediaStreamTrack) return;
 			unmeter(side);
 			var source = audio.createMediaStreamSource(new MediaStream([track.mediaStreamTrack]));
 			var node = audio.createAnalyser();
-			node.minDecibels = -100;
-			node.maxDecibels = -80;
-			node.fftSize = 2048;
-			node.smoothingTimeConstant = 0.8;
+			if (!node.getFloatTimeDomainData) return;   // a browser too old to hand over the samples: the orb keeps its colours
 			source.connect(node);
-			var bins = new Uint8Array(node.frequencyBinCount);
+			var samples = new Float32Array(node.fftSize), loudest = 0;
 			meters[side] = {
 				level: function () {
-					node.getByteFrequencyData(bins);
+					node.getFloatTimeDomainData(samples);
 					var sum = 0;
-					for (var i = 0; i < bins.length; i++) sum += (bins[i] / 255) * (bins[i] / 255);
-					return Math.sqrt(sum / bins.length);
+					for (var i = 0; i < samples.length; i++) sum += samples[i] * samples[i];
+					var now = Math.sqrt(sum / samples.length);
+					loudest = Math.max(now, loudest * 0.995);   // the loudest lately: it fades over a few seconds of speech
+					return loudest ? now / loudest : 0;
 				},
 				stop: function () { source.disconnect(); },
 				track: track.mediaStreamTrack,

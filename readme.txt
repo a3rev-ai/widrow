@@ -4,7 +4,7 @@ Tags: ai, chat, digital employee, ai assistant, customer support
 Requires at least: 6.2
 Tested up to: 7.1
 Requires PHP: 8.0
-Stable tag: 11.5.5
+Stable tag: 11.5.6
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -118,6 +118,10 @@ Chat messages, user display name, session context, and the visitor's IP address 
 4. Admin Settings — Branding, Chat Settings, Escalation, and Connection tabs
 
 == Changelog ==
+
+= 11.5.6 - 2026-11-24 =
+* Fix - In a Customer Chat voice conversation, the orb now moves with the voice: larger on each word and smaller between words, for a quiet voice as much as a loud one. It used to change colour and hold one size while someone spoke.
+* Tweak - A long press on Start voice or End voice shows the phone's own voice log, as a long press on the microphone does.
 
 = 11.5.5 - 2026-11-24 =
 * Fix - In Customer Chat, with voice conversation on, a tap on Start voice now starts a voice conversation however long the chat has been open. After about ten minutes open with nothing sent, the tap used to start the older hands-free voice instead.

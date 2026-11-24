@@ -219,6 +219,7 @@ function bootChat() {
 	const calls = [];
 	const els = {
 		micBtn: document.getElementById('micBtn'), input: document.getElementById('input'),
+		sendBtn: document.createElement('button'),   // the widget builds it beside the mic
 		messages: document.getElementById('messages'),
 	};
 	const factory = new window.Function(
