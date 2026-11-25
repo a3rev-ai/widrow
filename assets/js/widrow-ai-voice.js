@@ -160,7 +160,7 @@ window.DefVoice = (function () {
 	 * page's context stays). handlers: onTick(seconds), onAutoStop (the two-minute
 	 * stop), onSilence (a pause after speech), onIdle (no speech at all).
 	 *
-	 * start(live), live = {url, token, thread, context} (W75): the recording also streams
+	 * start(live), live = {url, token, thread, context, turn} (W75): the recording also streams
 	 * to DEF over one socket as it is spoken, and stop() waits up to LIVE_FINAL_WAIT_MS
 	 * for the transcript, resolving with `transcript` beside the clip when one came. The
 	 * clip is always recorded: any failure of the socket leaves it as the turn, except
@@ -206,8 +206,9 @@ window.DefVoice = (function () {
 
 		// The token rides as a subprotocol (DEF echoes "def-live"), never in the URL. Frames
 		// spoken before the socket opens wait for it, behind the `start` that opens the turn.
+		// live.turn false (dictation) asks for no turn signal: only the tap ends it.
 		function openLive(live) {
-			var queued = [JSON.stringify({ type: 'start', context: live.context || '', turn: true })];
+			var queued = [JSON.stringify({ type: 'start', context: live.context || '', turn: live.turn !== false })];
 			var open = { transcript: undefined }, settle;
 			open.settled = new Promise(function (resolve) { settle = resolve; });
 			try {

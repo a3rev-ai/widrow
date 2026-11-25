@@ -1157,8 +1157,8 @@ final class Widrow_AI {
 			'retrySuffix'          => __( '(retry in %ds)', 'widrow-ai' ),
 			'uploadInitFailed'     => __( 'Upload could not start. Please try again.', 'widrow-ai' ),
 			'uploadCommitFailed'   => __( 'Upload could not be completed. Please try again.', 'widrow-ai' ),
-			// Voice (7.7.8): the mic in the composer, shown when the employee's Voice switch is on.
-			'micStart'             => __( 'Speak', 'widrow-ai' ),
+			// Voice (7.7.8): the mic in the composer, shown when the employee's Voice switch is on. It dictates (11.6.0).
+			'micStart'             => __( 'Dictate', 'widrow-ai' ),
 			'micBlockedBySite'     => __( "This site's security settings block the microphone for every visitor (Permissions-Policy). The site admin needs to allow it for this site.", 'widrow-ai' ),
 			'micDenied'            => __( 'The microphone is blocked for this site in your browser. Allow it in the site permissions (the icon beside the address bar) and try again.', 'widrow-ai' ),
 			'micNotFound'          => __( 'No microphone was found on this device.', 'widrow-ai' ),

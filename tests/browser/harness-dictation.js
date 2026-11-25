@@ -199,7 +199,8 @@ function bootConsole(opts) {
 	window.StaffAIConfig = StaffAIConfig;
 	const deps = {
 		window, document, DefVoice: window.DefVoice, navigator: { language: 'en-AU' }, StaffAIConfig, apiBase: DOOR,
-		fetch: () => Promise.reject(new Error('no network but the host')), Response,
+		fetch: () => Promise.reject(new Error('no network but the host')), Response, Event: window.Event,
+		console: { error() {}, warn() {}, log() {}, info() {} },
 		setTimeout, localStorage: window.localStorage,
 		messagesList: $('messagesList'), messagesContainer: $('messagesContainer'), errorBanner: $('errorBanner'), infoBanner: $('infoBanner'),
 		composerInput: $('composerInput'), sendBtn: $('sendBtn'), micBtn: $('micBtn'), micLabel: $('micLabel'), voiceBtn: $('voiceBtn'),
@@ -415,9 +416,12 @@ function bootConsole(opts) {
 	await run('console: the controls', async () => {
 		const t = bootConsole();
 		await sleep(5);
-		check('console, conversation off: the mic shows, named "Dictate"; the round button is Start voice',
-			!t.$('micBtn').hidden && t.$('micBtn').getAttribute('aria-label') === 'Dictate' && t.role() === 'start',
-			show({ hidden: t.$('micBtn').hidden, label: t.$('micBtn').getAttribute('aria-label'), role: t.role() }));
+		const markup = /<button type="button" class="mic-btn" id="micBtn"[^>]*>/.exec(extract.phpToHtml(
+			extract.element(extract.templateSource(), 'button', l => l.includes('id="micBtn"'), 'micBtn'), 'micBtn'));
+		check('console, conversation off: the mic shows, named "Dictate" (its markup and its idle label); the round button is Start voice',
+			!t.$('micBtn').hidden && !!markup && /aria-label="Dictate"/.test(markup[0]) && /title="Dictate"/.test(markup[0]) &&
+				t.role() === 'start',
+			show({ hidden: t.$('micBtn').hidden, markup: markup && markup[0], role: t.role() }));
 	});
 
 	await run('console: tap, speak, tap', async () => {
@@ -437,7 +441,7 @@ function bootConsole(opts) {
 		await sleep(30);
 		check('console — the second tap: the words in the box after what is there, the box focused, nothing sent',
 			t.box().value === 'Hi book a table for two' && t.document.activeElement === t.box() && t.sent.length === 0 &&
-				t.$('micBtn').dataset.state === 'idle' && t.calls.length === 0,
+				t.$('micBtn').dataset.state === 'idle' && t.$('micBtn').getAttribute('aria-label') === 'Dictate' && t.calls.length === 0,
 			show({ value: t.box().value, sent: t.sent, calls: t.calls.length }));
 		check('console — no pause ends it: the mic\'s recorder has no silence stop',
 			typeof r.opts.onSilence !== 'function' && typeof r.opts.onAutoStop === 'function' && typeof r.opts.onIdle === 'function');
