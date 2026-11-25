@@ -965,6 +965,29 @@ function check(n, label, cond, detail) {
 				!!other && other.unavailable === undefined && !!other.blob,
 				'done=' + JSON.stringify(done && Object.keys(done)) + ' other=' + JSON.stringify(other && Object.keys(other)));
 		}
+		// 56. dictation (11.6.0): `turn: false` asks the socket for no turn signal, and a recorder
+		//     given no silence stop records through a pause and a `turn` frame until it is stopped
+		{
+			const t = boot(voicedWave);
+			const rec = t.DefVoice.createRecorder({});
+			await rec.start(Object.assign({}, LIVE, { turn: false }));
+			const ws = t.sockets[0];
+			ws.open();
+			await wait(t.window, 500);
+			t.say(silentWave);
+			await wait(t.window, 2300);   // past the 1.8 s pause
+			ws.answer({ type: 'turn' });
+			await wait(t.window, 20);
+			const still = rec.isRecording() && !ws.texts().some(m => m.type === 'end');
+			const stopped = rec.stop();
+			await wait(t.window, 10);
+			ws.answer({ type: 'final', text: 'Two coffees please.' });
+			const done = await stopped;
+			check(56, 'live — `turn: false` goes on the start frame; with no silence stop a pause and a `turn` frame end nothing, the tap does, with the transcript',
+				JSON.stringify(ws.texts()[0]) === JSON.stringify({ type: 'start', context: 'Hi there', turn: false }) && still &&
+					!!done && done.transcript === 'Two coffees please.',
+				'first=' + JSON.stringify(ws.texts()[0]) + ' still=' + still + ' done=' + JSON.stringify(done && done.transcript));
+		}
 	}
 
 	// 44. A phone with an audio session (an iPhone) opens each mic under play-and-record,
