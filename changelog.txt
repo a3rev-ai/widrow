@@ -1,5 +1,8 @@
 *** Widrow AI Changelog ***
 
+= 11.5.8 - 2026/11/26 =
+* Fix - When the voice provider's account cannot be used (its credit spent or its key refused), Customer Chat and Staff AI now say that voice isn't available and that you can type your message instead, where they used to stay silent or say the recording could not be transcribed.
+
 = 11.5.7 - 2026/11/24 =
 * Fix - In a Staff AI voice conversation, the whole orb now shows at its largest. At a loud voice its lower edge used to be cut off by the message box.
 

@@ -156,7 +156,7 @@ async function boot(opts) {
     w.DefVoice = {
       supported: () => true,
       micAllowedBySite: () => true,
-      createSpeaker: () => ({ stop() {}, unlock() {}, whenIdle: () => new Promise(() => {}),
+      createSpeaker: () => ({ stop() {}, unlock() {}, end() {}, whenIdle: () => new Promise(() => {}),
         speak: (text, audio, step) => h.voice.spoken.push({ audio, step, shown: h.bubbleTexts().join(' | ') }),
         discard: step => h.voice.spoken.push({ discard: step }) }),
       createRecorder: o => {
@@ -615,7 +615,7 @@ const WELCOME = {
   h.stream().end();
   await sleep(200);
   check(39, '  … speech_failed is as today: its text goes to the speaker for the device voice, and no sentence',
-    h.voice.spoken.length === 1 && h.voice.spoken[0].audio === null && h.bubbleTexts().join(' ').indexOf("Voice isn't available") === -1,
+    h.voice.spoken.length === 1 && h.voice.spoken[0].audio === null && h.bubbleTexts().slice(-1)[0] === 'In Australia.',
     'spoken=' + JSON.stringify(h.voice.spoken) + ' bubbles=' + show(h.bubbleTexts()));
 
   // ── No duplicates, across a whole session ──────────────────────────────

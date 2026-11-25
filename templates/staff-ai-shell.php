@@ -1009,6 +1009,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 			talkUnavailable: <?php echo wp_json_encode( __( 'Voice conversation is unavailable right now. Tap the mic to talk.', 'widrow-ai' ) ); ?>,
 			talkBusy: <?php echo wp_json_encode( __( 'Voice conversation is busy right now, so the microphone works as usual.', 'widrow-ai' ) ); ?>,
 			talkStopped: <?php echo wp_json_encode( __( 'Voice stopped unexpectedly. Tap the button to start again.', 'widrow-ai' ) ); ?>,
+			voiceUnavailable: <?php echo wp_json_encode( __( "Voice isn't available right now. You can type your message below instead.", 'widrow-ai' ) ); ?>,
 			talkingMic: <?php echo wp_json_encode( __( 'Speak, or type — tap the mic to end', 'widrow-ai' ) ); ?>,
 			startVoice: <?php echo wp_json_encode( __( 'Start voice', 'widrow-ai' ) ); ?>,
 			tapToSpeakAgainButton: <?php echo wp_json_encode( __( 'Tap the button to speak again.', 'widrow-ai' ) ); ?>,
