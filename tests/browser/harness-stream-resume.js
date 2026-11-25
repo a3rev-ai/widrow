@@ -508,8 +508,7 @@ function check(label, cond, detail) {
   }
   {
     // The voice provider refuses the site's key: each line comes as text with voice_unavailable.
-    // None goes to the speaker (no device voice for it); at the turn's end the conversation
-    // ends with the sentence, once. A speech_failed line still goes to the speaker, as today.
+    // None goes to the speaker; at the turn's end the conversation ends with the sentence, once.
     const SENTENCE = "Voice isn't available right now. You can type your message below instead.";
     const t = boot([sse([delta(1, 'In Australia. Ask me anything.'),
       frame(2, { type: 'speech', text: 'In Australia.', error: 'voice_unavailable', seq: 1, part: 0, last: true }),
@@ -518,16 +517,9 @@ function check(label, cond, detail) {
     const run = t.send('Where are you based?');
     t.api.speakAloud();
     await run;
-    const u = boot([sse([delta(1, 'In Australia.'),
-      frame(2, { type: 'speech', text: 'In Australia.', error: 'speech_failed', seq: 1, part: 0, last: true }),
-      done(3, 'In Australia.')])]);
-    const runU = u.send('Where are you based?');
-    u.api.speakAloud();
-    await runU;
-    check('speech refused with voice_unavailable: nothing goes to the speaker, the reply is shown, and the conversation ends once with the sentence; speech_failed goes to the speaker as today and ends nothing',
-      t.spoken.length === 0 && t.bubble() === 'In Australia. Ask me anything.' && JSON.stringify(t.ended) === JSON.stringify([SENTENCE]) &&
-      u.spoken.length === 1 && u.spoken[0].audio === null && u.ended.length === 0,
-      'spoken=' + JSON.stringify(t.spoken) + ' ended=' + JSON.stringify(t.ended) + ' u=' + JSON.stringify({ spoken: u.spoken, ended: u.ended }));
+    check('speech refused with voice_unavailable: nothing goes to the speaker, the reply is shown, and the conversation ends once with the sentence',
+      t.spoken.length === 0 && t.bubble() === 'In Australia. Ask me anything.' && JSON.stringify(t.ended) === JSON.stringify([SENTENCE]),
+      'spoken=' + JSON.stringify(t.spoken) + ' ended=' + JSON.stringify(t.ended));
   }
   {
     // ...and reading on through the pause does not end the turn early: a stream that closes

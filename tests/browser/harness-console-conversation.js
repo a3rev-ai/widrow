@@ -353,6 +353,17 @@ async function run(label, fn) {
 		await settle();
 		check('unmuted once her speech is over', mutedWhilePlaying === '[true]' && JSON.stringify(c.mutes) === '[true,false]', JSON.stringify(c.mutes));
 	});
+	await run('typing, voice refused', async () => {
+		const refused = n => frame(n, { type: 'speech', text: 'Line ' + n, error: 'voice_unavailable', seq: n, step: 1 });
+		const t = await started({ thread: 'th-1', stream: [refused(1), refused(2), frame(3, { type: 'done', choices: [{ message: { content: 'Typed reply' } }] })] });
+		const c = t.last();
+		await t.send('What else?');
+		await settle();
+		check('typing while it is on, its reply\'s speech refused with voice_unavailable: nothing spoken, the sentence on the info line, the conversation still on',
+			t.said.length === 0 && t.info() === "Voice isn't available right now. You can type your message below instead." && !t.error() &&
+			c.ended === 0 && t.api.state().talk && t.api.state().mic === 'conversation',
+			JSON.stringify({ said: t.said, info: t.info(), ended: c.ended, mic: t.api.state().mic }));
+	});
 	await run('reply during typing', async () => {
 		const enc = new TextEncoder();
 		let ctrl;

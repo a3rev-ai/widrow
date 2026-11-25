@@ -952,6 +952,20 @@ async function boot(opts) {
         h.spokenBubbles().length === 0, show(h.log()));
   }
 
+  // ── A typed message during the conversation, its reply's speech refused ──
+  h = await boot();
+  await h.start();
+  h.typedEvents = [{ type: 'speech', text: 'Typed reply.', error: 'voice_unavailable', seq: 1 },
+    { type: 'speech', text: 'More.', error: 'voice_unavailable', seq: 2 },
+    { type: 'text_delta', text: 'Typed reply. More.' }, { type: 'done', thread_id: 'thr-new', choices: [{ message: { content: 'Typed reply. More.' } }] }];
+  await h.send('Is it cordless?');
+  await sleep(100);
+  const sentence = "Voice isn't available right now. You can type your message below instead.";
+  check('a typed message during the conversation, its reply\'s speech refused with voice_unavailable: nothing spoken, the sentence once after the reply, the room still open',
+    h.spoken.length === 0 && h.bubbles().filter(b => b === sentence).length === 1 && h.bubbles().slice(-1)[0] === sentence &&
+      h.disconnects === 0 && h.orbRow().style.display === '' && h.rooms.length === 1,
+    show({ spoken: h.spoken, bubbles: h.bubbles(), disconnects: h.disconnects }));
+
   // ── The voice provider refuses the site's key: the room ends voice_unavailable ──
   h = await boot();
   h.holdReads = true;

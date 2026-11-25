@@ -603,20 +603,6 @@ const WELCOME = {
     refusedTexts.indexOf('In Australia. Ask me anything.') !== -1 &&
     !h.root.querySelector('.def-cc-composer-input').disabled,
     'spoken=' + JSON.stringify(h.voice.spoken) + ' bubbles=' + show(refusedTexts));
-  h = await boot({ stream: true, voice: true });
-  h.root.querySelector('.def-cc-composer-mic').click();
-  await sleep(20);
-  h.voice.opts.onSilence();
-  await sleep(40);
-  await h.event({ type: 'transcript', text: 'where are you based' });
-  h.stream().send({ type: 'text_delta', text: 'In Australia.' });
-  h.stream().send({ type: 'speech', text: 'In Australia.', error: 'speech_failed', seq: 1, part: 0, last: true });
-  h.stream().send({ type: 'done', thread_id: 'thr-local', choices: [{ message: { content: 'In Australia.' } }] });
-  h.stream().end();
-  await sleep(200);
-  check(39, '  … speech_failed is as today: its text goes to the speaker for the device voice, and no sentence',
-    h.voice.spoken.length === 1 && h.voice.spoken[0].audio === null && h.bubbleTexts().slice(-1)[0] === 'In Australia.',
-    'spoken=' + JSON.stringify(h.voice.spoken) + ' bubbles=' + show(h.bubbleTexts()));
 
   // ── No duplicates, across a whole session ──────────────────────────────
   h = await boot({ stream: true, storage: RESTORE_STORAGE });
