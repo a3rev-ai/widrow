@@ -4183,7 +4183,9 @@ function t(key, fallback) {
 						_userScrolledUp = false;
 						_isStreaming = false;
 						persona.reset();
-						showError(evt.message || 'An error occurred.');
+						// The voice provider refused the site's key (a proxy's frame carries the code).
+						if (evt.error === 'voice_unavailable') showInfo(t('voiceUnavailable', "Voice isn't available right now. You can type your message below instead."));
+						else showError(evt.message || 'An error occurred.');
 					}
 				}
 				processing = false;
