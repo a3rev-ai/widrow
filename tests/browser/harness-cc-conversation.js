@@ -952,6 +952,25 @@ async function boot(opts) {
         h.spokenBubbles().length === 0, show(h.log()));
   }
 
+  // ── The voice provider refuses the site's key: the room ends voice_unavailable ──
+  h = await boot();
+  h.holdReads = true;
+  await h.start();
+  await h.utter('Q1', 'Is there parking?');
+  h.her('A1').say('Yes, behind');   // her voice stops: the room ends before the reply's own message
+  await sleep(5);
+  h.room().data('def.ended', { type: 'ended', reason: 'voice_unavailable' });
+  h.room().close();
+  await sleep(20);
+  const heldReads = h.held.length;
+  h.held[0]({ ended: true, reason: 'voice_unavailable', reply: { id: 'w1', content: 'Yes, there is parking behind the hall.', tool_outputs: [] } });
+  await sleep(20);
+  check('voice_unavailable: the end\'s read draws the written reply as after a goodbye, then the widget says voice isn\'t available and the box is ready',
+    heldReads === 1 && show(h.log()) === show(['you: Is there parking?', 'her: Yes, there is parking behind the hall.',
+      "her: Voice isn't available right now. You can type your message below instead."]) &&
+      h.mic().dataset.state === 'idle' && h.orbRow().style.display === 'none' &&
+      !h.root.querySelector('.def-cc-composer-input').disabled, show(h.log()));
+
   // ── Words over her last reply, and the final words, kept ──
   h = await boot({ readReply: { ended: false, reply: { id: 'w1', content: 'We open at nine.', tool_outputs: [] } } });
   await h.start();

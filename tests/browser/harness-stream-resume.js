@@ -15,7 +15,7 @@
  * placeholder as the employee working, and a turn's frames touch the screen only while its
  * chat is the one showing.
  *
- * 29 checks.
+ * 30 checks.
  */
 const { JSDOM } = require('jsdom');
 const extract = require('./extract');
@@ -139,7 +139,7 @@ function boot(script) {
     { url: 'https://e.test/staff-ai/' });
   const window = dom.window, document = window.document;
   window.DefPersona = { createController: () => ({ handleEvent() {}, formatThinkingLabel: m => m, reset() {} }) };
-  const calls = [], waits = [], intervals = new Map(), clock = { now: 1e12 }, hooks = {}, held = [], spoken = [];
+  const calls = [], waits = [], intervals = new Map(), clock = { now: 1e12 }, hooks = {}, held = [], spoken = [], ended = [], infos = [];
   let nextInterval = 0;
   // `script` is a list answered in order, or a router (url, init) => response for a check
   // where the thread poll and the resume retries run side by side.
@@ -170,7 +170,8 @@ function boot(script) {
     errorBanner: document.getElementById('errorBanner'), confirmChips: document.getElementById('confirmChips'),
     composerInput: document.getElementById('composerInput'),
     autoResize() {}, updateSendButton() {}, hideInfo() {}, hasActiveFiles: () => false, stagedFiles: [],
-    classifySuggestionOutcome: () => ({}), endConversation() {}, browserTimezone: () => '', clearStagedFiles() {},
+    classifySuggestionOutcome: () => ({}), endConversation: msg => ended.push(msg), showInfo: msg => infos.push(msg),
+    browserTimezone: () => '', clearStagedFiles() {},
     readBack() {}, readBackSoFar() {}, loadConversations() {}, rememberConversation() {}, updateReadOnlyState() {}, afterSpokenTurn() {},
     dropUnfilledTranscript() { return false; }, uploadAllStagedFiles: async () => ({ success: true, fileIds: [] }),
     renderMarkdown: s => s,
@@ -190,7 +191,7 @@ function boot(script) {
     BANNER + '\n' + RECOVER + '\n' + TOOL_ROWS + '\n' + SEND + '\n' + LOAD + TAIL)(...names.map(k => deps[k]));
   const list = deps.messagesList;
   return {
-    api, calls, waits, intervals, clock, hooks, spoken,
+    api, calls, waits, intervals, clock, hooks, spoken, ended, infos,
     held: () => held.length > 0,
     release: () => held.splice(0).forEach(fn => setTimeout(fn, 0)),
     send: text => { deps.composerInput.value = text; return api.sendMessage(); },
@@ -504,6 +505,29 @@ function check(label, cond, detail) {
       during.length === 2 && during[0].step === 1 && during[1].discard === 1 && during[1].paused &&
       during[1].shown.indexOf('Let me look') === -1,
       'during=' + JSON.stringify(during));
+  }
+  {
+    // The voice provider refuses the site's key: each line comes as text with voice_unavailable.
+    // None goes to the speaker (no device voice for it); at the turn's end the conversation
+    // ends with the sentence, once. A speech_failed line still goes to the speaker, as today.
+    const SENTENCE = "Voice isn't available right now. You can type your message below instead.";
+    const t = boot([sse([delta(1, 'In Australia. Ask me anything.'),
+      frame(2, { type: 'speech', text: 'In Australia.', error: 'voice_unavailable', seq: 1, part: 0, last: true }),
+      frame(3, { type: 'speech', text: 'Ask me anything.', error: 'voice_unavailable', seq: 2, part: 0, last: true }),
+      done(4, 'In Australia. Ask me anything.')])]);
+    const run = t.send('Where are you based?');
+    t.api.speakAloud();
+    await run;
+    const u = boot([sse([delta(1, 'In Australia.'),
+      frame(2, { type: 'speech', text: 'In Australia.', error: 'speech_failed', seq: 1, part: 0, last: true }),
+      done(3, 'In Australia.')])]);
+    const runU = u.send('Where are you based?');
+    u.api.speakAloud();
+    await runU;
+    check('speech refused with voice_unavailable: nothing goes to the speaker, the reply is shown, and the conversation ends once with the sentence; speech_failed goes to the speaker as today and ends nothing',
+      t.spoken.length === 0 && t.bubble() === 'In Australia. Ask me anything.' && JSON.stringify(t.ended) === JSON.stringify([SENTENCE]) &&
+      u.spoken.length === 1 && u.spoken[0].audio === null && u.ended.length === 0,
+      'spoken=' + JSON.stringify(t.spoken) + ' ended=' + JSON.stringify(t.ended) + ' u=' + JSON.stringify({ spoken: u.spoken, ended: u.ended }));
   }
   {
     // ...and reading on through the pause does not end the turn early: a stream that closes

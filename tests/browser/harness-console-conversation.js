@@ -399,6 +399,7 @@ async function run(label, fn) {
 	const ENDINGS = [['goodbye', false, 'Conversation ended.'], ['stop_phrase', false, 'Conversation ended.'], ['end', false, 'Conversation ended.'],
 		['time_limit', false, 'The conversation reached its time limit. Tap the button to start a new one.'],
 		['silence', false, 'Conversation ended.'], ['refused', false, 'Voice stopped unexpectedly. Tap the button to start again.'],
+		['voice_unavailable', false, "Voice isn't available right now. You can type your message below instead."],
 		['unknown', false, 'Voice stopped unexpectedly. Tap the button to start again.'], ['mint', true, 'Voice stopped unexpectedly. Tap the button to start again.'],
 		['microphone', true, 'The microphone is blocked for this site in your browser. Allow it in the site permissions (the icon beside the address bar) and try again.'],
 		['dropped', true, 'Voice stopped unexpectedly. Tap the button to start again.']];
@@ -502,6 +503,14 @@ async function run(label, fn) {
 		check('a tap ends it at once, before the host answers; a late or second answer changes nothing',
 			now[0] === null && now[1] === 'idle' && now[2] === 'gone' && now[3] === 'Conversation ended.' && c.ended === 1 &&
 			t.info() === 'Conversation ended.' && t.reads() === 1, JSON.stringify({ now, info: t.info(), reads: t.reads() }));
+	});
+	await run('voice_unavailable reads the chat', async () => {
+		const t = await started({ thread: 'th-1' });
+		t.last().finish('voice_unavailable');
+		await settle();
+		check('voice_unavailable: the last read, as after a goodbye, and the info line, not an error',
+			t.reads() === 1 && t.info() === "Voice isn't available right now. You can type your message below instead." && !t.error(),
+			JSON.stringify({ reads: t.reads(), info: t.info(), error: t.error() }));
 	});
 	await run('host never answers', async () => {
 		const t = await started({ thread: 'th-1', silent: true });

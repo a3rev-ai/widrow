@@ -946,6 +946,25 @@ function check(n, label, cond, detail) {
 				'stops=' + stops + ' done=' + JSON.stringify(done === 'never' ? done : done && Object.keys(done)) +
 				' log=' + t.DefVoice.log().join('|'));
 		}
+		// 55. the voice provider refuses the site's key: the stop says so, and a plain `error` does not
+		{
+			const { t, rec, ws } = await liveBoot();
+			ws.open();
+			ws.answer({ type: 'error', error: 'voice_unavailable' });   // the platform's answer, then its close
+			ws.drop(1000);
+			await wait(t.window, 300);
+			const at = Date.now();
+			const done = await rec.stop();
+			const plain = await liveBoot();
+			plain.ws.open();
+			plain.ws.answer({ type: 'error' });
+			await wait(plain.t.window, 300);
+			const other = await plain.rec.stop();
+			check(55, 'live — an `error` frame saying voice_unavailable resolves the stop at once with unavailable: true and no transcript; a plain `error` carries no unavailable',
+				!!done && done.unavailable === true && done.transcript === undefined && Date.now() - at < 500 &&
+				!!other && other.unavailable === undefined && !!other.blob,
+				'done=' + JSON.stringify(done && Object.keys(done)) + ' other=' + JSON.stringify(other && Object.keys(other)));
+		}
 	}
 
 	// 44. A phone with an audio session (an iPhone) opens each mic under play-and-record,
