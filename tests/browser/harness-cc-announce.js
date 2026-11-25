@@ -156,7 +156,7 @@ async function boot(opts) {
     w.DefVoice = {
       supported: () => true,
       micAllowedBySite: () => true,
-      createSpeaker: () => ({ stop() {}, unlock() {}, whenIdle: () => new Promise(() => {}),
+      createSpeaker: () => ({ stop() {}, unlock() {}, end() {}, whenIdle: () => new Promise(() => {}),
         speak: (text, audio, step) => h.voice.spoken.push({ audio, step, shown: h.bubbleTexts().join(' | ') }),
         discard: step => h.voice.spoken.push({ discard: step }) }),
       createRecorder: o => {
@@ -580,6 +580,29 @@ const WELCOME = {
   check(37, 'a round moved on from: its speech goes to the speaker with its step, and the marker reaches discard() once',
     marked.length === 2 && marked[0].step === 1 && marked[1].discard === 1,
     'spoken=' + JSON.stringify(marked));
+
+  // The voice provider refuses the site's key mid-reply: the reply's lines come as text with
+  // voice_unavailable. None is read by the device voice; the sentence once, after the reply.
+  h = await boot({ stream: true, voice: true });
+  h.root.querySelector('.def-cc-composer-mic').click();
+  await sleep(20);
+  h.voice.opts.onSilence();
+  await sleep(40);
+  await h.event({ type: 'transcript', text: 'where are you based' });
+  h.stream().send({ type: 'text_delta', text: 'In Australia. Ask me anything.' });
+  h.stream().send({ type: 'speech', text: 'In Australia.', error: 'voice_unavailable', seq: 1, part: 0, last: true });
+  h.stream().send({ type: 'speech', text: 'Ask me anything.', error: 'voice_unavailable', seq: 2, part: 0, last: true });
+  h.stream().send({ type: 'done', thread_id: 'thr-local', choices: [{ message: { content: 'In Australia. Ask me anything.' } }] });
+  h.stream().end();
+  for (let i = 0; i < 50 && h.bubbleTexts().join(' ').indexOf("Voice isn't available") === -1; i++) await sleep(20);
+  const refusedTexts = h.bubbleTexts();
+  check(38, 'speech refused with voice_unavailable: nothing goes to the speaker, the sentence is shown once, below the reply, and the box is ready',
+    h.voice.spoken.length === 0 &&
+    refusedTexts.filter(b => b === "Voice isn't available right now. You can type your message below instead.").length === 1 &&
+    refusedTexts[refusedTexts.length - 1] === "Voice isn't available right now. You can type your message below instead." &&
+    refusedTexts.indexOf('In Australia. Ask me anything.') !== -1 &&
+    !h.root.querySelector('.def-cc-composer-input').disabled,
+    'spoken=' + JSON.stringify(h.voice.spoken) + ' bubbles=' + show(refusedTexts));
 
   // ── No duplicates, across a whole session ──────────────────────────────
   h = await boot({ stream: true, storage: RESTORE_STORAGE });

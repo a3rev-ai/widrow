@@ -3157,6 +3157,10 @@ function t(key, fallback) {
 			endConversation(recording ? t('nothingHeard', 'Nothing was heard. Try again a little closer to the microphone.') : null);
 			return;
 		}
+		if (recording.unavailable) {
+			endConversation(t('voiceUnavailable', "Voice isn't available right now. You can type your message below instead."));
+			return;
+		}
 		if (recording.transcript !== undefined) {
 			await sendSpoken({ transcript: recording.transcript });
 			return;
@@ -3498,6 +3502,8 @@ function t(key, fallback) {
 		setMicState('idle');
 		if (kind === 'goodbye' || kind === 'stop_phrase' || kind === 'end' || kind === 'silence') {
 			showInfo(t('voiceStopped', 'Conversation ended.'));
+		} else if (kind === 'voice_unavailable') {
+			showInfo(t('voiceUnavailable', "Voice isn't available right now. You can type your message below instead."));
 		} else if (kind === 'time_limit') {
 			showInfo(t('talkTimeLimit', 'The conversation reached its time limit. Tap the button to start a new one.'));
 		} else if (kind === 'connect' || kind === 'load') {
@@ -3738,6 +3744,7 @@ function t(key, fallback) {
 	// speech_out} — the recording rides the request; null for a typed turn.
 	async function sendMessageStreaming(text, fileIds, pendingOutcome, pendingScore, voice) {
 		var retried = false;
+		var speechRefused = false;   // a `speech` line said voice_unavailable
 
 		async function attemptStream() {
 			// Build messages array for DEF (full conversation history)
@@ -3790,13 +3797,16 @@ function t(key, fallback) {
 			if (!response.ok) {
 				// String-safe extraction (5.8.4): a DEF refusal object here
 				// used to stringify to "[object Object]" in the banner.
-				var errText = '';
+				var errText = '', errData = null;
 				try {
-					var errData = await response.json();
+					errData = await response.json();
 					errText = extractServerMessage(errData) ||
 						(typeof errData.message === 'string' ? errData.message : '');
 				} catch (e) { /* ignore */ }
-				throw new Error(errText || 'Stream request failed (' + response.status + ')');
+				var refusal = new Error(errText || 'Stream request failed (' + response.status + ')');
+				// The voice provider refused the site's key: said on the info line, in the console's words.
+				refusal.voiceUnavailable = !!(errData && errData.detail && errData.detail.error === 'voice_unavailable');
+				throw refusal;
 			}
 			// Only a turn the server ACCEPTED is worth recovering — a refusal (a billing
 			// gate, a rate limit) must show its own message, not two minutes of polling.
@@ -4173,7 +4183,9 @@ function t(key, fallback) {
 						_userScrolledUp = false;
 						_isStreaming = false;
 						persona.reset();
-						showError(evt.message || 'An error occurred.');
+						// The voice provider refused the site's key (a proxy's frame carries the code).
+						if (evt.error === 'voice_unavailable') showInfo(t('voiceUnavailable', "Voice isn't available right now. You can type your message below instead."));
+						else showError(evt.message || 'An error occurred.');
 					}
 				}
 				processing = false;
@@ -4210,7 +4222,9 @@ function t(key, fallback) {
 						// A streamed line comes as parts of one seq, its closing part with no audio.
 						// It goes to the speaker as it arrives, never through the paced queue: a
 						// part held there behind a tool row's pause is heard as a gap (8.8.2).
-						if (spokenTurn || talkTyped) {
+						// The voice provider refused the site's key: no device voice either; said once, after the reply.
+						if ((spokenTurn || talkTyped) && evt.error === 'voice_unavailable') speechRefused = true;
+						else if (spokenTurn || talkTyped) {
 							muteTalkForSpeech();
 							speaker.speak(evt.text || '', evt.audio_base64 || evt.part > 0
 								? { base64: evt.audio_base64 || '', mime: evt.mime, seq: evt.seq, part: evt.part, last: evt.last }
@@ -4343,6 +4357,7 @@ function t(key, fallback) {
 				dropUnfilledTranscript();
 				if (err.sessionExpired) { showSessionExpired(err, text); return; }
 				renderMessages();
+				if (err.voiceUnavailable) { showInfo(t('voiceUnavailable', "Voice isn't available right now. You can type your message below instead.")); return; }
 				showError(_turnReachedServer && currentConversationId
 					? t('stillWorking', 'Your assistant is still working on this — reopen the chat in a minute to see the reply.')
 					: (err.message || t('failedToSend', 'Failed to send message. Please try again.')));
@@ -4355,6 +4370,9 @@ function t(key, fallback) {
 			isLoading = false;
 			stopTurn = null;
 			updateSendButton();
+			// Speech refused: hands-free stops; a conversation's room stays.
+			if (speechRefused && talk) showInfo(t('voiceUnavailable', "Voice isn't available right now. You can type your message below instead."));
+			else if (speechRefused) endConversation(t('voiceUnavailable', "Voice isn't available right now. You can type your message below instead."));
 			afterSpokenTurn();
 			afterStreamTurn();
 		}

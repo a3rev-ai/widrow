@@ -241,5 +241,25 @@ echo "\n[7] Non-200 with an empty body still yields an event\n";
 $evt = decode_frame( call_private( 'sse_error_payload', array( 503, 0 ) ) );
 assert_true( null !== $evt && 'error' === $evt['type'], 'empty-body path has an event to send' );
 
+// ── 8. The voice provider's refusal keeps its code ───────────────────────
+// The page says voice isn't available only when it knows why: the one code rides along,
+// and every other refusal's frame is exactly as before.
+echo "\n[8] A 502 voice_unavailable carries its code; other refusals do not\n";
+
+$state = fresh_state();
+call_note_header( "HTTP/1.1 502 Bad Gateway\r\n", $state );
+$out = call_stream_chunk( '{"detail":{"error":"voice_unavailable","message":"Voice is not available."}}', $state );
+$evt = decode_frame( $out );
+assert_true( is_array( $evt ) && 'voice_unavailable' === ( $evt['error'] ?? '' ), 'voice_unavailable rides along as error' );
+assert_true( is_array( $evt ) && 502 === $evt['status'] && 'error' === $evt['type'], 'status and type as before' );
+assert_true( strpos( $out, 'Voice is not available.' ) === false, "the platform's own words are not forwarded" );
+
+foreach ( array( '{"detail":{"error":"transcription_failed","message":"x"}}', '{"detail":"refused"}', 'not json', '' ) as $body ) {
+	$state = fresh_state();
+	call_note_header( "HTTP/1.1 502 Bad Gateway\r\n", $state );
+	$frame = call_stream_chunk( $body, $state );
+	assert_true( $frame === call_private( 'sse_error_payload', array( 502, 0 ) ), 'any other refusal keeps today\'s frame exactly: ' . $body );
+}
+
 echo "\n--- SSE Error Visibility Tests: $pass passed, $fail failed ---\n";
 exit( $fail > 0 ? 1 : 0 );

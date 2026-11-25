@@ -163,7 +163,8 @@ window.DefVoice = (function () {
 	 * start(live), live = {url, token, thread, context} (W75): the recording also streams
 	 * to DEF over one socket as it is spoken, and stop() waits up to LIVE_FINAL_WAIT_MS
 	 * for the transcript, resolving with `transcript` beside the clip when one came. The
-	 * clip is always recorded: any failure of the socket leaves it as the turn.
+	 * clip is always recorded: any failure of the socket leaves it as the turn, except
+	 * `unavailable: true` (the socket said voice_unavailable), where the caller sends nothing.
 	 */
 	function createRecorder(handlers) {
 		handlers = handlers || {};
@@ -233,6 +234,8 @@ window.DefVoice = (function () {
 				try { msg = JSON.parse(e.data); } catch (x) { /* not a frame DEF sends */ }
 				// A final with no words is no transcript: the clip gets the batch transcriber's look.
 				if (msg && msg.type === 'final' && msg.text) open.transcript = String(msg.text);
+				// The voice provider refuses the site's key: the clip would be refused too.
+				if (msg && msg.type === 'error' && msg.error === 'voice_unavailable') open.unavailable = true;
 				if (msg && (msg.type === 'final' || msg.type === 'error')) settle();
 				// The provider judges the person has finished: the turn ends as the pause ends it,
 				// once, and only after speech. With no signal the pause still ends it.
@@ -385,6 +388,7 @@ window.DefVoice = (function () {
 				if (!open || !spoke) { if (resolve) resolve(result); return; }
 				finishLive(open).then(function (transcript) {
 					if (transcript !== undefined) result.transcript = transcript;
+					if (open.unavailable) result.unavailable = true;
 					if (resolve) resolve(result);
 				});
 			};

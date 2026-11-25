@@ -28,6 +28,7 @@
 		voiceStopped: 'Conversation ended.',
 		nothingHeard: 'Nothing was heard. Try again a little closer to the microphone.',
 		transcribeFailed: 'That recording could not be transcribed. Please try again.',
+		voiceUnavailable: "Voice isn't available right now. You can type your message below instead.",
 		listening: "Listening\u2026 pause when you're done, or tap to send",
 		transcribing: 'Transcribing\u2026',
 		answering: 'Answering\u2026 tap the mic to end',
@@ -2201,6 +2202,10 @@
 				endConversation(recording ? t('nothingHeard') : null);
 				return;
 			}
+			if (recording.unavailable) {
+				endConversation(t('voiceUnavailable'));
+				return;
+			}
 			if (recording.transcript !== undefined) {
 				sendSpoken({ transcript: recording.transcript });
 				return;
@@ -2361,7 +2366,7 @@
 	// can filter (config.talkLine) and is drawn with no part, so a site cannot hide or reword it.
 	var TALK_LINE = 'Your voice is turned into text as %s answers you. No audio recording is kept.';
 	// The reasons the room gives for an ending it announces; any other reads as 'unknown'.
-	var ENDINGS = ['goodbye', 'stop_phrase', 'silence', 'refused'];
+	var ENDINGS = ['goodbye', 'stop_phrase', 'silence', 'refused', 'voice_unavailable'];
 
 	// Loaded when the status says the mode is on, never inside the tap: an iPhone may no
 	// longer count a tap that waited on a download as the tap that unlocks its audio.
@@ -2520,7 +2525,7 @@
 			onNotice: mine(function (kind) {
 				if (kind === 'not_understood') appendMessage('assistant', t('talkNotUnderstood'));
 			}),
-			onEnded: mine(function () { talkEnded(); }),
+			onEnded: mine(function (reason) { talkEnded(reason === 'voice_unavailable' ? t('voiceUnavailable') : ''); }),
 			onError: mine(function (kind) {
 				talkEnded();
 				if (kind === 'dropped') { appendMessage('assistant', t('talkLost')); return; }
@@ -2533,8 +2538,9 @@
 		});
 	}
 
-	// Every ending: back to the ordinary chat, the mic ready to start again.
-	function talkEnded() {
+	// Every ending: back to the ordinary chat, the mic ready to start again. A note is said
+	// after the last read.
+	function talkEnded(note) {
 		if (talkRoom) {
 			// A last read, in case the room's last reply message was lost. Words said since her
 			// last reply are said once now, and kept: after the reply in progress, or as the
@@ -2544,6 +2550,7 @@
 			var left = answerStarts();
 			readReply(last ? last.bubbles : [], talkRoom, last ? last.asked : left).then(function (drawn) {
 				if (left.length && !destroyed && (last || !drawn)) upsertThread(threadId, said(left), '', null);
+				if (note && !destroyed) appendMessage('assistant', note);
 			});
 		}
 		talkEpoch++;
@@ -2657,7 +2664,7 @@
 	 * for the visitor's own (optional; a segment may come more than once),
 	 * onReply() at `def.reply`, once per reply when its speech has finished or was cut off
 	 * (optional), onNotice(kind) for `def.notice`,
-	 * onEnded('goodbye' | 'stop_phrase' | 'silence' | 'refused' | 'unknown': her `def.ended`;
+	 * onEnded('goodbye' | 'stop_phrase' | 'silence' | 'refused' | 'voice_unavailable' | 'unknown': her `def.ended`;
 	 * 'end': end() was called) and onError('mint' | 'connect' | 'microphone' | 'dropped' |
 	 * 'busy': no employee joined in time);
 	 * exactly one of the last two, once, and nothing after it. The room token goes to the
@@ -2946,6 +2953,7 @@
 		// WITHOUT one of them used to leave the composer disabled forever
 		// (5.8.4) — completion handling below re-enables unconditionally.
 		var streamTerminated = false;
+		var speechRefused = false;   // a `speech` line said voice_unavailable
 
 		// Progressive text rendering state.
 		var streamBuffer = '';
@@ -3008,6 +3016,8 @@
 		// A typed message's reply in a conversation is spoken too, by the same speaker.
 		function speakFrame(evt) {
 			if (!speaker || !(spokenTurn || talk)) return;
+			// The voice provider refused the site's key: no device voice either; said once, after the reply.
+			if (evt.error === 'voice_unavailable') { speechRefused = true; return; }
 			var line = function () {
 				speaker.speak(evt.text || '', evt.audio_base64 || evt.part > 0
 					? { base64: evt.audio_base64 || '', mime: evt.mime, seq: evt.seq, part: evt.part, last: evt.last }
@@ -3292,7 +3302,8 @@
 					// A voice refusal before the stream (the proxy carries DEF's status, not its
 					// words): a silent clip and a vendor failure get their own lines, the rest
 					// the proxy's. No listening again over a failed turn.
-					var spokenRefusal = transcribingEl && ({ 422: t('nothingHeard'), 502: t('transcribeFailed') })[evt.status];
+					var spokenRefusal = transcribingEl && (evt.error === 'voice_unavailable' ? t('voiceUnavailable')
+						: ({ 422: t('nothingHeard'), 502: t('transcribeFailed') })[evt.status]);
 					if (conversationOn) endConversation();
 					dropUnfilledTranscript();
 					appendMessage('assistant', spokenRefusal || evt.message || t('connectionError'));
@@ -3351,9 +3362,11 @@
 			.then(function (res) {
 				if (direct && !res.ok) {
 					// The site's proxy turns a refusal into an `error` frame; straight from the
-					// platform it is the status, read by the same case.
-					enqueue([{ type: 'error', status: res.status, message: t(res.status === 429 ? 'rateLimited' : 'assistantUnavailable') }]);
-					return;
+					// platform it is the status, and the voice provider's refusal its code, read by the same case.
+					return res.json().catch(function () { return null; }).then(function (data) {
+						var refusal = data && data.detail && data.detail.error === 'voice_unavailable' ? 'voice_unavailable' : '';
+						enqueue([{ type: 'error', status: res.status, error: refusal, message: t(res.status === 429 ? 'rateLimited' : 'assistantUnavailable') }]);
+					});
 				}
 				if (!res || !res.ok) {
 					throw { status: res ? res.status : 0 };
@@ -3436,6 +3449,9 @@
 				setComposerDisabled(false);
 			})
 			.then(function () {
+				// Speech refused: the sentence below the reply; hands-free stops, a conversation's room stays.
+				if (speechRefused && talk) appendMessage('assistant', t('voiceUnavailable'));
+				else if (speechRefused) endConversation(t('voiceUnavailable'));
 				if (spokenTurn) afterSpokenTurn();
 			})
 			.catch(function (err) {

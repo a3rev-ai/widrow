@@ -316,7 +316,12 @@ final class Widrow_AI_Tools {
 			return '';
 		}
 		$state['error_sent'] = true;
-		return self::sse_error_payload( $state['status'], $state['retry_after'] );
+		// The voice provider refused the site's key: the code rides along so the page can say so.
+		// Read from this first chunk only; a body split across chunks gets today's frame.
+		$body  = json_decode( $data, true );
+		$error = is_array( $body ) && is_array( $body['detail'] ?? null ) && 'voice_unavailable' === ( $body['detail']['error'] ?? '' )
+			? 'voice_unavailable' : '';
+		return self::sse_error_payload( $state['status'], $state['retry_after'], $error );
 	}
 
 	/**
@@ -332,11 +337,12 @@ final class Widrow_AI_Tools {
 	 * `status` and `retry_after` ride along so a widget can act on them (backing the
 	 * composer off, for instance) without re-deriving anything.
 	 *
-	 * @param int $status      Upstream HTTP status.
-	 * @param int $retry_after Seconds from Retry-After, 0 when absent.
+	 * @param int    $status      Upstream HTTP status.
+	 * @param int    $retry_after Seconds from Retry-After, 0 when absent.
+	 * @param string $error       'voice_unavailable' when DEF said so, else ''.
 	 * @return string A complete SSE frame.
 	 */
-	private static function sse_error_payload( int $status, int $retry_after ): string {
+	private static function sse_error_payload( int $status, int $retry_after, string $error = '' ): string {
 		if ( 429 === $status ) {
 			$message = $retry_after > 0
 				? sprintf(
@@ -361,6 +367,9 @@ final class Widrow_AI_Tools {
 		);
 		if ( $retry_after > 0 ) {
 			$payload['retry_after'] = $retry_after;
+		}
+		if ( '' !== $error ) {
+			$payload['error'] = $error;
 		}
 
 		return 'data: ' . wp_json_encode( $payload ) . "\n\n";

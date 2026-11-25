@@ -1171,6 +1171,7 @@ final class Widrow_AI {
 			'voiceStopped'         => __( 'Conversation ended.', 'widrow-ai' ),
 			'nothingHeard'         => __( 'Nothing was heard. Try again a little closer to the microphone.', 'widrow-ai' ),
 			'transcribeFailed'     => __( 'That recording could not be transcribed. Please try again.', 'widrow-ai' ),
+			'voiceUnavailable'     => __( "Voice isn't available right now. You can type your message below instead.", 'widrow-ai' ),
 			'listening'            => __( "Listening… pause when you're done, or tap to send", 'widrow-ai' ),
 			'transcribing'         => __( 'Transcribing…', 'widrow-ai' ),
 			'answering'            => __( 'Answering… tap the mic to end', 'widrow-ai' ),

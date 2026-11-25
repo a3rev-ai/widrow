@@ -22,7 +22,7 @@
  * the recording, through the host; a host.live that throws or gives no address, and a host
  * without host.live, give no live socket.
  *
- * 43 checks.
+ * 51 checks.
  */
 const fs = require('fs');
 const path = require('path');
@@ -93,9 +93,10 @@ async function bootChat(opts) {
       const next = h.direct.shift() || 'ok';
       if (next === 'typeerror') return Promise.reject(new w.TypeError('Failed to fetch'));
       if (typeof next === 'number') return res({ detail: 'refused' }, next);
+      if (next.status) return res(next.body, next.status);
       return reply(init);
     }
-    if (url === CC.chatStreamUrl) { h.proxyCalls.push(init); return reply(init); }
+    if (url === CC.chatStreamUrl) { h.proxyCalls.push(init); return opts.proxy ? sse(opts.proxy) : reply(init); }
     if (url === CC.loginUrl) return res({ success: true, data: { token: 'a.' + Buffer.from('{"first_name":"Sam"}').toString('base64') + '.s' } }, 200);
     if (url === CC.wpRestUrl + 'chat/voice') return res({ enabled: !!opts.voice }, 200);
     return res({}, 200);
@@ -110,7 +111,7 @@ async function bootChat(opts) {
       if (h.voice) h.voice.opts = o;
       return { start: live => { h.voice.starts.push(live); return Promise.resolve(true); }, isRecording: () => false, release() {},
         stop: () => Promise.resolve(Object.assign({ blob: {}, seconds: 2, spoke: true, mime: 'audio/webm' },
-          opts.transcript !== undefined && { transcript: opts.transcript })) };
+          opts.transcript !== undefined && { transcript: opts.transcript }, opts.unavailable && { unavailable: true })) };
     },
     toBase64: () => Promise.resolve('AAAA'), log: () => [],
     note: line => h.notes.push(line),
@@ -206,7 +207,7 @@ async function bootStaff(opts) {
     createRecorder: o => { h.recorderOpts = o; return { start: live => { h.starts.push(live); return Promise.resolve(true); },
       isRecording: () => false, release() {},
       stop: () => Promise.resolve(Object.assign({ blob: {}, seconds: 2, spoke: true, mime: 'audio/webm' },
-        opts.transcript !== undefined && { transcript: opts.transcript })) }; },
+        opts.transcript !== undefined && { transcript: opts.transcript }, opts.unavailable && { unavailable: true })) }; },
     toBase64: () => Promise.resolve('AAAA') };
   const enc = new TextEncoder();
   let threads = 0;
@@ -227,9 +228,11 @@ async function bootStaff(opts) {
       const next = h.direct.shift() || 'ok';
       if (next === 'typeerror') throw new TypeError('Failed to fetch');
       if (typeof next === 'number') return json(next, { detail: 'Too many requests right now.' });
+      if (next.status) return json(next.status, next.body);
       return sse(init);
     }
-    if (url === SA_PROXY) { h.proxyCalls.push(init); return sse(init); }
+    if (url === SA_PROXY) { h.proxyCalls.push(init); return opts.proxy ? new Response(opts.proxy.map(e => 'data: ' + JSON.stringify(e) + '\n\n').join(''),
+      { status: 200, headers: { 'content-type': 'text/event-stream' } }) : sse(init); }
     throw new Error('unscripted request to ' + url);
   }
   const deps = {
@@ -248,7 +251,7 @@ async function bootStaff(opts) {
     renderMarkdown: s => s, applyCitations() {}, buildCitationMap: () => ({}), createToolOutputCard: () => null,
     handleSpokenStop: () => false, console: { info() {}, error() {} },
     micBtn: document.getElementById('micBtn'), micLabel: document.getElementById('micLabel'), voiceBtn: null,
-    showInfo() {}, assistantName: 'Sue', onAssistantName() {}, DefVoice: window.DefVoice, localStorage: window.localStorage
+    showInfo(msg) { h.info = msg; }, assistantName: 'Sue', onAssistantName() {}, DefVoice: window.DefVoice, localStorage: window.localStorage
   };
   window.StaffAIConfig = deps.StaffAIConfig;
   const names = Object.keys(deps);
@@ -323,6 +326,29 @@ async function bootStaff(opts) {
   check('a spoken turn the platform refuses with 422 says "Nothing was heard", as through the site',
     h.directCalls.length === 1 && h.proxyCalls.length === 0 && /^Nothing was heard/.test(h.last()) &&
     !h.root.querySelector('.def-cc-message--transcribing'), h.last());
+
+  // The voice provider refuses the site's key: the sentence, the box ready for typing, the mic not opened again.
+  const UNAVAILABLE = "Voice isn't available right now. You can type your message below instead.";
+  const refusedVoice = code => ({ status: 502, body: { detail: { error: code, message: 'The platform\'s own words.' } } });
+  h = await bootChat({ voice: true, direct: [refusedVoice('voice_unavailable')] });
+  await h.speak();
+  check('Customer Chat: a spoken turn the platform refuses with 502 voice_unavailable says voice isn\'t available; the box is ready and the mic is not opened again',
+    h.directCalls.length === 1 && h.last() === UNAVAILABLE && !h.input().disabled && h.voice.starts.length === 1 &&
+    !h.root.querySelector('.def-cc-message--transcribing'), show({ last: h.last(), disabled: h.input().disabled, starts: h.voice.starts.length }));
+  h = await bootChat({ voice: true, direct: [refusedVoice('transcription_failed')] });
+  await h.speak();
+  check('  … a 502 with any other code keeps today\'s line', h.last() === 'That recording could not be transcribed. Please try again.', h.last());
+  // Through the site's proxy: its own `error` frame, the code carried along.
+  const proxied = code => [Object.assign({ type: 'error', message: 'The assistant is unavailable right now. Please try again.', status: 502 }, code && { error: code })];
+  h = await bootChat({ voice: true, life: 20, proxy: proxied('voice_unavailable') });
+  await h.speak();
+  check('Customer Chat: through the site, an `error` frame carrying voice_unavailable says voice isn\'t available; the box is ready, the mic not opened again',
+    h.proxyCalls.length === 1 && h.last() === UNAVAILABLE && !h.input().disabled && h.voice.starts.length === 1, show({ last: h.last(), proxy: h.proxyCalls.length }));
+  h = await bootChat({ voice: true, unavailable: true });
+  await h.speak();
+  check('Customer Chat: the live socket said voice_unavailable: the sentence, nothing sent, the mic not opened again',
+    h.directCalls.length === 0 && h.proxyCalls.length === 0 && h.last() === UNAVAILABLE && !h.input().disabled && h.voice.starts.length === 1,
+    show({ direct: h.directCalls.length, proxy: h.proxyCalls.length, last: h.last(), starts: h.voice.starts.length }));
 
   // W75: a spoken turn is transcribed while it is spoken, on the same token.
   const AUDIO = ['audio_base64', 'audio_mime', 'audio_seconds', 'audio_context'];
@@ -420,6 +446,26 @@ async function bootStaff(opts) {
   check('Staff AI: a 429 does not fall back or re-mint, and the banner shows the platform\'s own words',
     h.directCalls.length === 1 && h.proxyCalls.length === 0 && h.mints.length === 1 && h.banner() === 'Too many requests right now.',
     show({ direct: h.directCalls.length, proxy: h.proxyCalls.length, mints: h.mints.length, banner: h.banner() }));
+
+  h = await bootStaff({ voice: true, direct: [refusedVoice('voice_unavailable')] });
+  await h.speak();
+  check('Staff AI: a spoken turn the platform refuses with 502 voice_unavailable says voice isn\'t available, on the info line, not as an error; the mic is not opened again',
+    h.directCalls.length === 1 && h.info === UNAVAILABLE && h.banner() === '' && h.starts.length === 1 &&
+    !h.last(), show({ info: h.info, banner: h.banner(), starts: h.starts.length }));
+  h = await bootStaff({ voice: true, direct: [refusedVoice('transcription_failed')] });
+  await h.speak();
+  check('  … a 502 with any other code keeps today\'s banner, the platform\'s own words', h.banner() === 'The platform\'s own words.' && h.info === undefined,
+    show({ banner: h.banner(), info: h.info }));
+  h = await bootStaff({ voice: true, proxy: proxied('voice_unavailable') });
+  h.api.open('th-7');   // no token for it: the turn goes through the proxy
+  await h.speak();
+  check('Staff AI: through a proxy, an `error` frame carrying voice_unavailable says voice isn\'t available on the info line, not as an error',
+    h.proxyCalls.length === 1 && h.info === UNAVAILABLE && h.banner() === '', show({ info: h.info, banner: h.banner(), proxy: h.proxyCalls.length }));
+  h = await bootStaff({ voice: true, unavailable: true });
+  await h.speak();
+  check('Staff AI: the live socket said voice_unavailable: the sentence on the info line, nothing sent, the mic not opened again',
+    h.directCalls.length === 0 && h.proxyCalls.length === 0 && h.info === UNAVAILABLE && h.starts.length === 1,
+    show({ direct: h.directCalls.length, proxy: h.proxyCalls.length, info: h.info, starts: h.starts.length }));
 
   h = await bootStaff();
   h.api.open('th-7');   // a conversation opened from the list

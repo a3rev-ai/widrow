@@ -4,7 +4,7 @@ Tags: ai, chat, digital employee, ai assistant, customer support
 Requires at least: 6.2
 Tested up to: 7.1
 Requires PHP: 8.0
-Stable tag: 11.5.7
+Stable tag: 11.5.8
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -118,6 +118,9 @@ Chat messages, user display name, session context, and the visitor's IP address 
 4. Admin Settings — Branding, Chat Settings, Escalation, and Connection tabs
 
 == Changelog ==
+
+= 11.5.8 - 2026-11-26 =
+* Fix - When the voice provider's account cannot be used (its credit spent or its key refused), Customer Chat and Staff AI now say that voice isn't available and that you can type your message instead, where they used to stay silent or say the recording could not be transcribed.
 
 = 11.5.7 - 2026-11-24 =
 * Fix - In a Staff AI voice conversation, the whole orb now shows at its largest. At a loud voice its lower edge used to be cut off by the message box.
