@@ -22,7 +22,7 @@
  * the recording, through the host; a host.live that throws or gives no address, and a host
  * without host.live, give no live socket.
  *
- * 49 checks.
+ * 53 checks.
  */
 const fs = require('fs');
 const path = require('path');
@@ -96,7 +96,7 @@ async function bootChat(opts) {
       if (next.status) return res(next.body, next.status);
       return reply(init);
     }
-    if (url === CC.chatStreamUrl) { h.proxyCalls.push(init); return reply(init); }
+    if (url === CC.chatStreamUrl) { h.proxyCalls.push(init); return opts.proxy ? sse(opts.proxy) : reply(init); }
     if (url === CC.loginUrl) return res({ success: true, data: { token: 'a.' + Buffer.from('{"first_name":"Sam"}').toString('base64') + '.s' } }, 200);
     if (url === CC.wpRestUrl + 'chat/voice') return res({ enabled: !!opts.voice }, 200);
     return res({}, 200);
@@ -231,7 +231,8 @@ async function bootStaff(opts) {
       if (next.status) return json(next.status, next.body);
       return sse(init);
     }
-    if (url === SA_PROXY) { h.proxyCalls.push(init); return sse(init); }
+    if (url === SA_PROXY) { h.proxyCalls.push(init); return opts.proxy ? new Response(opts.proxy.map(e => 'data: ' + JSON.stringify(e) + '\n\n').join(''),
+      { status: 200, headers: { 'content-type': 'text/event-stream' } }) : sse(init); }
     throw new Error('unscripted request to ' + url);
   }
   const deps = {
@@ -337,6 +338,15 @@ async function bootStaff(opts) {
   h = await bootChat({ voice: true, direct: [refusedVoice('transcription_failed')] });
   await h.speak();
   check('  … a 502 with any other code keeps today\'s line', h.last() === 'That recording could not be transcribed. Please try again.', h.last());
+  // Through the site's proxy: its own `error` frame, the code carried along.
+  const proxied = code => [Object.assign({ type: 'error', message: 'The assistant is unavailable right now. Please try again.', status: 502 }, code && { error: code })];
+  h = await bootChat({ voice: true, life: 20, proxy: proxied('voice_unavailable') });
+  await h.speak();
+  check('Customer Chat: through the site, an `error` frame carrying voice_unavailable says voice isn\'t available; the box is ready, the mic not opened again',
+    h.proxyCalls.length === 1 && h.last() === UNAVAILABLE && !h.input().disabled && h.voice.starts.length === 1, show({ last: h.last(), proxy: h.proxyCalls.length }));
+  h = await bootChat({ voice: true, life: 20, proxy: proxied('') });
+  await h.speak();
+  check('  … the frame without the code keeps today\'s line', h.last() === 'That recording could not be transcribed. Please try again.', h.last());
   h = await bootChat({ voice: true, unavailable: true });
   await h.speak();
   check('Customer Chat: the live socket said voice_unavailable: the sentence, nothing sent, the mic not opened again',
@@ -448,6 +458,16 @@ async function bootStaff(opts) {
   h = await bootStaff({ voice: true, direct: [refusedVoice('transcription_failed')] });
   await h.speak();
   check('  … a 502 with any other code keeps today\'s banner, the platform\'s own words', h.banner() === 'The platform\'s own words.' && h.info === undefined,
+    show({ banner: h.banner(), info: h.info }));
+  h = await bootStaff({ voice: true, proxy: proxied('voice_unavailable') });
+  h.api.open('th-7');   // no token for it: the turn goes through the proxy
+  await h.speak();
+  check('Staff AI: through a proxy, an `error` frame carrying voice_unavailable says voice isn\'t available on the info line, not as an error',
+    h.proxyCalls.length === 1 && h.info === UNAVAILABLE && h.banner() === '', show({ info: h.info, banner: h.banner(), proxy: h.proxyCalls.length }));
+  h = await bootStaff({ voice: true, proxy: proxied('') });
+  h.api.open('th-7');
+  await h.speak();
+  check('  … the frame without the code keeps today\'s banner', h.banner() === 'The assistant is unavailable right now. Please try again.' && h.info === undefined,
     show({ banner: h.banner(), info: h.info }));
   h = await bootStaff({ voice: true, unavailable: true });
   await h.speak();
