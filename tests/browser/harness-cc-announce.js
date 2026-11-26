@@ -521,7 +521,7 @@ const WELCOME = {
 
   // ── A spoken turn ──────────────────────────────────────────────────────
   h = await boot({ stream: true, voice: true });
-  h.root.querySelector('.def-cc-composer-mic').click();
+  h.root.querySelector('.def-cc-composer-send').click();   // Start voice (11.6.0: the mic dictates)
   await sleep(20);
   h.voice.opts.onSilence();
   await sleep(40);
@@ -535,7 +535,7 @@ const WELCOME = {
     'before=' + show(beforeTranscript) + ' said=' + show(h.said()));
 
   h = await boot({ stream: true, voice: true });
-  h.root.querySelector('.def-cc-composer-mic').click();
+  h.root.querySelector('.def-cc-composer-send').click();   // Start voice (11.6.0: the mic dictates)
   await sleep(20);
   h.voice.opts.onSilence();
   await sleep(40);
@@ -548,7 +548,7 @@ const WELCOME = {
   // 8.8.2: the reply's text delta arrives first and waits its turn in the paced queue; the
   // speech frame behind it goes to the speaker at once, before those words are drawn.
   h = await boot({ stream: true, voice: true });
-  h.root.querySelector('.def-cc-composer-mic').click();
+  h.root.querySelector('.def-cc-composer-send').click();   // Start voice (11.6.0: the mic dictates)
   await sleep(20);
   h.voice.opts.onSilence();
   await sleep(40);
@@ -566,7 +566,7 @@ const WELCOME = {
   // A round the employee moves on from: its speech frame carries its step to the speaker, and
   // the step_superseded behind it reaches discard().
   h = await boot({ stream: true, voice: true });
-  h.root.querySelector('.def-cc-composer-mic').click();
+  h.root.querySelector('.def-cc-composer-send').click();   // Start voice (11.6.0: the mic dictates)
   await sleep(20);
   h.voice.opts.onSilence();
   await sleep(40);
@@ -584,7 +584,7 @@ const WELCOME = {
   // The voice provider refuses the site's key mid-reply: the reply's lines come as text with
   // voice_unavailable. None is read by the device voice; the sentence once, after the reply.
   h = await boot({ stream: true, voice: true });
-  h.root.querySelector('.def-cc-composer-mic').click();
+  h.root.querySelector('.def-cc-composer-send').click();   // Start voice (11.6.0: the mic dictates)
   await sleep(20);
   h.voice.opts.onSilence();
   await sleep(40);

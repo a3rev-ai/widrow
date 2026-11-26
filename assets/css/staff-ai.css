@@ -2385,15 +2385,14 @@ html {
 		background: #135e96;
 	}
 
-	/* Typed words hide the mic (a suggestion does not: it stays as the plain mic
-	   beside Send, below); so does a running reply's Stop. */
-	.composer:has(.composer-input:not(:placeholder-shown):not(.staff-ai-suggestion-text)) .mic-btn[data-state="idle"],
+	/* A running reply's Stop hides the mic. Typed words do not (11.6.0): it dictates
+	   after them, as the plain mic beside Send, below. */
 	.composer-toolbar:has(.send-btn.is-stop) .mic-btn[data-state="idle"] {
 		display: none;
 	}
 
-	/* Send enabled (files staged, a suggestion): the mic stays as a plain button,
-	   since a spoken turn carries the staged files too. */
+	/* Send enabled (Start voice, words or files, a suggestion): the mic stays as a plain
+	   button beside the round one. */
 	.composer-toolbar:has(.send-btn:not(:disabled)) .mic-btn[data-state="idle"] {
 		width: 44px;
 		height: 44px;

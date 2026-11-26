@@ -2313,7 +2313,7 @@
 		setMicState('transcribing', t('transcribing'));
 		dictation.stop().then(function (recording) {
 			if (epoch !== dictationEpoch) return;
-			if (!recording || recording.seconds < 0.5 || !recording.spoke) { endDictation(recording ? t('nothingHeard') : null); return; }
+			if (!recording || !recording.spoke) { endDictation(recording ? t('nothingHeard') : null); return; }
 			if (recording.unavailable) { endDictation(t('voiceUnavailable')); return; }
 			if (recording.transcript !== undefined) { endDictation(null, recording.transcript); return; }
 			window.DefVoice.toBase64(recording.blob).then(function (base64) {
@@ -2386,7 +2386,7 @@
 		});
 	}
 
-	// ─── 6c. DIRECT STREAM (W74)─────────────────────────────────
+	// ─── 6c. DIRECT STREAM (W74) ─────────────────────────────────
 	// The stream goes from the browser straight to the platform on a ten-minute token
 	// WordPress mints for one conversation. Minted when the chat opens, after a turn
 	// that changed the thread or left under five minutes, and after a refusal; a send

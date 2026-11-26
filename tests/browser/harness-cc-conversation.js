@@ -4,7 +4,7 @@
  * platform: the voice status, the stream-token route, the room mint, the after-reply
  * read, the typed stream and the shop's cart.
  *
- * What it holds: the mic opens a conversation only when the status says `conversation`,
+ * What it holds: Start voice (the mic dictates, 11.6.0) opens a conversation only when the status says `conversation`,
  * the browser has WebRTC and the site allows the microphone, otherwise today's voice; the
  * client is loaded at the status, only when the mode is on; inside the tap the audio is
  * unlocked, both elements primed, the wake lock asked, the room made and its audio
@@ -250,7 +250,8 @@ async function boot(opts) {
       const tag = w.document.head.querySelector('script[src="' + LIVEKIT + '"]');
       if (tag) tag.dispatchEvent(new w.Event('load'));
     },
-    tap: () => h.mic().click(),
+    // Start voice / End voice (11.6.0: the mic dictates).
+    tap: () => h.root.querySelector('.def-cc-composer-send').click(),
     // The log as it reads, top to bottom: whose message, and its words.
     log: () => Array.from(root.querySelectorAll('.def-cc-message')).filter(m => !h.opening.has(m)).map(m =>
       (m.classList.contains('def-cc-message--user') ? 'you: ' : 'her: ') + m.textContent.trim()),
@@ -285,13 +286,13 @@ async function boot(opts) {
   // ── The entry rule, and the client's loading ──
   let h = await boot({ conversation: false });
   await h.start();
-  check('mode off: the client is not loaded and the mic is today\'s voice (the recorder starts, no room)',
+  check('mode off: the client is not loaded and Start voice is today\'s voice (the recorder starts, no room)',
     h.scripts().indexOf(LIVEKIT) === -1 && h.starts.length === 1 && h.rooms.length === 0 && h.roomMints.length === 0,
     'scripts=' + show(h.scripts()) + ' starts=' + h.starts.length + ' rooms=' + h.rooms.length);
 
   h = await boot({ webrtc: false });
   await h.start();
-  check('no WebRTC: the client is not loaded and the mic is today\'s voice',
+  check('no WebRTC: the client is not loaded and Start voice is today\'s voice',
     h.scripts().indexOf(LIVEKIT) === -1 && h.starts.length === 1 && h.rooms.length === 0, 'scripts=' + show(h.scripts()));
 
   h = await boot({ micAllowed: false });
@@ -473,7 +474,7 @@ async function boot(opts) {
   check('a caption after the end draws nothing', h.spokenBubbles().length === 0 && h.bubbles().indexOf('Too late.') === -1);
   check('the visitor\'s words after the end draw nothing', !h.root.textContent.includes('Too late too.'));
   await h.start();
-  check('after an ending, the mic starts a conversation again', h.rooms.length === 3 && h.starts.length === 0);
+  check('after an ending, Start voice starts a conversation again', h.rooms.length === 3 && h.starts.length === 0);
 
   // ── The page hidden ──
   Object.defineProperty(h.w.document, 'visibilityState', { value: 'hidden', configurable: true });
@@ -1148,8 +1149,8 @@ async function boot(opts) {
   const today = h => { const now = shows(h); delete now.enabled; return show(now) === show({ role: 'today', name: 'Send message', title: null, mic: true }); };
 
   h = await boot();
-  check('mode on, box empty: one round button "Start voice" (name and tooltip), enabled; no mic',
-    show(shows(h)) === show({ role: 'start', name: 'Start voice', title: 'Start voice', enabled: true, mic: false }) &&
+  check('mode on, box empty: one round button "Start voice" (name and tooltip), enabled; the mic beside it (it dictates)',
+    show(shows(h)) === show({ role: 'start', name: 'Start voice', title: 'Start voice', enabled: true, mic: true }) &&
       / composer-send--talk /.test(' ' + btn(h).getAttribute('part') + ' ') && / composer-send--start /.test(' ' + btn(h).getAttribute('part') + ' '),
     show(shows(h)) + ' part=' + btn(h).getAttribute('part'));
   box(h).dispatchEvent(new h.w.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
@@ -1195,7 +1196,7 @@ async function boot(opts) {
 
   h = await boot();
   type(h, 'Hello');
-  check('mode on, words typed: the same button is Send', show(shows(h)) === show({ role: 'send', name: 'Send message', title: null, enabled: true, mic: false }), show(shows(h)));
+  check('mode on, words typed: the same button is Send, the mic beside it', show(shows(h)) === show({ role: 'send', name: 'Send message', title: null, enabled: true, mic: true }), show(shows(h)));
   type(h, '');
   check('the box cleared: Start voice again', shows(h).role === 'start' && shows(h).name === 'Start voice');
   type(h, 'Hello');
@@ -1204,14 +1205,17 @@ async function boot(opts) {
   check('Send sends a typed message, no conversation', h.typed.length === 1 && h.typed[0].messages[0].content === 'Hello' && h.rooms.length === 0 &&
     shows(h).role === 'start', show({ typed: h.typed.length, rooms: h.rooms.length, now: shows(h) }));
 
+  // 11.6.0: wherever voice is on the round button talks (hands-free where the mode is off) and the mic dictates.
+  const startVoice = h => show(shows(h)) === show({ role: 'start', name: 'Start voice', title: 'Start voice', enabled: true, mic: true });
+  const endVoice = h => show(shows(h)) === show({ role: 'end', name: 'End voice', title: 'End voice', enabled: true, mic: true });
   h = await boot({ conversation: false });
-  check('mode off: today\'s Send and today\'s mic, unchanged, and today\'s hint', today(h) && box(h).placeholder === 'Type your message...' &&
-    btn(h).getAttribute('part') === 'composer-send', show(shows(h)) + ' part=' + btn(h).getAttribute('part'));
+  check('mode off: the round Start voice and the mic beside it, and today\'s hint', startVoice(h) && box(h).placeholder === 'Type your message...' &&
+    / composer-send--start /.test(' ' + btn(h).getAttribute('part') + ' '), show(shows(h)) + ' part=' + btn(h).getAttribute('part'));
   type(h, 'Hello');
-  check('mode off, words typed: today\'s Send, the mic beside it', today(h) && shows(h).enabled, show(shows(h)));
+  check('mode off, words typed: Send, the mic beside it', show(shows(h)) === show({ role: 'send', name: 'Send message', title: null, enabled: true, mic: true }), show(shows(h)));
 
   h = await boot({ load: false });
-  check('mode on but the client not loaded yet: today\'s controls', today(h), show(shows(h)));
+  check('mode on but the client not loaded yet: Start voice (today\'s voice until it loads), the mic beside it', startVoice(h), show(shows(h)));
   h.loadClient();
   check('…and Start voice once it has loaded', shows(h).role === 'start', show(shows(h)));
 
@@ -1219,18 +1223,18 @@ async function boot(opts) {
   h.connectFails = true;
   btn(h).click();
   await sleep(40);
-  check('the mode fails for the page: the tap goes on as today\'s voice, with today\'s mic to end it and today\'s hint', h.starts.length === 1 &&
-    today(h) && /^Listening/.test(box(h).placeholder), show(shows(h)) + ' ' + box(h).placeholder);
+  check('the mode fails for the page: the tap goes on as today\'s voice, End voice to end it, its mic shown, and today\'s hint', h.starts.length === 1 &&
+    endVoice(h) && /^Listening/.test(box(h).placeholder), show(shows(h)) + ' ' + box(h).placeholder);
   h.tap();   // ends today's voice
   await sleep(10);
-  check('…and after it, today\'s controls for the page\'s life', today(h), show(shows(h)));
+  check('…and after it, Start voice (today\'s voice for the page\'s life)', startVoice(h), show(shows(h)));
 
   h = await boot({ clock: true, noEmployee: true });
   btn(h).click();
   await sleep(200);
-  check('the busy fallback: the tap goes on as today\'s voice, said as before, with today\'s mic to end it',
+  check('the busy fallback: the tap goes on as today\'s voice, said as before, End voice to end it',
     h.starts.length === 1 && h.bubbles().indexOf('Conversations are busy right now, so the microphone works as usual.') !== -1 &&
-      today(h), show(shows(h)));
+      endVoice(h), show(shows(h)));
   h.tap();   // ends today's voice
   await sleep(10);
   check('…and the next tap is Start voice again', shows(h).role === 'start', show(shows(h)));
@@ -1270,8 +1274,8 @@ async function boot(opts) {
   h.typedEvents = SUGGEST;
   await h.send('Hello');
   const ghost = box(h).value;
-  check('a suggestion left in the box after a reply: the button is Start voice; no mic', ghost === 'Tell me more' &&
-    show(shows(h)) === show({ role: 'start', name: 'Start voice', title: 'Start voice', enabled: true, mic: false }), ghost + ' ' + show(shows(h)));
+  check('a suggestion left in the box after a reply: the button is Start voice; the mic beside it', ghost === 'Tell me more' &&
+    show(shows(h)) === show({ role: 'start', name: 'Start voice', title: 'Start voice', enabled: true, mic: true }), ghost + ' ' + show(shows(h)));
   box(h).dispatchEvent(new h.w.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
   await sleep(80);
   check('…and Enter sends the suggestion, as today', h.typed.length === 2 && h.typed[1].messages.slice(-1)[0].content === 'Tell me more' &&
@@ -1303,7 +1307,7 @@ async function boot(opts) {
       box(h).placeholder === 'Speak, or type \u2014 tap the mic to end' && h.mic().getAttribute('aria-label') === box(h).placeholder,
     show(shows(h)) + ' ' + box(h).placeholder);
   btn(h).click();   // nothing: a disabled Send
-  h.tap();
+  h.mic().click();
   await sleep(20);
   check('…and the mic ends it', h.disconnects === 1, 'disconnects=' + h.disconnects);
 
@@ -1316,13 +1320,13 @@ async function boot(opts) {
   await sleep(5);
   check('the fallback closes quietly with the mode on: the line names the button',
     h.bubbles().indexOf('The mic closed. Tap the button to speak again.') !== -1, show(h.bubbles().slice(-1)));
-  check('the focused mic hidden as Start voice takes over: focus moves to the button', h.root.activeElement === btn(h) && shows(h).role === 'start',
+  check('the focused mic stays beside Start voice (it dictates), and keeps the focus', h.root.activeElement === h.mic() && shows(h).mic && shows(h).role === 'start',
     String(h.root.activeElement && h.root.activeElement.className));
   h = await boot({ conversation: false });
   await h.start();
   h.recorderOpts.onIdle();
   await sleep(5);
-  check('mode off: today\'s line, naming the mic', h.bubbles().indexOf('The mic closed \u2014 tap it to speak again.') !== -1, show(h.bubbles().slice(-1)));
+  check('mode off: the same line, naming the button (the mic dictates)', h.bubbles().indexOf('The mic closed. Tap the button to speak again.') !== -1, show(h.bubbles().slice(-1)));
 
   (function () {
     const css = fs.readFileSync(path.join(extract.REPO, 'assets/css/widrow-ai-customer-chat.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');

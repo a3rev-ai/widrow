@@ -3380,7 +3380,7 @@ function t(key, fallback) {
 		setMicState('transcribing', t('transcribing', 'Transcribing…'));
 		var recording = await dictation.stop();
 		if (epoch !== dictationEpoch) return;
-		if (!recording || recording.seconds < 0.5 || !recording.spoke) {
+		if (!recording || !recording.spoke) {
 			endDictation(recording ? t('nothingHeard', 'Nothing was heard. Try again a little closer to the microphone.') : null);
 			return;
 		}

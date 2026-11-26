@@ -1,5 +1,10 @@
 *** Widrow AI Changelog ***
 
+= 11.6.0 - 2026/11/26 =
+* Feature - In Customer Chat and the Staff AI console, the microphone now dictates: tap it, speak, and tap it again, and what was said appears in the message box to edit. Nothing is sent until you press Send, and the message goes as a typed one, so its reply is written, not spoken. This works whether voice conversation is on or off for the site.
+* Feature - The round button at the end of the message box now shows wherever voice is on. Where voice conversation is on it starts and ends the conversation, as before; where it is off it starts and ends the hands-free voice that the microphone used to start.
+* New - Customer Chat can send a dictated recording through the site for transcription when it cannot reach the platform directly.
+
 = 11.5.8 - 2026/11/26 =
 * Fix - When the voice provider's account cannot be used (its credit spent or its key refused), Customer Chat and Staff AI now say that voice isn't available and that you can type your message instead, where they used to stay silent or say the recording could not be transcribed.
 

@@ -164,8 +164,8 @@ function row(setup) {
 		els.mic.dataset.state = state; els.label.textContent = text || ''; els.label.hidden = !text;
 	};
 	els.setSend = function (disabled, stop) { els.send.classList.toggle('is-stop', !!stop); els.send.disabled = disabled; };
-	// Conversation mode on: the button's role, and the mic not shown.
-	els.setVoice = function (role) { els.send.dataset.voice = role; els.mic.hidden = true; };
+	// The button's role; the mic not shown only in a conversation (11.6.0: elsewhere it dictates beside it).
+	els.setVoice = function (role) { els.send.dataset.voice = role; els.mic.hidden = els.mic.dataset.state === 'conversation'; };
 	els.setMic('idle');
 	els.setSend(true);
 	setup(els);
@@ -180,7 +180,7 @@ function row(setup) {
 const ALL = ['attach', 'mic', 'readback', 'model', 'send'];
 const MATRIX = [
 	['empty', e => {}, ['attach', 'mic', 'readback', 'model'], ['mic'], false],
-	['typed', e => { e.input.value = 'hi'; e.setSend(false); }, ['attach', 'readback', 'model', 'send'], ['send'], false],
+	['typed', e => { e.input.value = 'hi'; e.setSend(false); }, ALL, ['send'], false],
 	['files staged, box empty', e => { e.setSend(false); }, ALL, ['send'], false],
 	['suggestion ghost text', e => { e.input.value = 'Tell me more'; e.input.classList.add('staff-ai-suggestion-text'); e.setSend(false); },
 		ALL, ['send'], false],
@@ -196,8 +196,9 @@ const MATRIX = [
 	['no microphone', e => { e.mic.hidden = true; e.voice.hidden = true; }, ['attach', 'model', 'send'], ['send'], false],
 	['no model picker', e => { e.select.hidden = true; }, ['attach', 'mic', 'readback'], ['mic'], false],
 	['read-only', e => { e.container.classList.add('disabled'); }, ['attach', 'mic', 'readback', 'model'], ['mic'], false],
-	['conversation mode, box empty: Start voice', e => { e.setVoice('start'); e.setSend(false); }, ['attach', 'readback', 'model', 'send'], ['send'], false],
-	['conversation mode, words typed: Send', e => { e.input.value = 'hi'; e.setVoice('send'); e.setSend(false); }, ['attach', 'readback', 'model', 'send'], ['send'], false],
+	['conversation mode, box empty: Start voice', e => { e.setVoice('start'); e.setSend(false); }, ALL, ['send'], false],
+	['conversation mode, words typed: Send', e => { e.input.value = 'hi'; e.setVoice('send'); e.setSend(false); }, ALL, ['send'], false],
+	['dictating', e => { e.setMic('listening', '0:03'); e.setVoice('start'); e.setSend(true); }, ['mic'], [], true],
 	['in a conversation, box empty: End voice', e => { e.setMic('conversation', 'Speak, or type'); e.setVoice('end'); e.setSend(false); },
 		['attach', 'readback', 'model', 'send'], ['send'], false]
 ];
@@ -208,7 +209,7 @@ MATRIX.forEach(function (m) {
 	check('state ' + m[0] + ': shows ' + m[2].join(', ') + '; main ' + (m[3][0] || 'none') + (m[4] ? '; the pill is the row' : ''),
 		JSON.stringify(r.visible) === JSON.stringify(m[2]) && JSON.stringify(r.main) === JSON.stringify(m[3]) && r.pill === m[4],
 		JSON.stringify(r));
-	if (m[0] === 'files staged, box empty' || m[0] === 'suggestion ghost text') {
+	if (m[0] === 'files staged, box empty' || m[0] === 'suggestion ghost text' || m[0] === 'typed' || m[0].indexOf('conversation mode,') === 0) {
 		check('  and the mic beside Send is the plain 44', r.micWidth === '44px', r.micWidth);
 	}
 	if (m[0] === 'answering, with Stop') check('  and its label may wrap', r.labelWrap === 'normal', r.labelWrap);
