@@ -190,7 +190,7 @@ function bootConsole(opts) {
 	const dom = new JSDOM('<!doctype html><div id="messagesContainer"><div id="messagesList"></div></div>' +
 		'<div id="infoBanner"></div><div id="errorBanner"></div>' +
 		'<div class="composer"><textarea id="composerInput" placeholder="Ask"></textarea><div id="dictationWave"></div></div><button id="sendBtn"></button>' +
-		'<button id="micBtn"></button><span id="micLabel"></span><button id="voiceBtn"></button>',
+		'<button id="micBtn"></button><span id="micLabel"></span>',
 	{ url: 'https://acme.defho.test/staff-ai/acme/', pretendToBeVisual: true, runScripts: 'outside-only' });
 	const window = dom.window, document = window.document;
 	if (opts.reduced) window.reducedMotion = 'reduce';
@@ -200,8 +200,8 @@ function bootConsole(opts) {
 	const insertAtCursor = realInsert(window);
 	const calls = [], sent = [];
 	window.DefVoice = {
-		supported: () => true, micAllowedBySite: () => true, log: () => [], note() {}, isStopPhrase: () => false, insertAtCursor, createWave: window.realWave,
-		createSpeaker: () => ({ mode: 'server', setMode(m) { this.mode = m; }, getMode() { return this.mode; }, unlock() {}, stop() {}, speak() {}, end() {}, whenIdle: () => Promise.resolve() }),
+		supported: () => true, micAllowedBySite: () => true, log: () => ['noted by the phone'], note() {}, isStopPhrase: () => false, insertAtCursor, createWave: window.realWave,
+		createSpeaker: () => ({ unlock() {}, stop() {}, speak() {}, end() {}, whenIdle: () => Promise.resolve() }),
 		createRecorder: recs.create,
 		toBase64: () => Promise.resolve('QUFBQQ=='),
 	};
@@ -225,7 +225,7 @@ function bootConsole(opts) {
 		console: { error() {}, warn() {}, log() {}, info() {} },
 		setTimeout, localStorage: window.localStorage,
 		messagesList: $('messagesList'), messagesContainer: $('messagesContainer'), errorBanner: $('errorBanner'), infoBanner: $('infoBanner'),
-		composerInput: $('composerInput'), sendBtn: $('sendBtn'), micBtn: $('micBtn'), micLabel: $('micLabel'), voiceBtn: $('voiceBtn'),
+		composerInput: $('composerInput'), sendBtn: $('sendBtn'), micBtn: $('micBtn'), micLabel: $('micLabel'),
 		hasActiveFiles: () => false, stagedFiles: [], renderMessages() {}, removeTypingMessage() {}, _streamAbort: null,
 		chatStreamUrl: DOOR + '/chat/stream', streamTokenLeft: () => 0, isStreaming: false,
 		sendMessage: () => { sent.push($('composerInput').value); },
@@ -239,7 +239,7 @@ function bootConsole(opts) {
 	`;
 	const TAIL = `
 		initVoice();
-		return { state: function () { return { on: conversationOn, mic: micBtn.dataset.state }; } };`;
+		return { update: updateSendButton, state: function () { return { on: conversationOn, mic: micBtn.dataset.state }; } };`;
 	const names = Object.keys(deps);
 	const api = new window.Function(...names, HEAD + REQUEST + '\n' + INFO + '\n' + BUTTON + '\n' + CLICK + '\n' + VOICE + TAIL)(...names.map(k => deps[k]));
 	return {
@@ -538,6 +538,49 @@ function bootConsole(opts) {
 		await sleep(10);
 		check('console — End voice ends it: released, back to Start voice', hf.releases >= 1 && t.role() === 'start' && !t.api.state().on,
 			show({ releases: hf.releases, role: t.role() }));
+	});
+
+	// ════ The voice log: a long press or a right-click on the mic, and on Start voice / End voice ════
+	await run('console: the voice log', async () => {
+		const t = bootConsole();
+		const fire = (el, type) => { const e = new t.window.Event(type, { cancelable: true }); el.dispatchEvent(e); return e; };
+		const shown = () => /noted by the phone/.test(t.info());
+		const clear = () => t.$('infoBanner').classList.remove('visible');
+		const longPress = async el => { fire(el, 'touchstart'); await sleep(700); fire(el, 'touchend'); };
+		const mic = t.$('micBtn');
+		let e = fire(mic, 'contextmenu');
+		check('console — a right-click on the mic shows the voice log (the browser\'s menu held back)', shown() && e.defaultPrevented, t.info());
+		clear();
+		await longPress(mic);
+		mic.click();   // the click a phone sends when the press is let go
+		await sleep(10);
+		check('console — a long press on the mic shows the voice log, and the click that ends it starts no dictation',
+			shown() && t.recs.mic().starts.length === 0 && mic.dataset.state !== 'listening', show({ info: t.info(), starts: t.recs.mic().starts.length }));
+		clear();
+		await longPress(mic);   // a press whose click never came…
+		fire(mic, 'touchstart'); fire(mic, 'touchend'); mic.click();
+		await sleep(10);
+		check('console — …does not swallow the next tap: it dictates', t.recs.mic().starts.length === 1, show({ starts: t.recs.mic().starts.length }));
+		const fresh = bootConsole();
+		const fbtn = fresh.$('sendBtn');
+		const ffire = (el, type) => { const ev = new fresh.window.Event(type, { cancelable: true }); el.dispatchEvent(ev); return ev; };
+		const fshown = () => /noted by the phone/.test(fresh.info());
+		e = ffire(fbtn, 'contextmenu');
+		check('console — a right-click on Start voice shows the voice log', fresh.role() === 'start' && fshown() && e.defaultPrevented, fresh.info());
+		fresh.$('infoBanner').classList.remove('visible');
+		ffire(fbtn, 'touchstart'); await sleep(700); ffire(fbtn, 'touchend');
+		fbtn.click();
+		await sleep(10);
+		check('console — a long press on Start voice shows the voice log, and letting go starts nothing',
+			fshown() && fresh.recs.handsFree().starts.length === 0 && fresh.role() === 'start', show({ info: fresh.info(), role: fresh.role() }));
+		fresh.$('infoBanner').classList.remove('visible');
+		fresh.type('Hello');
+		fresh.$('composerInput').dispatchEvent(new fresh.window.Event('input'));
+		fresh.api.update();
+		e = ffire(fbtn, 'contextmenu');
+		ffire(fbtn, 'touchstart'); await sleep(700); ffire(fbtn, 'touchend');
+		check('console — the round button showing Send does not show the log (right-click or long press)',
+			fresh.role() === 'send' && !fshown() && !e.defaultPrevented, show({ role: fresh.role(), info: fresh.info() }));
 	});
 
 	// ════ While a dictation records (11.6.2): the wave, a stop square, and Send in one tap ════

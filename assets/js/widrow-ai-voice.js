@@ -439,19 +439,18 @@ window.DefVoice = (function () {
 	}
 
 	/**
-	 * Readback. mode 'server' = the employee's own voice (audio frames the chat
-	 * stream carries), 'device' = speechSynthesis from the reply's text, 'off'.
-	 * speak(text, audio) queues one line: server audio when it came and the mode
-	 * is server, the device voice otherwise (a line whose synthesis failed still
-	 * gets read). Lines play in order; whenIdle() resolves once nothing is left —
-	 * hands-free listens again on that. unlock() must run inside the user's
+	 * Readback in the employee's own voice (audio frames the chat stream carries).
+	 * speak(text, audio) queues one line: its audio when it came, the device voice
+	 * otherwise (a line whose synthesis failed still gets read). Lines play in
+	 * order; whenIdle() resolves once nothing is left — hands-free listens again
+	 * on that. unlock() must run inside the user's
 	 * gesture — the mic tap — because iOS starts audio only from one.
 	 * handlers.onError(e) hears every line that failed to play (the browser's
 	 * own error), so a consumer can put the reason on screen.
 	 */
 	function createSpeaker(handlers) {
 		handlers = handlers || {};
-		var mode = 'server', audio = null, queue = [], busy = false, idleWaiters = [], playing = [], current = null;
+		var audio = null, queue = [], busy = false, idleWaiters = [], playing = [], current = null;
 		// The step of this reply's first line (its lead-in, which discard() keeps whole), until end() or stop().
 		var leadStep;
 
@@ -637,15 +636,15 @@ window.DefVoice = (function () {
 				// The first clip is seq 1, never a later segment that finds the queue run dry
 				// because the reply's audio trailed its playback. A line with no seq: the
 				// first after idle, as before.
-				if (mode === 'server' && line && (line.seq === undefined ? first : line.seq === 1) &&
+				if (line && (line.seq === undefined ? first : line.seq === 1) &&
 						audioCtx && await wakeContext()) {
 					try { log('lead-in'); await startBuffer(silence(0.3)); } catch (e) { /* the clip still plays */ }
 				}
 				first = false;
 				if (item.cut) continue;   // stop() came during the lead-in
 				try {
-					if (mode === 'server' && line && PCM_MIME.test(line.mime || '')) await playStream(item);
-					else if (mode === 'server' && line) await playServer(line.base64, line.mime);
+					if (line && PCM_MIME.test(line.mime || '')) await playStream(item);
+					else if (line) await playServer(line.base64, line.mime);
 					else await playDevice(item.text);
 				} catch (e) {
 					console.warn('[DEF voice] readback skipped:', e);
@@ -669,14 +668,12 @@ window.DefVoice = (function () {
 		}
 
 		return {
-			setMode: function (next) { mode = next; },
-			getMode: function () { return mode; },
 			unlock: unlock,
 			// audio may carry seq/part/last (a streamed line); a missing part is 0 and a
 			// missing last is true. A later part joins its line; a closing frame (last,
 			// no audio) closes it. step is the round the line belongs to, for discard().
 			speak: function (text, audio, step) {
-				if (mode === 'off' || (!text && !audio)) return;
+				if (!text && !audio) return;
 				if (audio && audio.part > 0) {
 					var line = openLine(audio.seq);
 					if (!line) return;
@@ -738,47 +735,6 @@ window.DefVoice = (function () {
 				if (window.speechSynthesis) speechSynthesis.cancel();
 			}
 		};
-	}
-
-	// Markdown → speakable prose (the device-voice path; DEF applies the same rules
-	// server-side for the employee's voice).
-	function plain(text) {
-		return String(text || '')
-			.replace(/```[\s\S]*?```/g, ' ')
-			.replace(/`([^`]*)`/g, '$1')
-			.replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
-			.replace(/[*_#>|]+/g, '')
-			.replace(/^\s*(?:[-*+]|\d+[.)])\s+/gm, '')
-			.replace(/\s+/g, ' ')
-			.trim();
-	}
-
-	// The opening sentence — the first prefix of at least three words that ends at
-	// a sentence boundary — or null while it is still arriving. The boundary needs
-	// the whitespace AFTER it: a chunk ending "costs 3." is not a sentence until
-	// the next chunk says whether "5 million" follows. Callers holding the
-	// finished text append a space.
-	function firstSentence(buffer) {
-		var text = String(buffer || '');
-		var boundary = /[.!?](?=\s)/g;
-		var match;
-		while ((match = boundary.exec(text))) {
-			var sentence = plain(text.slice(0, match.index + 1));
-			if (sentence.split(' ').length >= 3) return sentence;
-		}
-		return null;
-	}
-
-	// Index just past the sentence boundary that produced `opening` in the raw
-	// (markdown) text — the first boundary at which the plain text so far equals
-	// it — so the device voice can cut the opening out and read on from there.
-	function boundaryEnd(text, opening) {
-		var raw = String(text || '');
-		var boundary = /[.!?](?=\s)/g, match;
-		while ((match = boundary.exec(raw))) {
-			if (plain(raw.slice(0, match.index + 1)) === opening) return match.index + 1;
-		}
-		return raw.length;
 	}
 
 	// Bare words: what was said, without the case and punctuation the transcriber
@@ -859,9 +815,6 @@ window.DefVoice = (function () {
 		createRecorder: createRecorder,
 		createSpeaker: createSpeaker,
 		toBase64: toBase64,
-		plain: plain,
-		firstSentence: firstSentence,
-		boundaryEnd: boundaryEnd,
 		log: function () { return voiceLog.slice(); },
 		// A widget's own line on the same log: each chat stream's send → headers time (W74).
 		note: log,

@@ -329,7 +329,6 @@ function t(key, fallback) {
 	const uploadBtn     = document.getElementById('uploadBtn');
 	const micBtn        = document.getElementById('micBtn');
 	const micLabel      = document.getElementById('micLabel');
-	const voiceBtn      = document.getElementById('voiceBtn');
 	const fileInput     = document.getElementById('uploadFileInput');
 	const stagedArea    = document.getElementById('uploadStagedArea');
 	const dropOverlay   = document.getElementById('uploadDropOverlay');
@@ -2968,28 +2967,15 @@ function t(key, fallback) {
 	// One round trip: the recording rides the chat request as base64, DEF
 	// transcribes it on the stream (the `transcript` event fills the bubble) and
 	// the reply's opening and closing lines come back as `speech` frames in the
-	// employee's own voice — or the device voice reads them from the text. A
+	// employee's own voice (the device's voice reads a line whose audio failed). A
 	// pause after speaking sends; when the employee finishes speaking the mic
 	// opens again; a tap on the pill while she answers ends the conversation.
-	var VOICE_MODE_KEY = 'def_staff_ai_voice_mode';
-	var VOICE_MODES = ['server', 'device', 'off'];
 	var voiceRecorder = null;
 	var speaker = null;
 	var conversationOn = false;     // the hands-free loop, until the pill is tapped or the room stays quiet
 	var spokenTurn = false;         // the turn in flight was spoken → read it back
 	var turnReleased = false;       // this tab let go of the turn (a spoken stop, New Chat): nothing of it is shown or recovered
-	var openingSpoken = null;       // the opening sentence already read during streaming (device voice)
-	var readbackBuffer = '';        // the reply's own words as streamed — notices (step 0) excluded
-	var readbackCut = 0;            // how much of readbackBuffer the device voice has been given
 	var composerPlaceholder = '';
-
-	function voiceModeLabel(mode) {
-		if (mode === 'device') return t('voiceDevice', 'Reading back with your device voice');
-		if (mode === 'off') return t('voiceOff', 'Voice off');
-		return assistantName
-			? t('voiceEmployee', "Reading back in %s's voice").replace('%s', assistantName)
-			: t('voiceAssistant', "Reading back in your assistant's voice");
-	}
 
 	function setMicState(state, label) {
 		micBtn.dataset.state = state;
@@ -2999,12 +2985,35 @@ function t(key, fallback) {
 		updateSendButton();
 	}
 
+	// A long press (or right-click) on the mic, or on Start voice and End voice, shows what the phone
+	// did with the voice: the canary's own account, on the device. Android fires contextmenu itself at ~500 ms.
+	var pressTimer = null, pressShown = false;
+	function showVoiceLog(e) {
+		if (e && e.preventDefault) e.preventDefault();
+		var lines = DefVoice.log().slice(-14);
+		showInfo(lines.length ? lines.join(' · ') : t('voiceLogEmpty', 'No voice events yet.'));
+	}
+	function bindVoiceLog(btn, when) {
+		btn.addEventListener('contextmenu', function (e) {
+			if (when && !when()) return;
+			if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
+			showVoiceLog(e);
+		});
+		btn.addEventListener('touchstart', function () {
+			pressShown = false;   // a press whose click never came does not swallow this tap
+			if (when && !when()) return;
+			pressTimer = setTimeout(function () { pressTimer = null; pressShown = true; showVoiceLog(); }, 650);
+		}, { passive: true });
+		['touchend', 'touchcancel', 'touchmove'].forEach(function (name) {
+			btn.addEventListener(name, function () { if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; } }, { passive: true });
+		});
+	}
+
 	function initVoice() {
 		if (!micBtn) return;
 		var host = window.StaffAIConfig && window.StaffAIConfig.host;
 		if (!window.DefVoice || !DefVoice.supported() || (host && host.voice !== true)) {
 			micBtn.hidden = true;
-			if (voiceBtn) voiceBtn.hidden = true;
 			return;
 		}
 		speaker = DefVoice.createSpeaker({
@@ -3016,44 +3025,6 @@ function t(key, fallback) {
 					.replace('%e', (e && (e.name && e.name !== 'Error' ? e.name : e.message)) || 'unknown'));
 			}
 		});
-		var saved = null;
-		try { saved = localStorage.getItem(VOICE_MODE_KEY); } catch (e) { /* storage blocked */ }
-		speaker.setMode(VOICE_MODES.indexOf(saved) >= 0 ? saved : 'server');
-		if (voiceBtn) {
-			var paint = function () {
-				voiceBtn.dataset.mode = speaker.getMode();
-				voiceBtn.setAttribute('aria-label', voiceModeLabel(speaker.getMode()));
-				voiceBtn.title = voiceModeLabel(speaker.getMode());
-			};
-			onAssistantName(paint);
-			// A long press (or right-click) shows what the phone did with the voice —
-			// the canary's own account, on the device (7.7.4).
-			var showVoiceLog = function (e) {
-				if (e && e.preventDefault) e.preventDefault();
-				var lines = DefVoice.log().slice(-14);
-				showInfo(lines.length ? lines.join(' · ') : t('voiceLogEmpty', 'No voice events yet.'));
-			};
-			var pressTimer = null, pressShown = false;
-			voiceBtn.addEventListener('contextmenu', function (e) {
-				// Android fires this itself at ~500 ms and swallows the click; the timer must not also fire.
-				if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
-				showVoiceLog(e);
-			});
-			voiceBtn.addEventListener('touchstart', function () { pressTimer = setTimeout(function () { pressTimer = null; pressShown = true; showVoiceLog(); }, 650); }, { passive: true });
-			['touchend', 'touchcancel', 'touchmove'].forEach(function (name) {
-				voiceBtn.addEventListener(name, function () { if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; } }, { passive: true });
-			});
-			voiceBtn.addEventListener('click', function () {
-				if (pressShown) { pressShown = false; return; }   // the click that ends a long press is not a cycle
-				var next = VOICE_MODES[(VOICE_MODES.indexOf(speaker.getMode()) + 1) % VOICE_MODES.length];
-				speaker.stop();
-				speaker.setMode(next);
-				try { localStorage.setItem(VOICE_MODE_KEY, next); } catch (e) { /* storage blocked */ }
-				paint();
-				if (talkMode) updateSendButton();   // only her voice holds conversations
-				showInfo(voiceModeLabel(next));
-			});
-		}
 		// The mic's own recorder: it dictates, so no pause ends it (no onSilence), only the tap.
 		dictation = DefVoice.createRecorder({
 			onTick: dictationListening,
@@ -3070,11 +3041,14 @@ function t(key, fallback) {
 			onIdle: function () { endConversation(t('micClosedIdleButton', 'The mic closed. Tap the button to speak again.')); }   // the button talks again (the mic dictates)
 		});
 		micBtn.addEventListener('click', dictateTap);
+		bindVoiceLog(micBtn);
+		bindVoiceLog(sendBtn, function () { return /^(start|end)$/.test(talkButton()); });   // the same press on Start voice and End voice
 		updateSendButton();   // the button at the box's end talks: Start voice
 	}
 
 	// Start voice and End voice (button), and the mic while a voice is on: hands-free, or a conversation.
 	function micTap(button) {
+		if (pressShown) { pressShown = false; return; }   // the click that ends a long press is not a tap
 		if (talk) { endTalk(); return; }
 		if (button && conversationOn) { endConversation(); return; }   // End voice ends hands-free; its mic's tap still sends the turn
 		if (voiceRecorder.isRecording()) { finishRecording(); return; }
@@ -3139,7 +3113,6 @@ function t(key, fallback) {
 	function endConversation(message) {
 		conversationOn = false;
 		spokenTurn = false;      // nothing more of this turn is read aloud
-		openingSpoken = null;
 		if (voiceRecorder) voiceRecorder.release();
 		if (speaker) speaker.stop();
 		setMicState('idle');
@@ -3268,10 +3241,7 @@ function t(key, fallback) {
 		isLoading = true;
 		updateSendButton();
 		spokenTurn = true;
-		openingSpoken = null;
-		readbackBuffer = '';
-		readbackCut = 0;
-		voice.speech_out = speaker.getMode() === 'server';
+		voice.speech_out = true;
 		voice.audio_context = spokenContext();
 		setMicState('answering', t('answering', '%s is answering · tap to end').replace('%s', assistantName || t('assistant', 'Your assistant')));
 		await sendMessageStreaming('', fileIds, null, null, voice);
@@ -3284,7 +3254,6 @@ function t(key, fallback) {
 		// (7.7.2 cleared the flag at done and never played it).
 		if (speaker) speaker.end();   // a line whose closing frame the stream never brought
 		spokenTurn = false;
-		openingSpoken = null;
 		if (talkTyped) {
 			// Unmuted once her reply's speech is over, however the turn ended.
 			talkTyped = false;
@@ -3306,46 +3275,6 @@ function t(key, fallback) {
 		});
 	}
 
-	// The device voice reads the reply from its text: the opening line was read as
-	// it streamed, then each paragraph as it completed; the tail waits for the
-	// whole reply (7.7.5: the whole reply, not two lines). The employee's own voice
-	// arrives as `speech` frames instead.
-	function readBackSoFar(finished) {
-		if (!spokenTurn || speaker.getMode() !== 'device') return;
-		if (openingSpoken === null) {
-			// The opening is the first sentence OF THE FIRST PARAGRAPH; a first paragraph
-			// with no sentence boundary (a greeting, a list) is the opening as it is.
-			var gap0 = readbackBuffer.indexOf('\n\n');
-			var head = gap0 >= 0 ? readbackBuffer.slice(0, gap0) : readbackBuffer;
-			var opening = DefVoice.firstSentence(finished ? head + ' ' : head);
-			if (!opening && gap0 < 0) { if (!finished) return; }
-			else {
-				openingSpoken = opening || DefVoice.plain(head) || '-';
-				readbackCut = opening ? DefVoice.boundaryEnd(head, opening) : gap0;
-				speaker.speak(opening || DefVoice.plain(head));
-			}
-		}
-		// A blank line inside an open code fence is not a paragraph break: the cut
-		// waits for the fence to close (plain() then drops the whole block).
-		var gap, from = readbackCut;
-		while ((gap = readbackBuffer.indexOf('\n\n', from)) >= 0) {
-			var para = readbackBuffer.slice(readbackCut, gap);
-			if ((para.match(/```/g) || []).length % 2) { from = gap + 2; continue; }
-			speaker.speak(DefVoice.plain(para));
-			readbackCut = from = gap + 2;
-		}
-		if (finished && readbackBuffer.slice(readbackCut).trim()) {
-			speaker.speak(DefVoice.plain(readbackBuffer.slice(readbackCut)));
-			readbackCut = readbackBuffer.length;
-		}
-	}
-
-	function readBack(finalContent) {
-		if (!spokenTurn) return;
-		if (!readbackBuffer.trim()) readbackBuffer = finalContent || '';   // a reply nothing streamed for
-		readBackSoFar(true);
-	}
-
 	// ── Dictation (11.6.0) ──────────────────────────────────────────────────
 	// A tap on the mic records, a second tap puts what was said in the box to edit. Nothing
 	// is sent: the person presses Send, and it goes as a typed message.
@@ -3356,6 +3285,7 @@ function t(key, fallback) {
 	var waveLevel = function () {};   // the wave's level while it shows (showWave)
 
 	async function dictateTap() {
+		if (pressShown) { pressShown = false; return; }   // the click that ends a long press is not a tap
 		if (talk || conversationOn) { micTap(); return; }   // the voice that is on keeps the mic's tap
 		if (micBtn.dataset.state === 'listening') { finishDictation(); return; }   // the mic's state, not the recorder's (sendDictation)
 		if (dictating || isLoading || isReadOnly) return;
@@ -3497,7 +3427,7 @@ function t(key, fallback) {
 	}
 
 	function canTalk() {
-		return talkMode && !talkFailed && !!window.RTCPeerConnection && speaker.getMode() === 'server';
+		return talkMode && !talkFailed && !!window.RTCPeerConnection;
 	}
 
 	// Wherever the voice is on, Send is also the button to talk with: with the box empty it
@@ -3737,7 +3667,6 @@ function t(key, fallback) {
 		// spoken turn that never finished is read over this one.
 		if (conversationOn) endConversation();
 		spokenTurn = false;
-		openingSpoken = null;
 
 		// Phase 10.1: Classify suggestion outcome before clearing input
 		var suggResult = classifySuggestionOutcome(text, lastSuggestion);
@@ -3965,7 +3894,6 @@ function t(key, fallback) {
 					currentConversationId = jsonResult.thread_id;
 					rememberConversation(currentConversationId);
 				}
-				readBack(jsonResult.choices?.[0]?.message?.content || '');
 				loadConversations();
 				updateReadOnlyState();
 				return;
@@ -4165,14 +4093,9 @@ function t(key, fallback) {
 						}
 						if (streamEl) {
 							streamBuffer += evt.text;
-							// A budget/billing notice streams at step 0 ahead of the reply: shown,
-							// never read — the device voice reads the reply's own words. No round
+							// A budget/billing notice streams at step 0 ahead of the reply. No round
 							// of the reply supersedes it, so it sits below the cut.
 							if (evt.step === 0) stepStart = streamBuffer.length;
-							if (spokenTurn && evt.step !== 0) {
-								readbackBuffer += evt.text;
-								readBackSoFar(false);
-							}
 							if (!wordDrainTimer) {
 								renderStreamChunk();
 							}
@@ -4215,7 +4138,6 @@ function t(key, fallback) {
 							tool_outputs: toolOutputs,
 							stopped: !!evt.stopped
 						});
-						readBack(finalContent);
 
 						// Finalize the streamed bubble in place — match Customer
 						// Chat's V2 pattern. Do NOT call renderMessages() when

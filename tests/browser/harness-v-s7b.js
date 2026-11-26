@@ -30,7 +30,7 @@ const STAFF_HEAD = `
 	var messagesContainer = document.getElementById('messagesContainer');
 	var SSE_TOOL_PACING_MS = 0;
 	var eventQueue = [], processing = false, toolStatusElements = {};
-	var messages = [], spoken = [], readbackBuffer = '';
+	var messages = [];
 	var currentConversationId = null, dirtyInput = false, lastSuggestion = null;
 	var composerInput = null, conversationOn = false, speaker = null;
 	var _isStreaming = false, _userScrolledUp = false, chipEpoch = 0, turnThread = null;
@@ -52,8 +52,6 @@ const STAFF_HEAD = `
 	function endConversation() {}
 	var turnReleased = false;                          // V-S6b's guard, outside this slice
 	function handleSpokenStop() { return false; }      // V-S6b, outside this slice
-	function readBackSoFar() { spoken.push(readbackBuffer); }
-	function readBack(final) { spoken.push('final:' + final); }
 `;
 
 const STAFF_TAIL = `
@@ -67,8 +65,7 @@ const STAFF_TAIL = `
 			var w = messagesList.querySelector('.tool-status');
 			return w ? w.textContent : null;
 		},
-		saved: function () { return messages.length ? messages[messages.length - 1].content : null; },
-		spoken: function () { return spoken; }
+		saved: function () { return messages.length ? messages[messages.length - 1].content : null; }
 	};`;
 
 function bootStaff(spokenTurn) {
@@ -198,16 +195,6 @@ function check(label, cond, detail) {
 		check('Staff AI: a stream with no step_superseded renders exactly as before (both rounds in the bubble)',
 			t.bubble() === LEAD + ANSWER && t.working() === null,
 			'bubble=' + JSON.stringify(t.bubble()));
-	}
-	// 4. The device-voice readback is untouched — the lead-in was read once.
-	{
-		const t = bootStaff(true);
-		await t.push([delta(LEAD, 1), sup(1)].concat(TOOL)
-			.concat([delta(ANSWER, 2), done(ANSWER)]));
-		const spoken = t.spoken();
-		check('Staff AI: the cut does not touch the readback buffer — the lead-in stays read once',
-			spoken[0] === LEAD && spoken[1] === LEAD + ANSWER && spoken.length === 3,
-			'spoken=' + JSON.stringify(spoken));
 	}
 	// 5. A frame before anything streamed is a no-op.
 	{

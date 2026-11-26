@@ -94,9 +94,9 @@ const json = (status, body) => new Response(JSON.stringify(body), { status, head
 const HEAD = `
 	let nonce = StaffAIConfig.nonce;
 	let messages = [], isLoading = false, isReadOnly = false, conversationOn = false, dictating = false, spokenTurn = false, talk = null, talkTyped = false,
-		openingSpoken = null, lastSuggestion = null, selectedModel = '', currentConversationId = null,
+		lastSuggestion = null, selectedModel = '', currentConversationId = null,
 		activeProjectId = null, turnReleased = false, _isStreaming = false, _userScrolledUp = false,
-		dirtyInput = false, chipEpoch = 0, readbackBuffer = '';
+		dirtyInput = false, chipEpoch = 0;
 	function t(k, d) { return d; }
 	function renderMessages() {
 		messagesList.querySelectorAll('.message').forEach(function (el) { el.remove(); });
@@ -145,7 +145,7 @@ function boot(route, held) {   // held: an array that keeps the re-attach waits 
     showInfo: msg => { $('infoBanner').textContent = msg; },
     autoResize() {}, hideInfo() {}, hasActiveFiles: () => false, stagedFiles: [],
     classifySuggestionOutcome: () => ({}), endConversation() {}, talkButton: () => '', micBtn: null, browserTimezone: () => '', clearStagedFiles() {},
-    readBack() {}, readBackSoFar() {}, loadConversations() { loads++; }, rememberConversation() {}, updateReadOnlyState() {}, afterSpokenTurn() {},
+    loadConversations() { loads++; }, rememberConversation() {}, updateReadOnlyState() {}, afterSpokenTurn() {},
     dropUnfilledTranscript() { return false; }, uploadAllStagedFiles: async () => ({ success: true, fileIds: [] }),
     renderMarkdown: s => s, speaker: { speak() {} },
     applyCitations() {}, buildCitationMap: () => ({}), createToolOutputCard: () => null, handleSpokenStop: () => false,

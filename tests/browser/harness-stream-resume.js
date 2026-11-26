@@ -98,9 +98,9 @@ const thread = last => json(200, { success: true, id: 'th-1', messages: [{ role:
 const HEAD = `
 	let nonce = StaffAIConfig.nonce;
 	let messages = [], isLoading = false, isReadOnly = false, conversationOn = false, dictating = false, spokenTurn = false, talk = null, talkTyped = false,
-		openingSpoken = null, lastSuggestion = null, selectedModel = '', currentConversationId = null,
+		lastSuggestion = null, selectedModel = '', currentConversationId = null,
 		activeProjectId = null, turnReleased = false, _isStreaming = false, _userScrolledUp = false,
-		dirtyInput = false, chipEpoch = 0, readbackBuffer = '', stopTurn = null;
+		dirtyInput = false, chipEpoch = 0, stopTurn = null;
 	function t(k, d) { return d; }
 	function muteTalkForSpeech() {}
 	// As the console's own: only the .message elements go, anything beside them stays.
@@ -172,7 +172,7 @@ function boot(script) {
     autoResize() {}, updateSendButton() {}, hideInfo() {}, hasActiveFiles: () => false, stagedFiles: [],
     classifySuggestionOutcome: () => ({}), endConversation: msg => ended.push(msg), showInfo: msg => infos.push(msg),
     browserTimezone: () => '', clearStagedFiles() {},
-    readBack() {}, readBackSoFar() {}, loadConversations() {}, rememberConversation() {}, updateReadOnlyState() {}, afterSpokenTurn() {},
+    loadConversations() {}, rememberConversation() {}, updateReadOnlyState() {}, afterSpokenTurn() {},
     dropUnfilledTranscript() { return false; }, uploadAllStagedFiles: async () => ({ success: true, fileIds: [] }),
     renderMarkdown: s => s,
     // Each line handed to the speaker, with the reply's words on show at that moment; each

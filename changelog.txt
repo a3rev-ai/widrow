@@ -1,5 +1,9 @@
 *** Widrow AI Changelog ***
 
+= 11.6.3 - 2026/11/26 =
+* Tweak - In the Staff AI console the microphone now sits beside the Start voice / Send button on every screen size.
+* Tweak - The speaker icon is removed from the Staff AI console: spoken replies are always read in the assistant's own voice.
+
 = 11.6.2 - 2026/11/26 =
 * Tweak - While you dictate, a moving wave across the message box shows it is listening, the microphone becomes a stop button, and Send finishes the dictation and sends it in one tap. Tap stop instead to put the words in the box to edit first.
 * Tweak - If a dictation hears nothing or cannot be transcribed, a tap on Send sends nothing and the message box is left as it was.

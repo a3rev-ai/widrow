@@ -50,7 +50,7 @@ function boot() {
     messages: [], renderMessages() {}, autoResize() {}, updateSendButton() {}, hideInfo() {}, hideError() {},
     showError() {}, showSessionExpired() {}, hasActiveFiles: () => false, stagedFiles: [],
     classifySuggestionOutcome: () => ({}), endConversation() {}, browserTimezone: () => '', clearStagedFiles() {},
-    readBack() {}, readBackSoFar() {}, loadConversations() {}, rememberConversation() {}, updateReadOnlyState() {}, recoverTurn: async () => false,
+    loadConversations() {}, rememberConversation() {}, updateReadOnlyState() {}, recoverTurn: async () => false,
     afterSpokenTurn() {}, removeTypingMessage() {}, dropUnfilledTranscript() {}, renderMarkdown: s => s,
     renderToolStatus: () => document.createElement('div'), completeToolStatus() {}, applyCitations() {},
     buildCitationMap: () => ({}), createToolOutputCard: () => null, handleSpokenStop: () => false,
@@ -59,12 +59,12 @@ function boot() {
   };
   const names = Object.keys(deps);
   const api = new window.Function(...names,
-    'var isLoading = false, isReadOnly = false, conversationOn = false, spokenTurn = false, openingSpoken = null, talk = null, talkTyped = false,' +
+    'var isLoading = false, isReadOnly = false, conversationOn = false, spokenTurn = false, talk = null, talkTyped = false,' +
     ' lastSuggestion = null, selectedModel = "", currentConversationId = null, activeProjectId = null,' +
     ' _streamAbort = null, _turnReachedServer = false, turnReleased = false, _eventsSeen = 0, _isStreaming = false,' +
     ' _userScrolledUp = false, dirtyInput = false, SSE_TOOL_PACING_MS = 0, eventQueue = [], processing = false,' +
     ' chipEpoch = 0, turnThread = null,' +
-    ' toolStatusElements = {}, readbackBuffer = "", speaker = null;\n' + STREAM + '\n' + SEND +
+    ' toolStatusElements = {}, speaker = null;\n' + STREAM + '\n' + SEND +
     '\nreturn { push: async function (evts) { for (var i = 0; i < evts.length; i++) eventQueue.push(evts[i]);' +
     ' await processEventQueue(); }, leave: function () { clearConfirmChips(); },' +
     ' block: function (loading, readOnly) { isLoading = loading; isReadOnly = readOnly; } };'

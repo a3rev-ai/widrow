@@ -74,10 +74,8 @@ const phone = s => decl(PHONE, s);
 
 // ── The floor: a later edit that shrinks any of these fails ──────────────
 const FLOOR = {
-	'.composer-toolbar': d => px(d.gap) >= 8,
 	'.composer-toolbar .upload-btn': d => px(d.width) >= 44 && px(d.height) >= 44,
 	'.composer-toolbar .mic-btn': d => px(d.width) >= 44 && px(d.height) >= 44,
-	'.composer-toolbar .voice-btn': d => px(d.width) >= 44 && px(d.height) >= 44,
 	'.composer-toolbar .send-btn': d => px(d.width) >= 48 && px(d.height) >= 48,
 	'.composer-toolbar .mic-btn[data-state="idle"]': d => px(d.width) >= 48 && px(d.height) >= 48,
 	'.model-chip': d => px(d.height) >= 44 && px(d['font-size']) >= 15,
@@ -155,7 +153,7 @@ const COMPOSER = extract.phpToHtml(extract.element(extract.templateSource(), 'di
 function row(setup) {
 	const d = new JSDOM('<!doctype html><div id="staff-ai-app"><main class="chat-container">' + COMPOSER + '</main></div>').window.document;
 	const $ = id => d.getElementById(id);
-	const els = { input: $('composerInput'), mic: $('micBtn'), label: $('micLabel'), voice: $('voiceBtn'),
+	const els = { input: $('composerInput'), mic: $('micBtn'), label: $('micLabel'),
 		select: $('modelSelect'), send: $('sendBtn'), container: $('composerContainer') };
 	els.select.innerHTML = '<option value="opus" data-short="Opus 5.5">Opus 5.5 — Deep work</option>';
 	els.select.hidden = false;                             // the list arrived
@@ -170,41 +168,43 @@ function row(setup) {
 	els.setMic('idle');
 	els.setSend(true);
 	setup(els);
-	const controls = { attach: $('uploadBtn'), mic: els.mic, readback: els.voice, model: d.querySelector('.model-chip'), send: els.send };
+	const controls = { attach: $('uploadBtn'), model: d.querySelector('.model-chip'), mic: els.mic, send: els.send };
 	const visible = Object.keys(controls).filter(k => shown(controls[k]));
 	const main = visible.filter(k => computed(controls[k], 'width') === '48px');
-	return { visible, main, pill: /^1 1/.test(computed(els.mic, 'flex') || ''),
+	// The right-hand group starts where the auto margin is: on the mic, or on Send when the mic is not drawn.
+	const push = visible.filter(k => computed(controls[k], 'margin-left') === 'auto');
+	return { visible, main, push, pill: /^1 1/.test(computed(els.mic, 'flex') || ''),
 		micWidth: computed(els.mic, 'width'), labelWrap: computed(els.label, 'white-space'),
 		icons: ['send-icon', 'stop-icon', 'wave-icon'].filter(c => shown(els.send.querySelector('.' + c))),
 		box: shown(els.input), wave: shown(d.getElementById('dictationWave')),
 		micIcons: ['mic-icon', 'mic-stop'].filter(c => shown(els.mic.querySelector('.' + c))),
 		sendWidth: computed(els.send, 'width'), sendHeight: computed(els.send, 'height'), sendBg: computed(els.send, 'background') };
 }
-const ALL = ['attach', 'mic', 'readback', 'model', 'send'];
+const ALL = ['attach', 'model', 'mic', 'send'];
 const MATRIX = [
-	['empty', e => {}, ['attach', 'mic', 'readback', 'model'], ['mic'], false],
+	['empty', e => {}, ['attach', 'model', 'mic'], ['mic'], false],
 	['typed', e => { e.input.value = 'hi'; e.setSend(false); }, ALL, ['send'], false],
 	['files staged, box empty', e => { e.setSend(false); }, ALL, ['send'], false],
 	['suggestion ghost text', e => { e.input.value = 'Tell me more'; e.input.classList.add('staff-ai-suggestion-text'); e.setSend(false); },
 		ALL, ['send'], false],
-	['loading, before the turn id', e => { e.setSend(true); }, ['attach', 'mic', 'readback', 'model'], ['mic'], false],
-	['typed reply running', e => { e.setSend(false, true); }, ['attach', 'readback', 'model', 'send'], ['send'], false],
-	['stopping', e => { e.setSend(true, true); }, ['attach', 'readback', 'model', 'send'], ['send'], false],
+	['loading, before the turn id', e => { e.setSend(true); }, ['attach', 'model', 'mic'], ['mic'], false],
+	['typed reply running', e => { e.setSend(false, true); }, ['attach', 'model', 'send'], ['send'], false],
+	['stopping', e => { e.setSend(true, true); }, ['attach', 'model', 'send'], ['send'], false],
 	['listening', e => { e.setMic('listening', '0:03 · Tap to send'); }, ['mic'], [], true],
 	['listening, files staged', e => { e.setMic('listening', '0:03 · Tap to send'); e.setSend(false); }, ['mic'], [], true],
 	['transcribing', e => { e.setMic('transcribing', 'Transcribing…'); }, ['mic'], [], true],
 	['answering, with Stop', e => { e.setMic('answering', 'Ann is answering · tap to end'); e.setSend(false, true); },
 		['mic', 'send'], ['send'], true],
 	['answering, Stop gone', e => { e.setMic('answering', 'Ann is answering · tap to end'); }, ['mic'], [], true],
-	['no microphone', e => { e.mic.hidden = true; e.voice.hidden = true; }, ['attach', 'model', 'send'], ['send'], false],
-	['no model picker', e => { e.select.hidden = true; }, ['attach', 'mic', 'readback'], ['mic'], false],
-	['read-only', e => { e.container.classList.add('disabled'); }, ['attach', 'mic', 'readback', 'model'], ['mic'], false],
+	['no microphone', e => { e.mic.hidden = true; }, ['attach', 'model', 'send'], ['send'], false],
+	['no model picker', e => { e.select.hidden = true; }, ['attach', 'mic'], ['mic'], false],
+	['read-only', e => { e.container.classList.add('disabled'); }, ['attach', 'model', 'mic'], ['mic'], false],
 	['conversation mode, box empty: Start voice', e => { e.setVoice('start'); e.setSend(false); }, ALL, ['send'], false],
 	['conversation mode, words typed: Send', e => { e.input.value = 'hi'; e.setVoice('send'); e.setSend(false); }, ALL, ['send'], false],
 	// 11.6.2: while a dictation records the round button is Send beside the pill, and the wave has the box.
 	['dictating', e => { e.dictate(); e.setMic('listening', '0:03'); e.setVoice('send'); e.setSend(false); }, ['mic', 'send'], ['send'], true],
 	['in a conversation, box empty: End voice', e => { e.setMic('conversation', 'Speak, or type'); e.setVoice('end'); e.setSend(false); },
-		['attach', 'readback', 'model', 'send'], ['send'], false]
+		['attach', 'model', 'send'], ['send'], false]
 ];
 const ICONS = { 'conversation mode, box empty: Start voice': ['wave-icon'], 'conversation mode, words typed: Send': ['send-icon'], 'dictating': ['send-icon'],
 	'in a conversation, box empty: End voice': ['stop-icon'] };
@@ -213,6 +213,8 @@ MATRIX.forEach(function (m) {
 	check('state ' + m[0] + ': shows ' + m[2].join(', ') + '; main ' + (m[3][0] || 'none') + (m[4] ? '; the pill is the row' : ''),
 		JSON.stringify(r.visible) === JSON.stringify(m[2]) && JSON.stringify(r.main) === JSON.stringify(m[3]) && r.pill === m[4],
 		JSON.stringify(r));
+	check('  and the right-hand group starts at the ' + (r.visible.includes('mic') ? 'mic' : 'round button'),
+		JSON.stringify(r.push) === JSON.stringify([r.visible.includes('mic') ? 'mic' : 'send']), JSON.stringify(r.push));
 	if (m[0] === 'files staged, box empty' || m[0] === 'suggestion ghost text' || m[0] === 'typed' || m[0].indexOf('conversation mode,') === 0) {
 		check('  and the mic beside Send is the plain 44', r.micWidth === '44px', r.micWidth);
 	}
@@ -242,6 +244,49 @@ check('desktop: with conversation mode on the button is 40 by 40, larger than th
 		computed(mic, 'display', desktop) === 'none' && computed(send, 'display', desktop) === 'flex', computed(mic, 'display', desktop));
 })();
 
+// ── WCAG AA target size and spacing: the paperclip, the mic and the round button at both widths ──
+(function () {
+	const cascades = { wide: RULES.filter(r => r.media === null || r.media === '@media (min-width: 769px)'), phone: CASCADE };
+	const d = new JSDOM('<!doctype html><div id="staff-ai-app"><main class="chat-container">' + COMPOSER + '</main></div>').window.document;
+	d.getElementById('micBtn').dataset.state = 'idle';
+	const bar = d.querySelector('.composer-toolbar');
+	// The space between two neighbours: the row's gap plus their facing margins (an auto margin counts as none).
+	const margin = (el, side, c) => { const v = computed(el, 'margin-' + side, c); return px(v) || 0; };
+	const between = (a, b, c) => (px(computed(bar, 'gap', c)) || 0) + margin(a, 'right', c) + margin(b, 'left', c);
+	for (const w of ['wide', 'phone']) {
+		const c = cascades[w];
+		const size = ['uploadBtn', 'micBtn', 'sendBtn'].map(id => {
+			const el = d.getElementById(id);
+			return [id, px(computed(el, 'width', c)), px(computed(el, 'height', c))];
+		});
+		const floor = w === 'phone' ? { uploadBtn: 24, micBtn: 44, sendBtn: 44 } : { uploadBtn: 24, micBtn: 24, sendBtn: 24 };
+		check('target size, ' + w + ': the paperclip, the mic and the round button are each at least ' + (w === 'phone' ? '24 (the mic and the round button 44)' : '24') + ' wide and high',
+			size.every(([id, wd, ht]) => wd >= floor[id] && ht >= floor[id]), JSON.stringify(size));
+		const mic = d.getElementById('micBtn'), send = d.getElementById('sendBtn'), sel = d.getElementById('modelSelect');
+		const gaps = { micToSend: between(mic, send, c) };
+		if (w === 'wide') gaps.pickerToMic = between(sel, mic, c);
+		check('target spacing, ' + w + ': 8px between each pair in the right-hand group, never more',
+			Object.values(gaps).every(g => g === 8), JSON.stringify(gaps));
+	}
+})();
+
+// ── Desktop: the paperclip's auto margin holds the right-hand group right, picker shown or not ──
+(function () {
+	const DESKTOP = '@media (min-width: 769px)';
+	const cascade = RULES.filter(r => r.media === null || r.media === DESKTOP);
+	for (const hidden of [false, true]) {
+		const d = new JSDOM('<!doctype html><div id="staff-ai-app"><main class="chat-container">' + COMPOSER + '</main></div>').window.document;
+		d.getElementById('modelSelect').hidden = hidden;
+		const auto = ['uploadBtn', 'modelSelect', 'micBtn', 'sendBtn'].map(id => d.getElementById(id))
+			.filter(el => computed(el, 'margin-left', cascade) === 'auto' || computed(el, 'margin-right', cascade) === 'auto').map(el => el.id);
+		check('desktop, the model picker ' + (hidden ? 'hidden' : 'shown') + ': only the paperclip carries an auto margin (its right), so the picker, mic and round button sit right',
+			JSON.stringify(auto) === '["uploadBtn"]' && computed(d.getElementById('uploadBtn'), 'margin-right', cascade) === 'auto', JSON.stringify(auto));
+	}
+	const phoneUpload = computed(new JSDOM('<!doctype html><div id="staff-ai-app"><main class="chat-container">' + COMPOSER + '</main></div>')
+		.window.document.getElementById('uploadBtn'), 'margin-right');
+	check('phone: the paperclip carries no auto margin (the mic\'s own holds the group right there)', phoneUpload !== 'auto', phoneUpload);
+})();
+
 // ── Desktop: the wrapper is no box, the chip is not drawn ────────────────
 check('desktop: the wrapper is no box and the chip is not drawn',
 	decl(null, '.model-picker').display === 'contents' && decl(null, '.model-chip').display === 'none');
@@ -260,8 +305,9 @@ check('desktop: the wrapper is no box and the chip is not drawn',
 	const doc = new JSDOM(html).window.document;
 	const bar = doc.querySelector('.composer-toolbar');
 	const kids = Array.from(bar.children).map(e => e.id || e.className);
-	check('markup: attach, mic, read-back, the model picker, Send, in that order',
-		JSON.stringify(kids) === JSON.stringify(['uploadBtn', 'micBtn', 'voiceBtn', 'model-picker', 'sendBtn']), JSON.stringify(kids));
+	check('markup: attach, the model picker, the mic, Send, in that order: the mic is immediately before the round button',
+		JSON.stringify(kids) === JSON.stringify(['uploadBtn', 'model-picker', 'micBtn', 'sendBtn']) &&
+		doc.getElementById('sendBtn').previousElementSibling === doc.getElementById('micBtn'), JSON.stringify(kids));
 	const sel = doc.getElementById('modelSelect');
 	check('markup: the select sits in the picker, hidden until filled, still named "AI model"',
 		sel.parentElement.className === 'model-picker' && sel.hidden && sel.getAttribute('aria-label') === 'AI model');

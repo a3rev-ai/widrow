@@ -64,7 +64,7 @@ function boot(opts) {
 	const dom = new JSDOM('<!doctype html><div class="chat-container"><div id="messagesContainer"><div id="messagesList"></div></div>' +
 		'<div id="infoBanner"></div><div id="errorBanner"></div></div><div id="confirmChips"></div>' +
 		'<textarea id="composerInput" placeholder="Ask"></textarea><button id="sendBtn"></button>' +
-		'<button id="micBtn"></button><span id="micLabel"></span><button id="voiceBtn"></button>' +
+		'<button id="micBtn"></button><span id="micLabel"></span>' +
 		'<select id="modelSelect" hidden></select><span id="modelChipName"></span><div id="welcomeMessage"></div>' +
 		'<div id="composerContainer"></div><section id="docsPage" hidden></section>',
 	{ url: 'https://acme.defho.test/staff-ai/acme/', pretendToBeVisual: true });
@@ -74,7 +74,8 @@ function boot(opts) {
 	const spy = { info: m => logs.push(String(m)), error: (...a) => logs.push(a.map(x => JSON.stringify(x)).join(' ')), warn: (...a) => logs.push(a.join(' ')), log: (...a) => logs.push(a.join(' ')) };
 	if (opts.webrtc !== false) window.RTCPeerConnection = function () {};
 	window.matchMedia = q => ({ matches: q === '(pointer: coarse)' ? !!opts.phone : false, addEventListener() {} });
-	try { window.localStorage.setItem('def_staff_ai_voice_mode', opts.mode || 'server'); } catch (e) {}
+	// A choice the old speaker icon stored under its key (it no longer applies).
+	if (opts.stored) window.localStorage.setItem('def_staff_ai_voice_mode', opts.stored);
 	if (opts.model) window.localStorage.setItem('staff-ai-model', opts.model);
 	window.DefPersona = { createController: () => ({ handleEvent() {}, formatThinkingLabel: m => m, reset() {} }) };
 
@@ -83,7 +84,7 @@ function boot(opts) {
 	const said = [], order = [];
 	let idle = [];
 	const speaker = {
-		mode: 'server', setMode(m) { this.mode = m; }, getMode() { return this.mode; }, unlock() {}, stop() {},
+		unlock() {}, stop() {},
 		speak(text) { said.push(text); order.push('speak'); }, discard() {}, end() {},
 		whenIdle() { return new Promise(r => idle.push(r)); },
 	};
@@ -97,7 +98,7 @@ function boot(opts) {
 			? (rec.mic = { recording: false, stops: 0, releases: 0, isRecording() { return rec.mic.recording; },
 				start() { rec.mic.recording = true; return Promise.resolve(true); }, release() { rec.mic.recording = false; rec.mic.releases++; },
 				stop() { rec.mic.recording = false; rec.mic.stops++; return new Promise(r => { rec.mic.finish = r; }); } })
-			: (rec.opts = o, { isRecording: () => false, release() {}, stop: () => Promise.resolve(null),
+			: (rec.opts = o, { isRecording: () => false, release() {}, stop: () => Promise.resolve(opts.heard || null),
 			start: () => { rec.starts++; return opts.tapOnly && !inTap ? Promise.reject(new Error('needs a tap')) : Promise.resolve(true); } }),
 		insertAtCursor: (input, text) => { input.value += (input.value ? ' ' : '') + text; },
 	};
@@ -144,7 +145,7 @@ function boot(opts) {
 		localStorage: window.localStorage, sessionStorage: window.sessionStorage,
 		messagesList: $('messagesList'), messagesContainer: $('messagesContainer'), errorBanner: $('errorBanner'), infoBanner: $('infoBanner'),
 		welcomeMessage: $('welcomeMessage'), confirmChips: $('confirmChips'), composerInput: $('composerInput'), sendBtn: $('sendBtn'),
-		micBtn: $('micBtn'), micLabel: $('micLabel'), voiceBtn: $('voiceBtn'), composerContainer: $('composerContainer'), conversationList: null,
+		micBtn: $('micBtn'), micLabel: $('micLabel'), composerContainer: $('composerContainer'), conversationList: null,
 		handOverToPortal: () => false, autoResize() {}, hasActiveFiles: () => false, stagedFiles: [], showWelcomeOrTip() {},
 		classifySuggestionOutcome: () => ({}), browserTimezone: () => '', clearStagedFiles() {}, uploadAllStagedFiles: async () => ({ success: true, fileIds: [] }),
 		renderMarkdown: s => '<p>' + String(s).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>') + '</p>',
@@ -229,8 +230,7 @@ async function run(label, fn) {
 			mint.body.thread_id === '' && mint.body.model_id === 'm-fast' && t.api.state().thread === 'th-new', JSON.stringify({ body: mint.body, thread: t.api.state().thread }));
 	});
 	for (const [why, opts] of [['the status says it is off', { status: false }], ['the host has no conversation', { noConversation: true }],
-		['the browser has no WebRTC', { webrtc: false }], ['the Voice button is on the device voice', { mode: 'device' }],
-		['the Voice button is off', { mode: 'off' }]]) {
+		['the browser has no WebRTC', { webrtc: false }]]) {
 		await run('entry ' + why, async () => {
 			const t = boot(opts);
 			await settle();
@@ -636,8 +636,7 @@ async function run(label, fn) {
 		check('Send sends a typed message, no conversation', t.streams().length === 1 && t.talks.length === 0 && t.shows().role === 'start',
 			J({ streams: t.streams().length, talks: t.talks.length, now: t.shows() }));
 	});
-	for (const [why, opts] of [['the mode is off', { status: false }], ['the Voice button is on the device voice', { mode: 'device' }],
-		['a WordPress site with no host', { wordpress: true }]]) {
+	for (const [why, opts] of [['the mode is off', { status: false }], ['a WordPress site with no host', { wordpress: true }]]) {
 		await run('today ' + why, async () => {
 			const t = boot(opts);
 			await settle();
@@ -649,13 +648,21 @@ async function run(label, fn) {
 				J(typed) === J(SEND), J({ empty, typed }));
 		});
 	}
-	await run('voice button', async () => {
-		const t = boot({ mode: 'off' });
-		await settle();
-		const before = t.shows().role;
-		t.document.getElementById('voiceBtn').click();   // off → her voice
-		check('Start voice shows whichever voice the Voice button is on', before === 'start' && t.shows().role === 'start', J({ before, now: t.shows() }));
-	});
+	// The speaker icon is gone: a choice it stored (device, off) no longer applies.
+	for (const stored of ['device', 'off']) {
+		await run('stored ' + stored, async () => {
+			const t = boot({ thread: 'th-1', status: false, stored, heard: { transcript: 'What is on today?', seconds: 2, spoke: true } });
+			await settle();
+			const shown = t.shows();
+			t.tap();   // today's voice: hands-free
+			await settle();
+			t.rec.opts.onSilence();
+			await settle();
+			const body = (t.streams()[0] || {}).body || {};
+			check('"' + stored + '" stored under the old key: the round button offers Start voice, and a spoken turn asks for the employee\'s own voice (speech_out: true)',
+				J(shown) === J(START) && t.rec.starts === 1 && body.via_voice === true && body.speech_out === true, J({ shown, body }));
+		});
+	}
 	await run('start voice failed', async () => {
 		const t = boot({ thread: 'th-1', failAt: 'connect' });
 		await settle();
