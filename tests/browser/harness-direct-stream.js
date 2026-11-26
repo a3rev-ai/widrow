@@ -129,9 +129,9 @@ async function bootChat(opts) {
     await sleep(30);
   };
   h.last = () => { const b = root.querySelectorAll('.def-cc-message--assistant .def-cc-message-content'); return b.length ? b[b.length - 1].textContent.trim() : ''; };
-  // A spoken turn: the mic tap, then the pause.
+  // A spoken turn: Start voice (11.6.0: the mic dictates), then the pause.
   h.speak = async () => {
-    root.querySelector('.def-cc-composer-mic').click();
+    root.querySelector('.def-cc-composer-send').click();
     await sleep(20);
     h.voice.opts.onSilence();
     await sleep(80);
@@ -191,7 +191,8 @@ const HEAD = `
 	}
 `;
 const TAIL = `
-	return { sendMessage: sendMessage, open: function (id) { currentConversationId = id; } };`;
+	return { sendMessage: sendMessage, open: function (id) { currentConversationId = id; },
+		startVoice: typeof micTap === 'function' ? function () { micTap(true); } : null };   // Start voice's tap (11.6.0: the mic dictates)`;
 
 async function bootStaff(opts) {
   opts = opts || {};
@@ -258,7 +259,7 @@ async function bootStaff(opts) {
   h.api = new window.Function(...names, HEAD + PARSER + '\n' + TOOL_LABELS + '\n' + ESCAPE + '\n' + REQUEST + '\n' +
     BANNER + '\n' + RECOVER + '\n' + TOOL_ROWS + '\n' + SEND + (opts.voice ? '\n' + VOICE + '\ninitVoice();' : '') + TAIL)(...names.map(k => deps[k]));
   h.send = async text => { deps.composerInput.value = text; await h.api.sendMessage(); await sleep(20); };
-  h.speak = async () => { deps.micBtn.click(); await sleep(20); h.recorderOpts.onSilence(); await sleep(80); };
+  h.speak = async () => { h.api.startVoice(); await sleep(20); h.recorderOpts.onSilence(); await sleep(80); };
   h.banner = () => deps.errorBanner.classList.contains('visible') ? deps.errorBanner.textContent : '';
   h.last = () => { const m = deps.messagesList.querySelectorAll('.message-assistant'); return m.length ? m[m.length - 1].textContent : ''; };
   await sleep(20);
@@ -319,7 +320,7 @@ async function bootStaff(opts) {
     h.proxyCalls.length === 0 && h.last() === 'The assistant is unavailable right now. Please try again.', h.last());
 
   h = await bootChat({ voice: true, direct: [422] });
-  h.root.querySelector('.def-cc-composer-mic').click();
+  h.root.querySelector('.def-cc-composer-send').click();
   await sleep(20);
   h.voice.opts.onSilence();
   await sleep(80);

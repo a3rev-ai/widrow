@@ -965,6 +965,47 @@ function check(n, label, cond, detail) {
 				!!other && other.unavailable === undefined && !!other.blob,
 				'done=' + JSON.stringify(done && Object.keys(done)) + ' other=' + JSON.stringify(other && Object.keys(other)));
 		}
+		// 56. dictation (11.6.0): `turn: false` asks the socket for no turn signal, and a recorder
+		//     given no silence stop records through a pause and a `turn` frame until it is stopped
+		{
+			const t = boot(voicedWave);
+			const rec = t.DefVoice.createRecorder({});
+			await rec.start(Object.assign({}, LIVE, { turn: false }));
+			const ws = t.sockets[0];
+			ws.open();
+			await wait(t.window, 500);
+			t.say(silentWave);
+			await wait(t.window, 2300);   // past the 1.8 s pause
+			ws.answer({ type: 'turn' });
+			await wait(t.window, 20);
+			const still = rec.isRecording() && !ws.texts().some(m => m.type === 'end');
+			const stopped = rec.stop();
+			await wait(t.window, 10);
+			ws.answer({ type: 'final', text: 'Two coffees please.' });
+			const done = await stopped;
+			check(56, 'live — `turn: false` goes on the start frame; with no silence stop a pause and a `turn` frame end nothing, the tap does, with the transcript',
+				JSON.stringify(ws.texts()[0]) === JSON.stringify({ type: 'start', context: 'Hi there', turn: false }) && still &&
+					!!done && done.transcript === 'Two coffees please.',
+				'first=' + JSON.stringify(ws.texts()[0]) + ' still=' + still + ' done=' + JSON.stringify(done && done.transcript));
+		}
+		// 57. dictated words into a box: at the cursor, a space from the words around them, the
+		//     box focused, the caret after them, and an `input` event
+		{
+			const t = boot(voicedWave, '<textarea id="box"></textarea>');
+			const box = t.window.document.getElementById('box');
+			let inputs = 0;
+			box.addEventListener('input', () => { inputs++; });
+			const put = (value, at, text) => { box.value = value; box.setSelectionRange(at, at); t.DefVoice.insertAtCursor(box, text); return box.value; };
+			let got = null, caret = null;
+			try {
+				got = [put('', 0, 'hello'), put('Hello there', 5, 'big'), put('Hi', 2, 'again'), put('Hi ', 3, 'you')];
+				caret = box.selectionEnd;
+			} catch (e) { got = String(e); }
+			check(57, 'insertAtCursor — at the cursor, a space either side only where the neighbour is not one; focused, caret after, one input event each',
+				JSON.stringify(got) === JSON.stringify(['hello', 'Hello big there', 'Hi again', 'Hi you']) && caret === 6 &&
+					t.window.document.activeElement === box && inputs === 4,
+				'got=' + JSON.stringify(got) + ' caret=' + caret + ' inputs=' + inputs);
+		}
 	}
 
 	// 44. A phone with an audio session (an iPhone) opens each mic under play-and-record,

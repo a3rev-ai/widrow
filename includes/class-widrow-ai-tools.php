@@ -152,6 +152,31 @@ final class Widrow_AI_Tools {
 	}
 
 	/**
+	 * BFF proxy — a dictated clip to text (11.6.0), for a widget that cannot post it to DEF
+	 * directly. The JSON body goes unchanged; DEF's status and JSON come back as they are.
+	 * Auth mirrors rest_proxy_chat_stream; the visitor's IP is what DEF counts their messages by.
+	 *
+	 * @param \WP_REST_Request $request The REST request.
+	 * @return \WP_REST_Response|\WP_Error
+	 */
+	public static function rest_proxy_chat_voice_transcribe( $request ) {
+		if ( is_user_logged_in() ) {
+			$nonce = $request->get_header( 'X-WP-Nonce' );
+			if ( ! $nonce || ! wp_verify_nonce( $nonce, 'wp_rest' ) ) {
+				return new \WP_Error(
+					'invalid_nonce',
+					'Authentication required.',
+					array( 'status' => 403 )
+				);
+			}
+		}
+
+		$headers = self::build_proxy_headers();
+		$def_url = \Widrow_AI::get_def_api_url_internal() . '/api/customer/voice/transcribe';
+		return self::json_proxy( $def_url, $headers, $request->get_body() );
+	}
+
+	/**
 	 * SSE streaming proxy — forwards request to DEF and streams response back.
 	 *
 	 * @param string  $url     DEF backend URL.

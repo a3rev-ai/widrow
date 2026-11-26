@@ -4,7 +4,7 @@ Tags: ai, chat, digital employee, ai assistant, customer support
 Requires at least: 6.2
 Tested up to: 7.1
 Requires PHP: 8.0
-Stable tag: 11.5.8
+Stable tag: 11.6.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -118,6 +118,11 @@ Chat messages, user display name, session context, and the visitor's IP address 
 4. Admin Settings — Branding, Chat Settings, Escalation, and Connection tabs
 
 == Changelog ==
+
+= 11.6.0 - 2026-11-26 =
+* Feature - In Customer Chat and the Staff AI console, the microphone now dictates: tap it, speak, and tap it again, and what was said appears in the message box to edit. Nothing is sent until you press Send, and the message goes as a typed one, so its reply is written, not spoken. This works whether voice conversation is on or off for the site.
+* Feature - The round button at the end of the message box now shows wherever voice is on. Where voice conversation is on it starts and ends the conversation, as before; where it is off it starts and ends the hands-free voice that the microphone used to start.
+* New - Customer Chat can send a dictated recording through the site for transcription when it cannot reach the platform directly.
 
 = 11.5.8 - 2026-11-26 =
 * Fix - When the voice provider's account cannot be used (its credit spent or its key refused), Customer Chat and Staff AI now say that voice isn't available and that you can type your message instead, where they used to stay silent or say the recording could not be transcribed.
@@ -1185,7 +1190,7 @@ This plugin connects to an external AI service to power the Customer Chat and St
 When the Customer Chat widget or Staff AI panel is used, chat messages are sent to the configured Digital Employee Framework (DEF) API server for processing by AI models. This connection is required for the chat features to function.
 
 * **What is sent:** Chat messages, user display name, session context, and the visitor's IP address — the last so the service can distinguish one visitor from another when applying flood protection.
-* **When:** Only when a user or visitor actively sends a message via the chat interface.
+* **When:** Only when a user or visitor actively sends a message via the chat interface, or dictates one with the microphone (the recording is sent to be turned into text, and nothing is kept).
 * **Chat outcomes:** After a visitor has chatted, the site's server reports when that visitor reaches a page (its path, without the query string), submits a form (the form plugin and form id), places an order, or sends the hand-off form — with the chat's reference and the time, and never a form's contents, an order number, a name or an email. The chat's reference is kept in the first-party cookie `def_chat_ref`, renewed for 30 days on each visit and removed by Clear conversation.
 * **Service URL:** Configured by the site administrator on the Connection tab (typically `https://api.defho.ai`).
 * **Service provider:** [DEFHO](https://defho.ai/) by a3rev Software.
@@ -1194,11 +1199,11 @@ When the Customer Chat widget or Staff AI panel is used, chat messages are sent 
 
 = Voice media server =
 
-Customer Chat's conversation mode applies only when the site owner has turned it on for their tenancy and a visitor taps the microphone to start a conversation. The visitor's browser then joins an audio room on the platform's voice media server, using the bundled LiveKit client.
+Customer Chat's conversation mode applies only when the site owner has turned it on for their tenancy and a visitor taps Start voice to start a conversation. The visitor's browser then joins an audio room on the platform's voice media server, using the bundled LiveKit client.
 
 * **What is sent:** The visitor's microphone audio while the conversation is open, and the browser's network address (needed to carry the call). From the media server the audio goes, through the Digital Employee Framework, to the voice provider the site owner chose, for its ordinary transcription and speech, as voice in the chat already does. The employee's voice and words come back the same way.
 * **What is kept:** No audio recording is kept. The words of the conversation are saved in the chat, as typed messages are. The media server keeps an ordinary connection log (the visitor's network address, a random conversation name and the participants' identities) for 30 days.
-* **When:** Only while a conversation is open. It ends at the employee's goodbye, a tap on the microphone, when the page is hidden or the chat is closed, after five silent minutes, and at two hours.
+* **When:** Only while a conversation is open. It ends at the employee's goodbye, a tap on End voice, when the page is hidden or the chat is closed, after five silent minutes, and at two hours.
 * **Service URL:** Given to the browser by the Digital Employee Framework API when the conversation starts; a site whose security headers restrict connections must allow it.
 * **Service provider:** [DEFHO](https://defho.ai/) by a3rev Software.
 * **Terms of Service:** [https://defho.ai/terms](https://defho.ai/terms)

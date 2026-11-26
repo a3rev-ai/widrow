@@ -542,8 +542,8 @@ if ( ! defined( 'ABSPATH' ) ) {
 									</svg>
 								</button>
 								<button type="button" class="mic-btn" id="micBtn" data-state="idle"
-									aria-label="<?php echo esc_attr__( 'Speak', 'widrow-ai' ); ?>"
-									title="<?php echo esc_attr__( 'Speak your message — a pause sends it', 'widrow-ai' ); ?>">
+									aria-label="<?php echo esc_attr__( 'Dictate', 'widrow-ai' ); ?>"
+									title="<?php echo esc_attr__( 'Dictate', 'widrow-ai' ); ?>">
 									<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
 										stroke-linecap="round" stroke-linejoin="round">
 										<path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
@@ -982,7 +982,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 			stopped: <?php echo wp_json_encode( __( 'Stopped', 'widrow-ai' ) ); ?>,
 			noConversations: <?php echo wp_json_encode( __( 'No conversations yet', 'widrow-ai' ) ); ?>,
 			assistantStopped: <?php echo wp_json_encode( __( 'The assistant stopped before finishing. Please try again.', 'widrow-ai' ) ); ?>,
-			micStart: <?php echo wp_json_encode( __( 'Speak', 'widrow-ai' ) ); ?>,
+			micStart: <?php echo wp_json_encode( __( 'Dictate', 'widrow-ai' ) ); ?>,
 			micDenied: <?php echo wp_json_encode( __( 'The microphone is blocked for this site in your browser. Allow it in the site permissions (the icon beside the address bar) and try again.', 'widrow-ai' ) ); ?>,
 			micNotFound: <?php echo wp_json_encode( __( 'No microphone was found on this device.', 'widrow-ai' ) ); ?>,
 			micFailed: <?php echo wp_json_encode( __( "The microphone couldn't start (%e).", 'widrow-ai' ) ); ?>,
@@ -1006,8 +1006,8 @@ if ( ! defined( 'ABSPATH' ) ) {
 			talking: <?php echo wp_json_encode( __( 'Speak, or type. Tap the button to end.', 'widrow-ai' ) ); ?>,
 			talkNotUnderstood: <?php echo wp_json_encode( __( "I couldn't make that out. You can type your message below instead.", 'widrow-ai' ) ); ?>,
 			talkTimeLimit: <?php echo wp_json_encode( __( 'The conversation reached its time limit. Tap the button to start a new one.', 'widrow-ai' ) ); ?>,
-			talkUnavailable: <?php echo wp_json_encode( __( 'Voice conversation is unavailable right now. Tap the mic to talk.', 'widrow-ai' ) ); ?>,
-			talkBusy: <?php echo wp_json_encode( __( 'Voice conversation is busy right now, so the microphone works as usual.', 'widrow-ai' ) ); ?>,
+			talkUnavailable: <?php echo wp_json_encode( __( 'Voice conversation is unavailable right now. Tap the button to talk.', 'widrow-ai' ) ); ?>,
+			talkBusy: <?php echo wp_json_encode( __( 'Voice conversation is busy right now, so the button starts the usual voice.', 'widrow-ai' ) ); ?>,
 			talkStopped: <?php echo wp_json_encode( __( 'Voice stopped unexpectedly. Tap the button to start again.', 'widrow-ai' ) ); ?>,
 			voiceUnavailable: <?php echo wp_json_encode( __( "Voice isn't available right now. You can type your message below instead.", 'widrow-ai' ) ); ?>,
 			talkingMic: <?php echo wp_json_encode( __( 'Speak, or type — tap the mic to end', 'widrow-ai' ) ); ?>,

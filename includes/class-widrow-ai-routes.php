@@ -127,6 +127,17 @@ final class Widrow_AI_Routes {
 			)
 		);
 
+		// Customer Chat BFF proxy — a dictated clip to text (11.6.0); anyone's, as /chat/stream is.
+		register_rest_route(
+			WIDROW_AI_API_NAME_SPACE,
+			'/chat/voice/transcribe',
+			array(
+				'methods'             => 'POST',
+				'permission_callback' => '__return_true',
+				'callback'            => array( 'Widrow_AI_Tools', 'rest_proxy_chat_voice_transcribe' ),
+			)
+		);
+
 		// Customer Chat BFF proxy — upload init/commit (same pattern as chat)
 		register_rest_route(
 			WIDROW_AI_API_NAME_SPACE,

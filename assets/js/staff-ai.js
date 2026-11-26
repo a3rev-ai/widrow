@@ -268,6 +268,7 @@ function t(key, fallback) {
 			});
 			var err = new Error(detailMsg ? errorMsg : (errorCode ? '[' + errorCode + '] ' + errorMsg : errorMsg));
 			err.status = response.status;
+			err.data = data;   // a caller that reads the refusal's own code (dictation's transcribe)
 			throw err;
 		}
 		return data;
@@ -905,6 +906,7 @@ function t(key, fallback) {
 	// Load a specific conversation
 	async function loadConversation(id, shared) {
 		if (conversationOn) endConversation();   // a spoken turn never lands in a thread she just opened
+		if (dictating) endDictation();   // nor a dictation's words in its box
 		if (talk) endTalk();
 		currentConversationId = id;
 		rememberConversation(id);
@@ -1242,6 +1244,7 @@ function t(key, fallback) {
 		// new chat, and the send's own finally frees the composer. DEF lands it on its thread.
 		if (_streamAbort) { turnReleased = true; _streamAbort.abort(); }
 		if (conversationOn || spokenTurn) endConversation();   // a reply being read aloud goes quiet too
+		if (dictating) endDictation();   // a dictation's words never land in the new chat
 		if (talk) endTalk();
 		// Every path to a fresh chat leaves the open page — the sidebar button,
 		// a project row's "New chat", every Ask button.
@@ -1300,7 +1303,7 @@ function t(key, fallback) {
 		var name = role === 'start' ? t('startVoice', 'Start voice') : role === 'end' ? t('endVoice', 'End voice')
 			: !stopTurn ? t('sendMessage', 'Send message') : stopTurn.stopping ? t('stopping', 'Stopping…') : t('stop', 'Stop');
 		if (sendBtn.getAttribute('aria-label') !== name) sendBtn.setAttribute('aria-label', name);
-		sendBtn.disabled = role === 'start' ? isLoading || isReadOnly : role === 'end' ? false
+		sendBtn.disabled = role === 'start' ? isLoading || isReadOnly || dictating : role === 'end' ? false
 			: stopTurn ? stopTurn.stopping
 			: (!composerInput.value.trim() && !hasActiveFiles()) || isLoading || isReadOnly;
 		if (role) sendBtn.dataset.voice = role;
@@ -1308,8 +1311,10 @@ function t(key, fallback) {
 		if (voice) sendBtn.title = name;
 		else sendBtn.removeAttribute('title');
 		if (micBtn && speaker) {
-			if (role && document.activeElement === micBtn) (sendBtn.disabled ? composerInput : sendBtn).focus();   // focus is not dropped to the page
-			micBtn.hidden = !!role;
+			// The mic dictates beside the button; a conversation holds the microphone, and the button ends it.
+			var micHidden = !!role && micBtn.dataset.state === 'conversation';
+			if (micHidden && document.activeElement === micBtn) (sendBtn.disabled ? composerInput : sendBtn).focus();   // focus is not dropped to the page
+			micBtn.hidden = micHidden;
 			// In a conversation the hint names whichever control ends it: the button, or the mic
 			// while a typed reply streams (the button is Stop then).
 			if (micBtn.dataset.state === 'conversation') {
@@ -1365,7 +1370,7 @@ function t(key, fallback) {
 	});
 
 	sendBtn.addEventListener('click', function () {
-		if (sendBtn.dataset.voice === 'start' || sendBtn.dataset.voice === 'end') micTap();   // the mic's tap, in this tap
+		if (sendBtn.dataset.voice === 'start' || sendBtn.dataset.voice === 'end') micTap(true);   // Start or End voice, in this tap
 		else if (stopTurn) requestStop();
 		else sendMessage();
 	});
@@ -1627,6 +1632,8 @@ function t(key, fallback) {
 		// Hands-free is a foreground interaction: a pocketed phone must not keep
 		// listening (7.7.1) — the mic is released the moment the page hides.
 		if (document.visibilityState === 'hidden' && (conversationOn || spokenTurn)) endConversation();
+		// A dictation is finished: the mic closes, and what was said still arrives in the box, unsent.
+		if (document.visibilityState === 'hidden' && dictation && dictation.isRecording()) finishDictation();
 		// A conversation too, on a phone; on a laptop another tab leaves it on.
 		if (document.visibilityState === 'hidden' && talk && window.matchMedia('(pointer: coarse)').matches) endTalk();
 		if (document.visibilityState === 'visible') {
@@ -2987,8 +2994,8 @@ function t(key, fallback) {
 		micBtn.dataset.state = state;
 		micLabel.textContent = label || '';
 		micLabel.hidden = !label;
-		micBtn.setAttribute('aria-label', label || t('micStart', 'Speak'));
-		if (talkMode) updateSendButton();
+		micBtn.setAttribute('aria-label', label || t('micStart', 'Dictate'));
+		updateSendButton();
 	}
 
 	function initVoice() {
@@ -3046,19 +3053,28 @@ function t(key, fallback) {
 				showInfo(voiceModeLabel(next));
 			});
 		}
+		// The mic's own recorder: it dictates, so no pause ends it (no onSilence), only the tap.
+		dictation = DefVoice.createRecorder({
+			onTick: function (seconds) { setMicState('listening', Math.floor(seconds / 60) + ':' + String(seconds % 60).padStart(2, '0')); },
+			onAutoStop: finishDictation,
+			onIdle: finishDictation
+		});
 		voiceRecorder = DefVoice.createRecorder({
 			onTick: function (seconds) {
 				setMicState('listening', Math.floor(seconds / 60) + ':' + String(seconds % 60).padStart(2, '0') + ' · ' + t('tapToSend', 'Tap to send'));
 			},
 			onAutoStop: finishRecording,
 			onSilence: finishRecording,
-			onIdle: function () { endConversation(tapLine('micClosedIdle', 'The mic closed — tap it to speak again.', 'The mic closed. Tap the button to speak again.')); }
+			onIdle: function () { endConversation(t('micClosedIdleButton', 'The mic closed. Tap the button to speak again.')); }   // the button talks again (the mic dictates)
 		});
-		micBtn.addEventListener('click', micTap);
+		micBtn.addEventListener('click', dictateTap);
+		updateSendButton();   // the button at the box's end talks: Start voice
 	}
 
-	function micTap() {
+	// Start voice and End voice (button), and the mic while a voice is on: hands-free, or a conversation.
+	function micTap(button) {
 		if (talk) { endTalk(); return; }
+		if (button && conversationOn) { endConversation(); return; }   // End voice ends hands-free; its mic's tap still sends the turn
 		if (voiceRecorder.isRecording()) { finishRecording(); return; }
 		if (conversationOn) { endConversation(); return; }   // she is answering or speaking
 		if (isLoading || isReadOnly) return;
@@ -3088,17 +3104,7 @@ function t(key, fallback) {
 			voiceRecorder.release();   // a stream granted before the failure does not stay hot
 			setMicState('idle');
 			restorePlaceholder();
-			// Say what the browser said, not one line for every failure (7.7.6). The
-			// module's own "context won't wake" error (a plain Error) is the quiet hint.
-			var name = (e && e.name) || '';
-			if (!fromTap || name === 'Error') { showInfo(tapLine('tapToSpeakAgain', 'Tap the mic to speak again.', 'Tap the button to speak again.')); return; }
-			if (name === 'NotAllowedError' || name === 'SecurityError') {
-				showError(t('micDenied', 'The microphone is blocked for this site in your browser. Allow it in the site permissions (the icon beside the address bar) and try again.'));
-			} else if (name === 'NotFoundError' || name === 'OverconstrainedError') {
-				showError(t('micNotFound', 'No microphone was found on this device.'));
-			} else {
-				showError(t('micFailed', "The microphone couldn't start (%e).").replace('%e', (name && name !== 'Error' ? name : (e && e.message)) || 'unknown'));
-			}
+			showMicFailure(e, fromTap, t('tapToSpeakAgainButton', 'Tap the button to speak again.'));
 			return;
 		}
 		if (!started) return;   // the first tap owns the recording
@@ -3108,6 +3114,20 @@ function t(key, fallback) {
 		setMicState('listening', '0:00 · ' + t('tapToSend', 'Tap to send'));
 		if (!composerPlaceholder) composerPlaceholder = composerInput.placeholder;
 		composerInput.placeholder = t('listening', 'Listening… pause when you\'re done, or tap to send');
+	}
+
+	// Say what the browser said, not one line for every failure (7.7.6). The module's own
+	// "context won't wake" error (a plain Error), or a start outside a tap, is the quiet hint `again`.
+	function showMicFailure(e, fromTap, again) {
+		var name = (e && e.name) || '';
+		if (!fromTap || name === 'Error') { showInfo(again); return; }
+		if (name === 'NotAllowedError' || name === 'SecurityError') {
+			showError(t('micDenied', 'The microphone is blocked for this site in your browser. Allow it in the site permissions (the icon beside the address bar) and try again.'));
+		} else if (name === 'NotFoundError' || name === 'OverconstrainedError') {
+			showError(t('micNotFound', 'No microphone was found on this device.'));
+		} else {
+			showError(t('micFailed', "The microphone couldn't start (%e).").replace('%e', (name && name !== 'Error' ? name : (e && e.message)) || 'unknown'));
+		}
 	}
 
 	function restorePlaceholder() {
@@ -3324,6 +3344,94 @@ function t(key, fallback) {
 		readBackSoFar(true);
 	}
 
+	// ── Dictation (11.6.0) ──────────────────────────────────────────────────
+	// A tap on the mic records, a second tap puts what was said in the box to edit. Nothing
+	// is sent: the person presses Send, and it goes as a typed message.
+	var dictation = null;      // the mic's own recorder (initVoice)
+	var dictating = false;     // from the tap until the words are in the box
+	var dictationEpoch = 0;
+
+	async function dictateTap() {
+		if (talk || conversationOn) { micTap(); return; }   // the voice that is on keeps the mic's tap
+		if (dictation.isRecording()) { finishDictation(); return; }
+		if (dictating || isLoading || isReadOnly) return;
+		if (!DefVoice.micAllowedBySite()) {
+			showError(t('micBlockedBySite', "This site's security settings block the microphone for every visitor (Permissions-Policy). The site admin needs to allow it for this site."));
+			return;
+		}
+		dictating = true;
+		var epoch = dictationEpoch;
+		var live = liveTranscription();
+		if (live) live.turn = false;
+		updateSendButton();
+		try {
+			await dictation.start(live);
+		} catch (e) {
+			if (epoch === dictationEpoch) {
+				endDictation();
+				showMicFailure(e, true, t('tapToSpeakAgain', 'Tap the mic to speak again.'));
+			}
+			return;
+		}
+		if (epoch !== dictationEpoch) { dictation.release(); return; }
+		hideError();
+		hideInfo();
+		setMicState('listening', '0:00');
+	}
+
+	async function finishDictation() {
+		var epoch = dictationEpoch;
+		setMicState('transcribing', t('transcribing', 'Transcribing…'));
+		var recording = await dictation.stop();
+		if (epoch !== dictationEpoch) return;
+		if (!recording || !recording.spoke) {
+			endDictation(recording ? t('nothingHeard', 'Nothing was heard. Try again a little closer to the microphone.') : null);
+			return;
+		}
+		if (recording.unavailable) { endDictation(t('voiceUnavailable', "Voice isn't available right now. You can type your message below instead.")); return; }
+		if (recording.transcript !== undefined) { endDictation(null, recording.transcript); return; }
+		var said;
+		try {
+			said = await transcribeClip({ audio_base64: await DefVoice.toBase64(recording.blob), audio_mime: recording.mime, audio_seconds: recording.seconds });
+		} catch (e) {
+			said = { info: t('transcribeFailed', 'That recording could not be transcribed. Please try again.') };
+		}
+		if (epoch === dictationEpoch) endDictation(said.info, said.text, said.error);
+	}
+
+	// A recording with no live words: the host's transcribe request. Resolves { text }, or the
+	// line to show: { info } for a refusal, { error } for the console's ordinary service error.
+	async function transcribeClip(clip) {
+		try {
+			var data = await apiRequest('/voice/transcribe', { method: 'POST', body: JSON.stringify(clip) });
+			return { text: String(data.text || '') };
+		} catch (e) {
+			var body = e.data || {};
+			var code = body.error || (body.detail && body.detail.error);
+			if (code === 'voice_unavailable') return { info: t('voiceUnavailable', "Voice isn't available right now. You can type your message below instead.") };
+			if (e.status === 422) return { info: t('nothingHeard', 'Nothing was heard. Try again a little closer to the microphone.') };
+			if (!e.status || (e.status === 502 && !body.error)) return { error: e.message };
+			return { info: t('transcribeFailed', 'That recording could not be transcribed. Please try again.') };
+		}
+	}
+
+	// The words go in at the cursor, a space from the words around them; a refusal leaves the box as it was.
+	function endDictation(info, text, error) {
+		dictating = false;
+		dictationEpoch++;
+		dictation.release();
+		setMicState('idle');
+		if (info) showInfo(info);
+		if (error) showError(error);
+		if (!text) return;
+		if (composerInput.classList.contains('staff-ai-suggestion-text')) {
+			composerInput.value = '';
+			composerInput.classList.remove('staff-ai-suggestion-text');
+		}
+		DefVoice.insertAtCursor(composerInput, text);
+	}
+	// ── end dictation
+
 	// ── Conversation mode ──────────────────────────────────────────────────────
 	// Where the status says voice_conversation, the host holds conversations
 	// (host.conversation), the browser has WebRTC and the Voice button is on her voice, a
@@ -3358,23 +3466,17 @@ function t(key, fallback) {
 		return talkMode && !talkFailed && !!window.RTCPeerConnection && speaker.getMode() === 'server';
 	}
 
-	// Where the mode is on, Send is the one button to talk with, and the mic is not shown: with
-	// the box empty it starts a conversation ('start') or ends the one on ('end'); with words or
-	// files in it, or a reply's Stop, it is today's button ('send'). '' is today's Send and mic:
-	// the mode off or failed, or a tap gone on as the voice above.
+	// Wherever the voice is on, Send is also the button to talk with: with the box empty it
+	// starts a voice ('start': a conversation where it can, else the voice above) or ends the one
+	// on ('end'); with words or files in it, or a reply's Stop, it is today's button ('send').
+	// '' is today's Send, and the mic ends a voice that is on.
 	function talkButton() {
 		if (!speaker) return '';
-		var talking = micBtn.dataset.state === 'conversation';
-		if (!talking && (!canTalk() || talkSkip || conversationOn)) return '';
+		var talking = micBtn.dataset.state === 'conversation' || conversationOn;
 		if (stopTurn) return talking ? '' : 'send';   // a reply streaming: Stop, and in a conversation the mic ends it
 		var typed = composerInput.value.trim() && !composerInput.classList.contains('staff-ai-suggestion-text');   // a suggestion counts as empty
 		if (!typed && stagedFiles.some(function (f) { return f.status === 'failed' || f.status === 'uploading'; })) return '';
 		return typed || stagedFiles.length ? 'send' : talking ? 'end' : 'start';
-	}
-
-	// A line that says what to tap: the button where it is what shows once voice stops.
-	function tapLine(key, fallback, buttonFallback) {
-		return speaker && canTalk() && !talkSkip ? t(key + 'Button', buttonFallback) : t(key, fallback);
 	}
 
 	// Inside the mic tap, before any await: the host unlocks the phone's audio there.
@@ -3508,7 +3610,7 @@ function t(key, fallback) {
 			showInfo(t('talkTimeLimit', 'The conversation reached its time limit. Tap the button to start a new one.'));
 		} else if (kind === 'connect' || kind === 'load') {
 			talkFailed = true;
-			showInfo(t('talkUnavailable', 'Voice conversation is unavailable right now. Tap the mic to talk.'));
+			showInfo(t('talkUnavailable', 'Voice conversation is unavailable right now. Tap the button to talk.'));
 		} else if (kind === 'microphone') {
 			showError(t('micDenied', 'The microphone is blocked for this site in your browser. Allow it in the site permissions (the icon beside the address bar) and try again.'));
 		} else if (kind === 'busy') {
@@ -3518,7 +3620,7 @@ function t(key, fallback) {
 			listen().then(function () {
 				if (!conversationOn) talkSkip = true;
 				updateSendButton();
-				showInfo(t('talkBusy', 'Voice conversation is busy right now, so the microphone works as usual.'));
+				showInfo(t('talkBusy', 'Voice conversation is busy right now, so the button starts the usual voice.'));
 			});
 		} else {
 			showInfo(t('talkStopped', 'Voice stopped unexpectedly. Tap the button to start again.'));
