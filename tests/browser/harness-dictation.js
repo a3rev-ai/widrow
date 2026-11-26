@@ -83,6 +83,7 @@ async function bootWidget(opts) {
 		{ url: 'https://shop.test/', runScripts: 'outside-only', pretendToBeVisual: true });
 	const w = dom.window;
 	extract.stubMatchMedia(w);
+	if (opts.reduced) w.reducedMotion = 'reduce';
 	const realST = w.setTimeout.bind(w);
 	w.setTimeout = (fn, ms) => realST(fn, Math.min(ms || 0, 1));
 	for (const src of VENDOR) w.eval(src);
@@ -138,6 +139,8 @@ async function bootWidget(opts) {
 	Object.assign(h, {
 		root,
 		mic: () => $('.def-cc-composer-mic'), box: () => $('.def-cc-composer-input'), btn: () => $('.def-cc-composer-send'),
+		waveShown: () => $('.def-cc-composer-form').classList.contains('def-cc-composer-form--dictating') && !!$('.def-cc-dictation-wave'),
+		bars: () => Array.from(root.querySelectorAll('.def-cc-dictation-wave span')).map(b => b.style.height),
 		bubbles: () => Array.from(root.querySelectorAll('.def-cc-message--assistant .def-cc-message-content')).map(b => b.textContent.trim()),
 		role: () => ['start', 'end'].find(r => h.btn().classList.contains('def-cc-composer-send--' + r)) ||
 			(h.btn().classList.contains('def-cc-composer-send--talk') ? 'send' : 'today'),
@@ -174,10 +177,12 @@ function bootConsole(opts) {
 	opts = opts || {};
 	const dom = new JSDOM('<!doctype html><div id="messagesContainer"><div id="messagesList"></div></div>' +
 		'<div id="infoBanner"></div><div id="errorBanner"></div>' +
-		'<textarea id="composerInput" placeholder="Ask"></textarea><button id="sendBtn"></button>' +
+		'<div class="composer"><textarea id="composerInput" placeholder="Ask"></textarea><div id="dictationWave"></div></div><button id="sendBtn"></button>' +
 		'<button id="micBtn"></button><span id="micLabel"></span><button id="voiceBtn"></button>',
 	{ url: 'https://acme.defho.test/staff-ai/acme/', pretendToBeVisual: true, runScripts: 'outside-only' });
 	const window = dom.window, document = window.document;
+	if (opts.reduced) window.reducedMotion = 'reduce';
+	extract.stubMatchMedia(window);
 	const $ = id => document.getElementById(id);
 	const recs = fakeRecorders();
 	const insertAtCursor = realInsert(window);
@@ -229,6 +234,8 @@ function bootConsole(opts) {
 		window, document, api, recs, calls, sent, $,
 		box: () => $('composerInput'),
 		role: () => $('sendBtn').dataset.voice || 'today',
+		waveShown: () => $('composerInput').parentNode.classList.contains('is-dictating'),
+		bars: () => Array.from($('dictationWave').querySelectorAll('span')).map(b => b.style.height),
 		info: () => $('infoBanner').classList.contains('visible') ? $('infoBanner').textContent : '',
 		error: () => $('errorBanner').classList.contains('visible') ? $('errorBanner').textContent : '',
 		transcribes: () => calls.filter(c => c.url === DOOR + '/voice/transcribe'),
@@ -304,15 +311,17 @@ function bootConsole(opts) {
 		await h.dictate({ transcript: 'again', spoke: true, seconds: 1 });
 		check('widget — the words go in at the cursor, a space from the words around them',
 			mid === 'Hello big there' && h.box().value === 'Hi again', show([mid, h.box().value]));
+		h.type('Before the tap', 6);
 		h.mic().click();
 		await sleep(10);
-		h.type('Typed while it listened', 23);
+		const during = [h.waveShown(), h.box().value];
 		h.mic().click();
 		await sleep(5);
-		h.recs.mic().finish({ transcript: 'and said too', spoke: true, seconds: 1 });
+		h.recs.mic().finish({ transcript: 'and said', spoke: true, seconds: 1 });
 		await sleep(30);
-		check('widget — words typed while it records are kept; the dictated words go where the cursor is when they arrive',
-			h.box().value === 'Typed while it listened and said too', h.box().value);
+		check('widget — while it records the wave has the box (no typing); its earlier text is back after, the words where the cursor was',
+			during[0] === true && during[1] === 'Before the tap' && !h.waveShown() && h.box().value === 'Before and said the tap',
+			show({ during, value: h.box().value }));
 	});
 
 	await run('widget: a pause', async () => {
@@ -518,6 +527,143 @@ function bootConsole(opts) {
 		check('console — End voice ends it: released, back to Start voice', hf.releases >= 1 && t.role() === 'start' && !t.api.state().on,
 			show({ releases: hf.releases, role: t.role() }));
 	});
+
+	// ════ While a dictation records (11.6.2): the wave, a stop square, and Send in one tap ════
+	const screens = {
+		widget: {
+			boot: async o => {
+				const h = await bootWidget(o);
+				h.tapMic = () => h.mic().click();
+				h.tapSend = () => h.btn().click();
+				h.micName = () => h.mic().getAttribute('aria-label');
+				h.sendOn = () => !h.btn().disabled;
+				h.sendName = () => h.btn().getAttribute('aria-label');
+				h.lastSent = () => { const b = h.sent[0]; return b && { text: b.messages.slice(-1)[0].content, voice: 'via_voice' in b || 'audio_base64' in b || 'speech_out' in b }; };
+				h.sentCount = () => h.sent.length;
+				h.line = () => h.bubbles().slice(-1)[0] || '';
+				return h;
+			},
+			refusal: why => ({ direct: () => why }),
+		},
+		console: {
+			boot: async o => {
+				const t = bootConsole(o);
+				await sleep(5);
+				t.mic = () => t.$('micBtn');
+				t.recs = t.recs;
+				t.tapMic = () => t.$('micBtn').click();
+				t.tapSend = () => t.$('sendBtn').click();
+				t.micName = () => t.$('micBtn').getAttribute('aria-label');
+				t.sendOn = () => !t.$('sendBtn').disabled;
+				t.sendName = () => t.$('sendBtn').getAttribute('aria-label');
+				t.lastSent = () => t.sent.length ? { text: t.sent[0], voice: false } : undefined;
+				t.sentCount = () => t.sent.length;
+				t.line = () => t.info() || t.error();
+				return t;
+			},
+			refusal: why => ({ transcribe: () => json(why.status, why.body) }),
+		},
+	};
+	for (const [name, sc] of Object.entries(screens)) {
+		await run(name + ': while it records', async () => {
+			const h = await sc.boot();
+			h.type('Note:', 5);
+			h.tapMic();
+			await sleep(10);
+			const r = h.recs.mic();
+			const flat = h.bars();
+			r.opts.onLevel && r.opts.onLevel(0.9);
+			r.opts.onLevel && r.opts.onLevel(0.2);
+			const moved = h.bars();
+			check(name + ' — while it records: the wave across the box, the mic named "Stop dictating", the round button Send and enabled, the box text kept',
+				h.waveShown() && flat.length >= 16 && h.micName() === 'Stop dictating' && h.role() === 'send' && h.sendOn() &&
+					h.sendName() === 'Send message' && h.box().value === 'Note:',
+				show({ wave: h.waveShown(), bars: flat.length, mic: h.micName(), role: h.role(), on: h.sendOn(), send: h.sendName(), value: h.box().value }));
+			check(name + ' — the wave moves with the mic\'s level: the newest bars at the right, louder taller',
+				typeof r.opts.onLevel === 'function' && show(moved) !== show(flat) &&
+					parseFloat(moved[moved.length - 2]) > parseFloat(moved[moved.length - 1]) && parseFloat(moved[moved.length - 1]) > parseFloat(flat[0]),
+				show({ flat: flat.slice(-3), moved: moved.slice(-3) }));
+			h.tapMic();
+			await sleep(5);
+			r.finish(SAID);
+			await sleep(30);
+			check(name + ' — the stop tap: the words in the box after its text, nothing sent, the wave gone, the mic "Dictate" again',
+				h.box().value === 'Note: book a table for two' && h.sentCount() === 0 && !h.waveShown() && h.micName() === 'Dictate',
+				show({ value: h.box().value, sent: h.sentCount(), wave: h.waveShown(), mic: h.micName() }));
+		});
+
+		await run(name + ': Send while it records', async () => {
+			const h = await sc.boot();
+			h.type('Hello there', 5);
+			h.tapMic();
+			await sleep(10);
+			const r = h.recs.mic();
+			h.tapSend();
+			await sleep(5);
+			const stopped = r.stops === 1 && h.sentCount() === 0;
+			r.finish(SAID);
+			await sleep(80);
+			const got = h.lastSent();
+			check(name + ' — Send finishes the dictation and sends ONE typed message: the box text and the words, where a stop puts them; no voice flag',
+				stopped && h.sentCount() === 1 && got.text === 'Hello book a table for two there' && !got.voice,
+				show({ stopped, sent: h.sentCount(), got }));
+			await sleep(30);
+			check(name + ' — after it the box is empty, the wave gone, and no recorder opens again',
+				(name === 'console' || h.box().value === '') && !h.waveShown() && r.starts.length === 1 && h.recs.handsFree().starts.length === 0,
+				show({ value: h.box().value, wave: h.waveShown(), starts: r.starts.length }));
+		});
+
+		const REFUSED = [
+			['nothing heard', null, { spoke: false, seconds: 3, mime: 'audio/webm', blob: {} }, 'Nothing was heard. Try again a little closer to the microphone.'],
+			['voice refused live', null, { spoke: true, seconds: 3, unavailable: true, mime: 'audio/webm', blob: {} }, "Voice isn't available right now. You can type your message below instead."],
+			['an empty transcript', null, { transcript: '', spoke: true, seconds: 2, mime: 'audio/webm', blob: {} }, ''],
+			['a transcription failure', { status: 502, body: { detail: { error: 'transcription_failed', message: 'x' }, error: 'transcription_failed', code: 'staff_ai_service_error' } }, CLIP, 'That recording could not be transcribed. Please try again.'],
+			['voice unavailable', { status: 502, body: { detail: { error: 'voice_unavailable', message: 'x' }, error: 'voice_unavailable', code: 'staff_ai_service_error' } }, CLIP, "Voice isn't available right now. You can type your message below instead."],
+			['a refused request (422)', { status: 422, body: { detail: { error: 'nothing_heard', message: 'x' } } }, CLIP, 'Nothing was heard. Try again a little closer to the microphone.'],
+		];
+		for (const [why, answer, heard, line] of REFUSED) {
+			await run(name + ': Send, then ' + why, async () => {
+				const h = await sc.boot(answer ? sc.refusal(answer) : undefined);
+				h.type('Keep this', 9);
+				h.tapMic();
+				await sleep(10);
+				h.tapSend();
+				await sleep(5);
+				h.recs.mic().finish(heard);
+				await sleep(80);
+				check(name + ' — Send, then ' + why + ': nothing sent, the box as it was' + (line ? ', and its line' : ''),
+					h.sentCount() === 0 && h.box().value === 'Keep this' && !h.waveShown() && (!line || h.line().indexOf(line) !== -1),
+					show({ sent: h.sentCount(), value: h.box().value, line: h.line() }));
+			});
+		}
+
+		await run(name + ': reduced motion', async () => {
+			const h = await sc.boot({ reduced: true });
+			h.tapMic();
+			await sleep(10);
+			const r = h.recs.mic();
+			const still = h.bars();
+			r.opts.onLevel && r.opts.onLevel(0.9);
+			r.opts.onLevel && r.opts.onLevel(0.1);
+			check(name + ' — reduced motion: the wave shows as a still pattern that does not move with the level',
+				h.waveShown() && still.length >= 16 && new Set(still).size > 1 && show(h.bars()) === show(still),
+				show({ wave: h.waveShown(), still: still.slice(0, 6), after: h.bars().slice(0, 6) }));
+		});
+	}
+
+	// The wave's look: each screen's own colours, and still under reduced motion.
+	const CC_CSS = fs.readFileSync(path.join(extract.REPO, 'assets/css/widrow-ai-customer-chat.css'), 'utf8');
+	const SA_CSS = fs.readFileSync(path.join(extract.REPO, 'assets/css/staff-ai.css'), 'utf8');
+	const reducedBlocks = css => (css.match(/@media[^{]*prefers-reduced-motion: reduce\)\s*\{[\s\S]*?\n\}/g) || []).join('\n');
+	check('look — the widget\'s wave bars are its own primary colour; under reduced motion they have no transition',
+		/\.def-cc-dictation-wave span\s*\{[^}]*background:\s*var\(--def-cc-primary\)/.test(CC_CSS) &&
+			/\.def-cc-dictation-wave span\s*\{[^}]*transition:\s*none/.test(reducedBlocks(CC_CSS)));
+	check('look — the console\'s wave bars are its own recording red; under reduced motion they have no transition',
+		/\.dictation-wave span\s*\{[^}]*background:\s*#d63638/.test(SA_CSS) &&
+			/\.dictation-wave span\s*\{[^}]*transition:\s*none/.test(reducedBlocks(SA_CSS)));
+	const micMarkup = extract.phpToHtml(extract.element(extract.templateSource(), 'button', l => l.includes('id="micBtn"'), 'micBtn'), 'micBtn');
+	check('look — the console\'s mic carries a stop square, and the box a wave, in the shipped markup',
+		/class="mic-stop"/.test(micMarkup) && /id="dictationWave"/.test(extract.templateSource()), micMarkup.slice(0, 200));
 
 	console.log('harness-dictation: ' + pass + ' passed, ' + fail + ' failed');
 	console.log(results.join('\n'));

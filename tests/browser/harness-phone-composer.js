@@ -166,6 +166,7 @@ function row(setup) {
 	els.setSend = function (disabled, stop) { els.send.classList.toggle('is-stop', !!stop); els.send.disabled = disabled; };
 	// The button's role; the mic not shown only in a conversation (11.6.0: elsewhere it dictates beside it).
 	els.setVoice = function (role) { els.send.dataset.voice = role; els.mic.hidden = els.mic.dataset.state === 'conversation'; };
+	els.dictate = function () { els.input.closest('.composer').classList.add('is-dictating'); };
 	els.setMic('idle');
 	els.setSend(true);
 	setup(els);
@@ -175,6 +176,8 @@ function row(setup) {
 	return { visible, main, pill: /^1 1/.test(computed(els.mic, 'flex') || ''),
 		micWidth: computed(els.mic, 'width'), labelWrap: computed(els.label, 'white-space'),
 		icons: ['send-icon', 'stop-icon', 'wave-icon'].filter(c => shown(els.send.querySelector('.' + c))),
+		box: shown(els.input), wave: shown(d.getElementById('dictationWave')),
+		micIcons: ['mic-icon', 'mic-stop'].filter(c => shown(els.mic.querySelector('.' + c))),
 		sendWidth: computed(els.send, 'width'), sendHeight: computed(els.send, 'height'), sendBg: computed(els.send, 'background') };
 }
 const ALL = ['attach', 'mic', 'readback', 'model', 'send'];
@@ -198,11 +201,12 @@ const MATRIX = [
 	['read-only', e => { e.container.classList.add('disabled'); }, ['attach', 'mic', 'readback', 'model'], ['mic'], false],
 	['conversation mode, box empty: Start voice', e => { e.setVoice('start'); e.setSend(false); }, ALL, ['send'], false],
 	['conversation mode, words typed: Send', e => { e.input.value = 'hi'; e.setVoice('send'); e.setSend(false); }, ALL, ['send'], false],
-	['dictating', e => { e.setMic('listening', '0:03'); e.setVoice('start'); e.setSend(true); }, ['mic'], [], true],
+	// 11.6.2: while a dictation records the round button is Send beside the pill, and the wave has the box.
+	['dictating', e => { e.dictate(); e.setMic('listening', '0:03'); e.setVoice('send'); e.setSend(false); }, ['mic', 'send'], ['send'], true],
 	['in a conversation, box empty: End voice', e => { e.setMic('conversation', 'Speak, or type'); e.setVoice('end'); e.setSend(false); },
 		['attach', 'readback', 'model', 'send'], ['send'], false]
 ];
-const ICONS = { 'conversation mode, box empty: Start voice': ['wave-icon'], 'conversation mode, words typed: Send': ['send-icon'],
+const ICONS = { 'conversation mode, box empty: Start voice': ['wave-icon'], 'conversation mode, words typed: Send': ['send-icon'], 'dictating': ['send-icon'],
 	'in a conversation, box empty: End voice': ['stop-icon'] };
 MATRIX.forEach(function (m) {
 	const r = row(m[1]);
@@ -212,6 +216,8 @@ MATRIX.forEach(function (m) {
 	if (m[0] === 'files staged, box empty' || m[0] === 'suggestion ghost text' || m[0] === 'typed' || m[0].indexOf('conversation mode,') === 0) {
 		check('  and the mic beside Send is the plain 44', r.micWidth === '44px', r.micWidth);
 	}
+	if (m[0] === 'dictating') check('  and the wave has the box, the mic a stop square', !r.box && r.wave && JSON.stringify(r.micIcons) === '["mic-stop"]', JSON.stringify(r));
+	if (m[0] === 'listening') check('  and hands-free keeps the box and its mic icon', r.box && !r.wave && JSON.stringify(r.micIcons) === '["mic-icon"]', JSON.stringify(r));
 	if (m[0] === 'answering, with Stop') check('  and its label may wrap', r.labelWrap === 'normal', r.labelWrap);
 	if (ICONS[m[0]]) {
 		check('  and it is the 48 by 48 round button, showing ' + ICONS[m[0]].join(', ') + (m[0].indexOf('End') > -1 ? ' on the live red' : ''),

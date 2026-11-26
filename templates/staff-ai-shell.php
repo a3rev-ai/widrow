@@ -531,6 +531,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 									id="composerInput"
 									placeholder="<?php echo esc_attr__( 'Send a message...', 'widrow-ai' ); ?>"
 									rows="1"></textarea>
+								<div class="dictation-wave" id="dictationWave" aria-hidden="true"></div>
 							</div>
 							<div class="composer-toolbar">
 								<button type="button" class="upload-btn" id="uploadBtn"
@@ -544,12 +545,15 @@ if ( ! defined( 'ABSPATH' ) ) {
 								<button type="button" class="mic-btn" id="micBtn" data-state="idle"
 									aria-label="<?php echo esc_attr__( 'Dictate', 'widrow-ai' ); ?>"
 									title="<?php echo esc_attr__( 'Dictate', 'widrow-ai' ); ?>">
-									<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+									<svg class="mic-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
 										stroke-linecap="round" stroke-linejoin="round">
 										<path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
 										<path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
 										<line x1="12" y1="19" x2="12" y2="23"></line>
 										<line x1="8" y1="23" x2="16" y2="23"></line>
+									</svg>
+									<svg class="mic-stop" viewBox="0 0 24 24" aria-hidden="true">
+										<rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"></rect>
 									</svg>
 									<span class="mic-label" id="micLabel" hidden></span>
 								</button>
@@ -983,6 +987,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 			noConversations: <?php echo wp_json_encode( __( 'No conversations yet', 'widrow-ai' ) ); ?>,
 			assistantStopped: <?php echo wp_json_encode( __( 'The assistant stopped before finishing. Please try again.', 'widrow-ai' ) ); ?>,
 			micStart: <?php echo wp_json_encode( __( 'Dictate', 'widrow-ai' ) ); ?>,
+			micStop: <?php echo wp_json_encode( __( 'Stop dictating', 'widrow-ai' ) ); ?>,
 			micDenied: <?php echo wp_json_encode( __( 'The microphone is blocked for this site in your browser. Allow it in the site permissions (the icon beside the address bar) and try again.', 'widrow-ai' ) ); ?>,
 			micNotFound: <?php echo wp_json_encode( __( 'No microphone was found on this device.', 'widrow-ai' ) ); ?>,
 			micFailed: <?php echo wp_json_encode( __( "The microphone couldn't start (%e).", 'widrow-ai' ) ); ?>,
