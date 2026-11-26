@@ -4,7 +4,7 @@ Tags: ai, chat, digital employee, ai assistant, customer support
 Requires at least: 6.2
 Tested up to: 7.1
 Requires PHP: 8.0
-Stable tag: 11.6.0
+Stable tag: 11.6.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -118,6 +118,9 @@ Chat messages, user display name, session context, and the visitor's IP address 
 4. Admin Settings — Branding, Chat Settings, Escalation, and Connection tabs
 
 == Changelog ==
+
+= 11.6.1 - 2026-11-26 =
+* Fix - A "translation loading was triggered too early" notice that WordPress 6.7 and later could show in debugging tools no longer appears.
 
 = 11.6.0 - 2026-11-26 =
 * Feature - In Customer Chat and the Staff AI console, the microphone now dictates: tap it, speak, and tap it again, and what was said appears in the message box to edit. Nothing is sent until you press Send, and the message goes as a typed one, so its reply is written, not spoken. This works whether voice conversation is on or off for the site.

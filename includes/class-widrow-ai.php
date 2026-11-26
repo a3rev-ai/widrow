@@ -200,7 +200,7 @@ final class Widrow_AI {
 
 		// Instantiate built-in conditional tools (auto-register via should_register()).
 		add_action(
-			'plugins_loaded',
+			'init',
 			function () {
 				new Widrow_AI_Tool_BbPress_Tickets();
 			},
