@@ -53,6 +53,9 @@ function fakeRecorders() {
 		handsFree: () => list.find(r => typeof r.opts.onSilence === 'function'),
 	};
 }
+const VOICE_SRC = fs.readFileSync(extract.VOICE_PATH, 'utf8');
+// The shared module's own insert, taken from the SHIPPED widrow-ai-voice.js in each page.
+function realInsert(w) { w.eval(VOICE_SRC); const f = w.DefVoice.insertAtCursor; delete w.DefVoice; return f; }
 const SAID = { transcript: 'book a table for two', spoke: true, seconds: 2.4, mime: 'audio/webm', blob: {} };
 const CLIP = { spoke: true, seconds: 3.2, mime: 'audio/mp4', blob: {} };
 
@@ -119,8 +122,9 @@ async function bootWidget(opts) {
 		}
 		return res({}, 200);
 	};
+	const insertAtCursor = realInsert(w);
 	w.DefVoice = {
-		supported: () => true, micAllowedBySite: () => true, isStopPhrase: () => false,
+		supported: () => true, micAllowedBySite: () => true, isStopPhrase: () => false, insertAtCursor,
 		createSpeaker: () => ({ stop() {}, unlock() {}, end() {}, speak() {}, discard() {}, whenIdle: () => Promise.resolve() }),
 		createRecorder: recs.create,
 		toBase64: () => Promise.resolve('QUFBQQ=='), log: () => [], note() {},
@@ -172,13 +176,14 @@ function bootConsole(opts) {
 		'<div id="infoBanner"></div><div id="errorBanner"></div>' +
 		'<textarea id="composerInput" placeholder="Ask"></textarea><button id="sendBtn"></button>' +
 		'<button id="micBtn"></button><span id="micLabel"></span><button id="voiceBtn"></button>',
-	{ url: 'https://acme.defho.test/staff-ai/acme/', pretendToBeVisual: true });
+	{ url: 'https://acme.defho.test/staff-ai/acme/', pretendToBeVisual: true, runScripts: 'outside-only' });
 	const window = dom.window, document = window.document;
 	const $ = id => document.getElementById(id);
 	const recs = fakeRecorders();
+	const insertAtCursor = realInsert(window);
 	const calls = [], sent = [];
 	window.DefVoice = {
-		supported: () => true, micAllowedBySite: () => true, log: () => [], note() {}, isStopPhrase: () => false,
+		supported: () => true, micAllowedBySite: () => true, log: () => [], note() {}, isStopPhrase: () => false, insertAtCursor,
 		createSpeaker: () => ({ mode: 'server', setMode(m) { this.mode = m; }, getMode() { return this.mode; }, unlock() {}, stop() {}, speak() {}, end() {}, whenIdle: () => Promise.resolve() }),
 		createRecorder: recs.create,
 		toBase64: () => Promise.resolve('QUFBQQ=='),
@@ -387,6 +392,23 @@ function bootConsole(opts) {
 			show(quiet) === show([LINES.nothingHeard, 'Keep this', 0]) && h.bubbles().slice(-1)[0] === LINES.voiceUnavailable &&
 				h.box().value === 'Keep this' && h.transcribes.length === 0,
 			show({ quiet, last: h.bubbles().slice(-1)[0] }));
+	});
+
+	await run('widget: the page hides mid-dictation', async () => {
+		const h = await bootWidget();
+		h.type('Note:', 5);
+		h.mic().click();
+		await sleep(10);
+		const r = h.recs.mic();
+		Object.defineProperty(h.w.document, 'visibilityState', { value: 'hidden', configurable: true });
+		h.w.document.dispatchEvent(new h.w.Event('visibilitychange'));
+		await sleep(5);
+		const stopped = r.stops === 1 && !r.recording;
+		if (r.finish) r.finish({ transcript: 'call me back', spoke: true, seconds: 2 });
+		await sleep(30);
+		check('widget — the page hides mid-dictation: the mic closes at once, and what was said still arrives in the box, unsent',
+			stopped && h.box().value === 'Note: call me back' && h.sent.length === 0 && h.recs.handsFree().starts.length === 0,
+			show({ stops: r.stops, value: h.box().value, sent: h.sent.length }));
 	});
 
 	await run('widget: the round button, conversation off', async () => {

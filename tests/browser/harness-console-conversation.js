@@ -92,8 +92,14 @@ function boot(opts) {
 		isStopPhrase: () => false,
 		createSpeaker: () => speaker,
 		// A phone that hands the mic over only inside a tap refuses a start outside one.
-		createRecorder: o => (rec.opts = o, { isRecording: () => false, release() {}, stop: () => Promise.resolve(null),
+		// The mic's own recorder (11.6.0: it dictates, no silence stop) records until stopped; a check answers its stop.
+		createRecorder: o => typeof o.onSilence !== 'function'
+			? (rec.mic = { recording: false, stops: 0, releases: 0, isRecording() { return rec.mic.recording; },
+				start() { rec.mic.recording = true; return Promise.resolve(true); }, release() { rec.mic.recording = false; rec.mic.releases++; },
+				stop() { rec.mic.recording = false; rec.mic.stops++; return new Promise(r => { rec.mic.finish = r; }); } })
+			: (rec.opts = o, { isRecording: () => false, release() {}, stop: () => Promise.resolve(null),
 			start: () => { rec.starts++; return opts.tapOnly && !inTap ? Promise.reject(new Error('needs a tap')) : Promise.resolve(true); } }),
+		insertAtCursor: (input, text) => { input.value += (input.value ? ' ' : '') + text; },
 	};
 
 	// The fake host: every request, and each conversation's callbacks. Its end() answers
@@ -772,6 +778,37 @@ async function run(label, fn) {
 		await settle();
 		check('…and a tap ends the conversation', t.last().ended === 1, 'ended ' + t.last().ended);
 	});
+	await run('dictation, the page hides', async () => {
+		const t = boot({ thread: 'th-1' });
+		await settle();
+		t.micTap();
+		await settle();
+		const listening = t.rec.mic.recording;
+		t.hide();
+		await settle();
+		const stopped = t.rec.mic.stops === 1 && !t.rec.mic.recording;
+		t.rec.mic.finish({ transcript: 'call me back', spoke: true, seconds: 2 });
+		await settle();
+		check('dictation: the page hides mid-dictation, the mic closes at once and what was said still arrives in the box, unsent',
+			listening && stopped && t.document.getElementById('composerInput').value === 'call me back' && t.streams().length === 0,
+			JSON.stringify({ listening, stops: t.rec.mic.stops, value: t.document.getElementById('composerInput').value }));
+	});
+	for (const [why, act] of [['another chat opens', t => t.api.loadConversation('th-2')], ['New chat', t => t.api.resetToNewChat()]]) {
+		await run('dictation, ' + why, async () => {
+			const t = boot({ thread: 'th-1' });
+			await settle();
+			t.micTap();
+			await settle();
+			await act(t);
+			await settle();
+			const dropped = !t.rec.mic.recording && t.rec.mic.releases >= 1;
+			if (t.rec.mic.finish) t.rec.mic.finish({ transcript: 'for the other chat', spoke: true, seconds: 2 });
+			await settle();
+			check('dictation: ' + why + ' mid-dictation: the mic closes and nothing lands in the box',
+				dropped && t.document.getElementById('composerInput').value === '' && t.api.state().mic === 'idle',
+				JSON.stringify({ recording: t.rec.mic.recording, releases: t.rec.mic.releases, value: t.document.getElementById('composerInput').value }));
+		});
+	}
 	await run('fallback lines and focus', async () => {
 		const t = boot({ thread: 'th-1' });
 		await settle();

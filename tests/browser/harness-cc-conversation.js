@@ -751,7 +751,7 @@ async function boot(opts) {
   await sleep(150);
   check('no employee within ten seconds: busy, released once, today\'s voice for this tap, said in the widget\'s words',
     h.orbRow().style.display === 'none' && h.micStops === 1 && h.closed === 1 && h.wakeReleases === 1 && h.disconnects === 1 &&
-      h.starts.length === 1 && h.bubbles().indexOf('Conversations are busy right now, so the microphone works as usual.') !== -1 &&
+      h.starts.length === 1 && h.bubbles().indexOf('Conversations are busy right now, so the button starts the usual voice.') !== -1 &&
       h.notes.indexOf('conversation no employee joined') !== -1,
     'mic=' + h.micStops + ' audio=' + h.closed + ' starts=' + h.starts.length + ' ' + show(h.notes));
   h.noEmployee = false;
@@ -770,7 +770,7 @@ async function boot(opts) {
   h.tap();
   await sleep(150);
   check('end() before the wait is over cancels it: one release, no busy line, no today\'s voice',
-    h.micStops === 1 && h.closed === 1 && h.starts.length === 0 && h.bubbles().indexOf('Conversations are busy right now, so the microphone works as usual.') === -1);
+    h.micStops === 1 && h.closed === 1 && h.starts.length === 0 && h.bubbles().indexOf('Conversations are busy right now, so the button starts the usual voice.') === -1);
 
   // ── The mint's own refusals ──
   h = await boot();
@@ -1233,7 +1233,7 @@ async function boot(opts) {
   btn(h).click();
   await sleep(200);
   check('the busy fallback: the tap goes on as today\'s voice, said as before, End voice to end it',
-    h.starts.length === 1 && h.bubbles().indexOf('Conversations are busy right now, so the microphone works as usual.') !== -1 &&
+    h.starts.length === 1 && h.bubbles().indexOf('Conversations are busy right now, so the button starts the usual voice.') !== -1 &&
       endVoice(h), show(shows(h)));
   h.tap();   // ends today's voice
   await sleep(10);

@@ -93,7 +93,7 @@ const json = (status, body) => new Response(JSON.stringify(body), { status, head
 
 const HEAD = `
 	let nonce = StaffAIConfig.nonce;
-	let messages = [], isLoading = false, isReadOnly = false, conversationOn = false, spokenTurn = false, talk = null, talkTyped = false,
+	let messages = [], isLoading = false, isReadOnly = false, conversationOn = false, dictating = false, spokenTurn = false, talk = null, talkTyped = false,
 		openingSpoken = null, lastSuggestion = null, selectedModel = '', currentConversationId = null,
 		activeProjectId = null, turnReleased = false, _isStreaming = false, _userScrolledUp = false,
 		dirtyInput = false, chipEpoch = 0, readbackBuffer = '';

@@ -86,7 +86,7 @@ async function bootChat(startUrl, stored, ids) {
   };
   const names = Object.keys(deps);
   const api = new window.Function(...names,
-    'var currentConversationId = null, messages = [], isReadOnly = false, conversationOn = false, talk = null, talkTyped = false,' +
+    'var currentConversationId = null, messages = [], isReadOnly = false, conversationOn = false, dictating = false, talk = null, talkTyped = false,' +
     ' spokenTurn = false, _streamAbort = null, turnReleased = false, stopTurn = null;\n' +
     BLOCK + '\n' + W88 + '\n' + NEW_CHAT + REG.replace('return {', 'return { restore: restoreConversation,' +
       ' reset: resetToNewChat, load: loadConversation, conversation: function () { return currentConversationId; },')

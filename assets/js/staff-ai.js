@@ -906,6 +906,7 @@ function t(key, fallback) {
 	// Load a specific conversation
 	async function loadConversation(id, shared) {
 		if (conversationOn) endConversation();   // a spoken turn never lands in a thread she just opened
+		if (dictating) endDictation();   // nor a dictation's words in its box
 		if (talk) endTalk();
 		currentConversationId = id;
 		rememberConversation(id);
@@ -1243,6 +1244,7 @@ function t(key, fallback) {
 		// new chat, and the send's own finally frees the composer. DEF lands it on its thread.
 		if (_streamAbort) { turnReleased = true; _streamAbort.abort(); }
 		if (conversationOn || spokenTurn) endConversation();   // a reply being read aloud goes quiet too
+		if (dictating) endDictation();   // a dictation's words never land in the new chat
 		if (talk) endTalk();
 		// Every path to a fresh chat leaves the open page — the sidebar button,
 		// a project row's "New chat", every Ask button.
@@ -1630,6 +1632,8 @@ function t(key, fallback) {
 		// Hands-free is a foreground interaction: a pocketed phone must not keep
 		// listening (7.7.1) — the mic is released the moment the page hides.
 		if (document.visibilityState === 'hidden' && (conversationOn || spokenTurn)) endConversation();
+		// A dictation is finished: the mic closes, and what was said still arrives in the box, unsent.
+		if (document.visibilityState === 'hidden' && dictation && dictation.isRecording()) finishDictation();
 		// A conversation too, on a phone; on a laptop another tab leaves it on.
 		if (document.visibilityState === 'hidden' && talk && window.matchMedia('(pointer: coarse)').matches) endTalk();
 		if (document.visibilityState === 'visible') {
@@ -3424,12 +3428,7 @@ function t(key, fallback) {
 			composerInput.value = '';
 			composerInput.classList.remove('staff-ai-suggestion-text');
 		}
-		var at = composerInput.selectionEnd, before = composerInput.value.slice(0, at), after = composerInput.value.slice(at);
-		var words = (/\S$/.test(before) ? ' ' : '') + text + (/^\S/.test(after) ? ' ' : '');
-		composerInput.value = before + words + after;
-		composerInput.focus();
-		composerInput.setSelectionRange(at + words.length, at + words.length);
-		composerInput.dispatchEvent(new Event('input', { bubbles: true }));
+		DefVoice.insertAtCursor(composerInput, text);
 	}
 	// ── end dictation
 
@@ -3621,7 +3620,7 @@ function t(key, fallback) {
 			listen().then(function () {
 				if (!conversationOn) talkSkip = true;
 				updateSendButton();
-				showInfo(t('talkBusy', 'Voice conversation is busy right now, so the microphone works as usual.'));
+				showInfo(t('talkBusy', 'Voice conversation is busy right now, so the button starts the usual voice.'));
 			});
 		} else {
 			showInfo(t('talkStopped', 'Voice stopped unexpectedly. Tap the button to start again.'));

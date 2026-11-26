@@ -38,7 +38,7 @@
 		talkingMic: 'Speak, or type \u2014 tap the mic to end',
 		talkNotUnderstood: "I couldn't make that out. You can type your message below instead.",
 		talkLost: 'The conversation was cut off. Tap the button to talk again.',
-		talkBusy: 'Conversations are busy right now, so the microphone works as usual.',
+		talkBusy: 'Conversations are busy right now, so the button starts the usual voice.',
 		startVoice: 'Start voice',
 		endVoice: 'End voice',
 		clearChat: 'Clear conversation & start fresh',
@@ -2077,9 +2077,11 @@
 	}
 
 	// A tab you leave stops speaking and closes its mic — a reply link opens a new
-	// tab, and two tabs talking over each other is the alternative (W72).
+	// tab, and two tabs talking over each other is the alternative (W72). A dictation is
+	// finished: the mic closes, and what was said still arrives in the box, unsent.
 	function endVoiceWhenHidden() {
 		if (voiceRecorder && document.visibilityState === 'hidden' && (conversationOn || spokenTurn || talk)) endConversation();
+		if (dictation && document.visibilityState === 'hidden' && dictation.isRecording()) finishDictation();
 	}
 
 	// The mic's state paints the button; the composer placeholder says what is happening.
@@ -2339,12 +2341,7 @@
 			input.value = '';
 			setState(input, 'def-cc-suggestion-text', false);
 		}
-		var at = input.selectionEnd, before = input.value.slice(0, at), after = input.value.slice(at);
-		var words = (/\S$/.test(before) ? ' ' : '') + text + (/^\S/.test(after) ? ' ' : '');
-		input.value = before + words + after;
-		input.focus();
-		input.setSelectionRange(at + words.length, at + words.length);
-		input.dispatchEvent(new Event('input', { bubbles: true }));
+		window.DefVoice.insertAtCursor(input, text);
 	}
 
 	// A recording with no live words: the platform's transcribe request, straight on the stream
