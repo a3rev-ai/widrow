@@ -2137,8 +2137,7 @@ html {
 
 /* Upload button (paperclip) */
 .upload-btn,
-.mic-btn,
-.voice-btn {
+.mic-btn {
 	background: transparent;
 	border: none;
 	color: var(--text-tertiary);
@@ -2154,28 +2153,25 @@ html {
 }
 
 /* `hidden` loses to the buttons' own display:flex. */
-.composer-toolbar .mic-btn[hidden],
-.composer-toolbar .voice-btn[hidden] {
+.composer-toolbar .mic-btn[hidden] {
 	display: none;
 }
 
 .upload-btn:hover,
-.mic-btn:hover,
-.voice-btn:hover {
+.mic-btn:hover {
 	color: var(--text-primary);
 	background: var(--hover-bg);
 }
 
 .upload-btn svg,
-.mic-btn svg,
-.voice-btn svg {
+.mic-btn svg {
 	width: 18px;
 	height: 18px;
 }
 
-/* Voice (7.7.1): the mic beside attach (it shares the attach button's rules
-   above) grows into a pill while it listens, transcribes or waits for the
-   answer; the Voice button cycles the readback (assistant / device / off). */
+/* Voice (7.7.1): the mic beside the round button (it shares the attach button's
+   rules above) grows into a pill while it listens, transcribes or waits for the
+   answer. */
 .mic-btn[data-state="listening"],
 .mic-btn[data-state="transcribing"],
 .mic-btn[data-state="answering"],
@@ -2286,20 +2282,6 @@ html {
 	}
 }
 
-.voice-btn svg {
-	display: none;
-}
-
-.voice-btn[data-mode="server"] .voice-icon-server,
-.voice-btn[data-mode="device"] .voice-icon-device,
-.voice-btn[data-mode="off"] .voice-icon-off {
-	display: block;
-}
-
-.voice-btn[data-mode="off"] {
-	opacity: 0.55;
-}
-
 /* The message box on a phone (11.1.0). After the base rules above because it
    overrides them at equal specificity. Without :has() (iOS Safari before 15.4)
    the row is today's controls at these sizes: the mic and a dimmed Send side by
@@ -2311,8 +2293,7 @@ html {
 	}
 
 	.composer-toolbar .upload-btn,
-	.composer-toolbar .mic-btn,
-	.composer-toolbar .voice-btn {
+	.composer-toolbar .mic-btn {
 		width: 44px;
 		height: 44px;
 		border-radius: 10px;
@@ -2320,7 +2301,6 @@ html {
 
 	.composer-toolbar .upload-btn svg,
 	.composer-toolbar .mic-btn svg,
-	.composer-toolbar .voice-btn svg,
 	.composer-toolbar .send-btn svg {
 		width: 24px;
 		height: 24px;
@@ -2334,13 +2314,9 @@ html {
 		min-width: 0;
 	}
 
-	.composer-toolbar .voice-btn {
-		order: 2;
-		margin-left: auto;
-	}
-
 	.composer-toolbar .mic-btn {
 		order: 3;
+		margin-left: auto;
 	}
 
 	.composer-toolbar .send-btn {
@@ -2349,7 +2325,7 @@ html {
 		height: 48px;
 	}
 
-	.composer-toolbar .voice-btn[hidden] ~ .send-btn {
+	.composer-toolbar .mic-btn[hidden] ~ .send-btn {
 		margin-left: auto;
 	}
 
@@ -2422,6 +2398,10 @@ html {
 	   after them, as the plain mic beside Send, below. */
 	.composer-toolbar:has(.send-btn.is-stop) .mic-btn[data-state="idle"] {
 		display: none;
+	}
+
+	.composer-toolbar:has(.send-btn.is-stop) .mic-btn[data-state="idle"] ~ .send-btn {
+		margin-left: auto;
 	}
 
 	/* Send enabled (Start voice, words or files, a suggestion): the mic stays as a plain

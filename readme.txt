@@ -4,7 +4,7 @@ Tags: ai, chat, digital employee, ai assistant, customer support
 Requires at least: 6.2
 Tested up to: 7.1
 Requires PHP: 8.0
-Stable tag: 11.6.2
+Stable tag: 11.6.3
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -118,6 +118,10 @@ Chat messages, user display name, session context, and the visitor's IP address 
 4. Admin Settings — Branding, Chat Settings, Escalation, and Connection tabs
 
 == Changelog ==
+
+= 11.6.3 - 2026-11-26 =
+* Tweak - In the Staff AI console the microphone now sits beside the Start voice / Send button on every screen size.
+* Tweak - The speaker icon is removed from the Staff AI console: spoken replies are always read in the assistant's own voice.
 
 = 11.6.2 - 2026-11-26 =
 * Tweak - While you dictate, a moving wave across the message box shows it is listening, the microphone becomes a stop button, and Send finishes the dictation and sends it in one tap. Tap stop instead to put the words in the box to edit first.

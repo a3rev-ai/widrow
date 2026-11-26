@@ -160,7 +160,7 @@ const REPLY = { base64: 'AAAA', mime: 'audio/mpeg' };
 
 // ── The console's voice block, wired to a DOM and injectable stubs ───────
 const CONSOLE_HTML = '<button id="micBtn"></button><span id="micLabel"></span>'
-	+ '<button id="voiceBtn"></button><textarea id="composerInput" placeholder="Ask"></textarea>';
+	+ '<textarea id="composerInput" placeholder="Ask"></textarea>';
 
 const CONSOLE_TAIL = `
 	return {
@@ -182,7 +182,7 @@ function bootConsole(spoken) {
 		{ role: 'assistant', content: '', isTyping: true },
 	];
 	const factory = new window.Function(
-		'window', 'document', 't', 'micBtn', 'micLabel', 'voiceBtn', 'composerInput',
+		'window', 'document', 't', 'micBtn', 'micLabel', 'composerInput',
 		'messages', 'renderMessages', 'showInfo', 'showError', 'removeTypingMessage',
 		'_streamAbort', 'assistantName', 'onAssistantName', 'isLoading', 'isReadOnly',
 		'hideError', 'hideInfo', 'streamTokenLeft', 'updateSendButton',
@@ -190,7 +190,7 @@ function bootConsole(spoken) {
 	const api = factory(window, document,
 		(key, fallback) => fallback,
 		document.getElementById('micBtn'), document.getElementById('micLabel'),
-		document.getElementById('voiceBtn'), document.getElementById('composerInput'),
+		document.getElementById('composerInput'),
 		messages, () => calls.push('render'), msg => calls.push('info:' + msg),
 		msg => calls.push('error:' + msg),
 		() => { const i = messages.findIndex(m => m.isTyping); if (i >= 0) messages.splice(i, 1); },
@@ -440,8 +440,7 @@ function check(n, label, cond, detail) {
 			JSON.stringify(t.starts) === JSON.stringify([0.3, CLIP]), JSON.stringify(t.starts));
 
 		t.starts.length = 0;
-		speaker.setMode('device');
-		speaker.speak('Read by the device.', REPLY);
+		speaker.speak('Read by the device.');   // no audio: the device voice reads it
 		await speaker.whenIdle();
 		check(16, 'the device voice gets no lead-in', t.starts.length === 0, JSON.stringify(t.starts));
 	}

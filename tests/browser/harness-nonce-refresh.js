@@ -62,7 +62,7 @@ function boot(script, opts) {
     ReadableStream: (opts || {}).noStream ? undefined : function () {},
     messages: [], renderMessages() {}, autoResize() {}, updateSendButton() {}, hideInfo() {},
     hasActiveFiles: () => false, stagedFiles: [], classifySuggestionOutcome: () => ({}),
-    endConversation() {}, browserTimezone: () => '', clearStagedFiles() {}, readBack() {},
+    endConversation() {}, browserTimezone: () => '', clearStagedFiles() {},
     loadConversations() {}, rememberConversation() {}, updateReadOnlyState() {}, recoverTurn: async () => false, afterSpokenTurn() {},
     removeTypingMessage() { const i = deps.messages.findIndex(m => m.isTyping); if (i >= 0) deps.messages.splice(i, 1); },
     dropUnfilledTranscript() {}, uploadAllStagedFiles: async () => ({ success: true, fileIds: [] }),
@@ -71,7 +71,7 @@ function boot(script, opts) {
   const names = Object.keys(deps);
   const api = new window.Function(...names,
     'let nonce = StaffAIConfig.nonce; var isLoading = false, isReadOnly = false, conversationOn = false, talk = null, talkTyped = false,' +
-    ' spokenTurn = false, openingSpoken = null, lastSuggestion = null, selectedModel = "", currentConversationId = null,' +
+    ' spokenTurn = false, lastSuggestion = null, selectedModel = "", currentConversationId = null,' +
     ' activeProjectId = null, _streamAbort = null, _turnReachedServer = false, turnReleased = false, _eventsSeen = 0,' +
     ' _isStreaming = false, _userScrolledUp = false;\n' +
     REQUEST + '\n' + BANNER + '\n' + SEND +

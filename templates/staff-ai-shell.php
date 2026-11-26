@@ -542,6 +542,14 @@ if ( ! defined( 'ABSPATH' ) ) {
 										<path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path>
 									</svg>
 								</button>
+								<span class="model-picker">
+									<select class="model-select" id="modelSelect" hidden aria-label="<?php echo esc_attr__( 'AI model', 'widrow-ai' ); ?>" title="<?php echo esc_attr__( 'Choose the AI model for this session', 'widrow-ai' ); ?>"></select>
+									<!-- On a phone: the chosen model's short name, under the transparent select. -->
+									<span class="model-chip" aria-hidden="true">
+										<span class="model-chip-name" id="modelChipName"></span>
+										<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+									</span>
+								</span>
 								<button type="button" class="mic-btn" id="micBtn" data-state="idle"
 									aria-label="<?php echo esc_attr__( 'Dictate', 'widrow-ai' ); ?>"
 									title="<?php echo esc_attr__( 'Dictate', 'widrow-ai' ); ?>">
@@ -557,31 +565,6 @@ if ( ! defined( 'ABSPATH' ) ) {
 									</svg>
 									<span class="mic-label" id="micLabel" hidden></span>
 								</button>
-								<button type="button" class="voice-btn" id="voiceBtn" data-mode="server"
-									aria-label="<?php echo esc_attr__( 'Voice', 'widrow-ai' ); ?>"
-									title="<?php echo esc_attr__( 'How spoken replies are read back', 'widrow-ai' ); ?>">
-									<svg class="voice-icon-server" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-										<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
-										<path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
-									</svg>
-									<svg class="voice-icon-device" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-										<rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect>
-										<line x1="12" y1="18" x2="12.01" y2="18"></line>
-									</svg>
-									<svg class="voice-icon-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-										<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
-										<line x1="23" y1="9" x2="17" y2="15"></line>
-										<line x1="17" y1="9" x2="23" y2="15"></line>
-									</svg>
-								</button>
-								<span class="model-picker">
-									<select class="model-select" id="modelSelect" hidden aria-label="<?php echo esc_attr__( 'AI model', 'widrow-ai' ); ?>" title="<?php echo esc_attr__( 'Choose the AI model for this session', 'widrow-ai' ); ?>"></select>
-									<!-- On a phone: the chosen model's short name, under the transparent select. -->
-									<span class="model-chip" aria-hidden="true">
-										<span class="model-chip-name" id="modelChipName"></span>
-										<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
-									</span>
-								</span>
 								<button type="button" class="send-btn" id="sendBtn" disabled aria-label="<?php echo esc_attr__( 'Send message', 'widrow-ai' ); ?>">
 									<svg class="send-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
 										<line x1="22" y1="2" x2="11" y2="13"></line>
@@ -999,10 +982,6 @@ if ( ! defined( 'ABSPATH' ) ) {
 			transcribing: <?php echo wp_json_encode( __( 'Transcribing…', 'widrow-ai' ) ); ?>,
 			answering: <?php echo wp_json_encode( __( '%s is answering · tap to end', 'widrow-ai' ) ); ?>,
 			assistant: <?php echo wp_json_encode( __( 'Your assistant', 'widrow-ai' ) ); ?>,
-			voiceEmployee: <?php echo wp_json_encode( __( "Reading back in %s's voice", 'widrow-ai' ) ); ?>,
-			voiceAssistant: <?php echo wp_json_encode( __( "Reading back in your assistant's voice", 'widrow-ai' ) ); ?>,
-			voiceDevice: <?php echo wp_json_encode( __( 'Reading back with your device voice', 'widrow-ai' ) ); ?>,
-			voiceOff: <?php echo wp_json_encode( __( 'Voice off', 'widrow-ai' ) ); ?>,
 			voiceNeedsStreaming: <?php echo wp_json_encode( __( 'Voice needs a browser that can stream replies.', 'widrow-ai' ) ); ?>,
 			tapToSpeakAgain: <?php echo wp_json_encode( __( 'Tap the mic to speak again.', 'widrow-ai' ) ); ?>,
 			micClosedIdle: <?php echo wp_json_encode( __( 'The mic closed — tap it to speak again.', 'widrow-ai' ) ); ?>,

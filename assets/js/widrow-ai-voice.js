@@ -439,11 +439,9 @@ window.DefVoice = (function () {
 	}
 
 	/**
-	 * Readback. mode 'server' = the employee's own voice (audio frames the chat
-	 * stream carries), 'device' = speechSynthesis from the reply's text, 'off'.
-	 * speak(text, audio) queues one line: server audio when it came and the mode
-	 * is server, the device voice otherwise (a line whose synthesis failed still
-	 * gets read). Lines play in order; whenIdle() resolves once nothing is left —
+	 * Readback in the employee's own voice (audio frames the chat stream carries).
+	 * speak(text, audio) queues one line: its audio when it came, the device voice
+	 * otherwise (a line whose synthesis failed still gets read). Lines play in order; whenIdle() resolves once nothing is left —
 	 * hands-free listens again on that. unlock() must run inside the user's
 	 * gesture — the mic tap — because iOS starts audio only from one.
 	 * handlers.onError(e) hears every line that failed to play (the browser's
@@ -451,7 +449,7 @@ window.DefVoice = (function () {
 	 */
 	function createSpeaker(handlers) {
 		handlers = handlers || {};
-		var mode = 'server', audio = null, queue = [], busy = false, idleWaiters = [], playing = [], current = null;
+		var audio = null, queue = [], busy = false, idleWaiters = [], playing = [], current = null;
 		// The step of this reply's first line (its lead-in, which discard() keeps whole), until end() or stop().
 		var leadStep;
 
@@ -637,15 +635,15 @@ window.DefVoice = (function () {
 				// The first clip is seq 1, never a later segment that finds the queue run dry
 				// because the reply's audio trailed its playback. A line with no seq: the
 				// first after idle, as before.
-				if (mode === 'server' && line && (line.seq === undefined ? first : line.seq === 1) &&
+				if (line && (line.seq === undefined ? first : line.seq === 1) &&
 						audioCtx && await wakeContext()) {
 					try { log('lead-in'); await startBuffer(silence(0.3)); } catch (e) { /* the clip still plays */ }
 				}
 				first = false;
 				if (item.cut) continue;   // stop() came during the lead-in
 				try {
-					if (mode === 'server' && line && PCM_MIME.test(line.mime || '')) await playStream(item);
-					else if (mode === 'server' && line) await playServer(line.base64, line.mime);
+					if (line && PCM_MIME.test(line.mime || '')) await playStream(item);
+					else if (line) await playServer(line.base64, line.mime);
 					else await playDevice(item.text);
 				} catch (e) {
 					console.warn('[DEF voice] readback skipped:', e);
@@ -669,14 +667,12 @@ window.DefVoice = (function () {
 		}
 
 		return {
-			setMode: function (next) { mode = next; },
-			getMode: function () { return mode; },
 			unlock: unlock,
 			// audio may carry seq/part/last (a streamed line); a missing part is 0 and a
 			// missing last is true. A later part joins its line; a closing frame (last,
 			// no audio) closes it. step is the round the line belongs to, for discard().
 			speak: function (text, audio, step) {
-				if (mode === 'off' || (!text && !audio)) return;
+				if (!text && !audio) return;
 				if (audio && audio.part > 0) {
 					var line = openLine(audio.seq);
 					if (!line) return;

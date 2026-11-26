@@ -174,9 +174,9 @@ const DOOR_LIVE = 'wss://door.example.test/api/tenant/acme/staff-ai/voice/live';
 const HEAD = `
 	let nonce = StaffAIConfig.nonce;
 	var messages = [], isLoading = false, isReadOnly = false, conversationOn = false, spokenTurn = false, talk = null, talkTyped = false,
-		openingSpoken = null, lastSuggestion = null, selectedModel = '', currentConversationId = null,
+		lastSuggestion = null, selectedModel = '', currentConversationId = null,
 		activeProjectId = null, turnReleased = false, _isStreaming = false, _userScrolledUp = false,
-		dirtyInput = false, chipEpoch = 0, readbackBuffer = '';
+		dirtyInput = false, chipEpoch = 0;
 	function renderMessages() {
 		messagesList.querySelectorAll('.message').forEach(function (el) { el.remove(); });
 		messages.forEach(function (m) {
@@ -204,7 +204,7 @@ async function bootStaff(opts) {
   window.DefPersona = { createController: () => ({ handleEvent() {}, formatThinkingLabel: m => m, reset() {} }) };
   const h = { direct: opts.direct || [], mints: [], directCalls: [], proxyCalls: [], notes: [], life: opts.life || 600, starts: [], hostCalls: [] };
   window.DefVoice = { note: line => h.notes.push(line), supported: () => true, micAllowedBySite: () => true,
-    createSpeaker: () => ({ stop() {}, unlock() {}, speak() {}, end() {}, setMode() {}, getMode: () => 'server', whenIdle: () => new Promise(() => {}) }),
+    createSpeaker: () => ({ stop() {}, unlock() {}, speak() {}, end() {}, whenIdle: () => new Promise(() => {}) }),
     createRecorder: o => { h.recorderOpts = o; return { start: live => { h.starts.push(live); return Promise.resolve(true); },
       isRecording: () => false, release() {},
       stop: () => Promise.resolve(Object.assign({ blob: {}, seconds: 2, spoke: true, mime: 'audio/webm' },
@@ -247,11 +247,11 @@ async function bootStaff(opts) {
     composerInput: document.getElementById('composerInput'),
     autoResize() {}, updateSendButton() {}, hideInfo() {}, hasActiveFiles: () => false, stagedFiles: [],
     classifySuggestionOutcome: () => ({}), endConversation() {}, browserTimezone: () => '', clearStagedFiles() {},
-    readBack() {}, readBackSoFar() {}, loadConversations() {}, rememberConversation() {}, updateReadOnlyState() {}, afterSpokenTurn() {},
+    loadConversations() {}, rememberConversation() {}, updateReadOnlyState() {}, afterSpokenTurn() {},
     dropUnfilledTranscript() { return false; }, uploadAllStagedFiles: async () => ({ success: true, fileIds: [] }),
     renderMarkdown: s => s, applyCitations() {}, buildCitationMap: () => ({}), createToolOutputCard: () => null,
     handleSpokenStop: () => false, console: { info() {}, error() {} },
-    micBtn: document.getElementById('micBtn'), micLabel: document.getElementById('micLabel'), voiceBtn: null,
+    micBtn: document.getElementById('micBtn'), micLabel: document.getElementById('micLabel'), sendBtn: document.createElement('button'),
     showInfo(msg) { h.info = msg; }, assistantName: 'Sue', onAssistantName() {}, DefVoice: window.DefVoice, localStorage: window.localStorage
   };
   window.StaffAIConfig = deps.StaffAIConfig;

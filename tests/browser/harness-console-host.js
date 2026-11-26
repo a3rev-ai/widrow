@@ -84,7 +84,7 @@ function stubHost(flags, files) {
 function dom() {
 	return new JSDOM(`<!doctype html><body><div id="errorBanner"></div>
 		<button id="shareBtn">Share</button><div><button id="overflowShare">Share</button></div>
-		<button id="micBtn"></button><button id="voiceBtn"></button><div id="messages"></div></body>`,
+		<button id="micBtn"></button><div id="messages"></div></body>`,
 	{ url: 'https://acme.defho.test/staff-ai/acme/', pretendToBeVisual: true }).window;
 }
 
@@ -311,14 +311,14 @@ function click(window, el) {
 	}
 	{
 		const window = dom(), document = window.document;
-		const mic = document.getElementById('micBtn'), voice = document.getElementById('voiceBtn');
+		const mic = document.getElementById('micBtn');
 		let threw = null;
 		try {
-			new window.Function('window', 'micBtn', 'voiceBtn', 'DefVoice', VOICE_INIT + '\ninitVoice();')(
+			new window.Function('window', 'micBtn', 'DefVoice', VOICE_INIT + '\ninitVoice();')(
 				{ StaffAIConfig: { host: stubHost({ voice: false }) }, DefVoice: { supported: () => true } },
-				mic, voice, { supported: () => true });
+				mic, { supported: () => true });
 		} catch (e) { threw = e; }
-		check('voice is off: the mic and the voice button are hidden', !threw && mic.hidden && voice.hidden, threw && threw.message);
+		check('voice is off: the mic is hidden', !threw && mic.hidden, threw && threw.message);
 	}
 	// The release check over the SHIPPED block: what it fetches, and whether the host saw it.
 	async function releaseFetches(host) {
