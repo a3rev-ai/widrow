@@ -1244,12 +1244,12 @@ body {
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
+	gap: 8px;
 	padding-top: 8px;
 }
 
 /* Model switcher (B), grouped with the mic and the send button on the right. */
 .model-select {
-	margin-right: 8px;
 	max-width: 220px;
 	/* On a narrow phone the switcher gives way before the buttons do (they don't
 	   shrink): min-width 0 lets a select shrink below its widest option, and Send
@@ -2294,7 +2294,6 @@ html {
 @media (max-width: 768px) {
 	.composer-toolbar {
 		justify-content: flex-start;
-		gap: 8px;
 	}
 
 	.composer-toolbar .upload-btn,

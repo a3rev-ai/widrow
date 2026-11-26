@@ -74,7 +74,6 @@ const phone = s => decl(PHONE, s);
 
 // ── The floor: a later edit that shrinks any of these fails ──────────────
 const FLOOR = {
-	'.composer-toolbar': d => px(d.gap) >= 8,
 	'.composer-toolbar .upload-btn': d => px(d.width) >= 44 && px(d.height) >= 44,
 	'.composer-toolbar .mic-btn': d => px(d.width) >= 44 && px(d.height) >= 44,
 	'.composer-toolbar .send-btn': d => px(d.width) >= 48 && px(d.height) >= 48,
@@ -243,6 +242,32 @@ check('desktop: with conversation mode on the button is 40 by 40, larger than th
 	const desktop = RULES.filter(r => r.media === null);
 	check('desktop: with the role button shown, the hidden mic is not drawn (display none, not the hidden property alone)',
 		computed(mic, 'display', desktop) === 'none' && computed(send, 'display', desktop) === 'flex', computed(mic, 'display', desktop));
+})();
+
+// ── WCAG AA target size and spacing: the paperclip, the mic and the round button at both widths ──
+(function () {
+	const cascades = { wide: RULES.filter(r => r.media === null || r.media === '@media (min-width: 769px)'), phone: CASCADE };
+	const d = new JSDOM('<!doctype html><div id="staff-ai-app"><main class="chat-container">' + COMPOSER + '</main></div>').window.document;
+	d.getElementById('micBtn').dataset.state = 'idle';
+	const bar = d.querySelector('.composer-toolbar');
+	// The space between two neighbours: the row's gap plus their facing margins (an auto margin counts as none).
+	const margin = (el, side, c) => { const v = computed(el, 'margin-' + side, c); return px(v) || 0; };
+	const between = (a, b, c) => (px(computed(bar, 'gap', c)) || 0) + margin(a, 'right', c) + margin(b, 'left', c);
+	for (const w of ['wide', 'phone']) {
+		const c = cascades[w];
+		const size = ['uploadBtn', 'micBtn', 'sendBtn'].map(id => {
+			const el = d.getElementById(id);
+			return [id, px(computed(el, 'width', c)), px(computed(el, 'height', c))];
+		});
+		const floor = w === 'phone' ? { uploadBtn: 24, micBtn: 44, sendBtn: 44 } : { uploadBtn: 24, micBtn: 24, sendBtn: 24 };
+		check('target size, ' + w + ': the paperclip, the mic and the round button are each at least ' + (w === 'phone' ? '24 (the mic and the round button 44)' : '24') + ' wide and high',
+			size.every(([id, wd, ht]) => wd >= floor[id] && ht >= floor[id]), JSON.stringify(size));
+		const mic = d.getElementById('micBtn'), send = d.getElementById('sendBtn'), sel = d.getElementById('modelSelect');
+		const gaps = { micToSend: between(mic, send, c) };
+		if (w === 'wide') gaps.pickerToMic = between(sel, mic, c);
+		check('target spacing, ' + w + ': 8px between each pair in the right-hand group, never more',
+			Object.values(gaps).every(g => g === 8), JSON.stringify(gaps));
+	}
 })();
 
 // ── Desktop: the paperclip's auto margin holds the right-hand group right, picker shown or not ──
