@@ -2077,7 +2077,7 @@
 	}
 
 	// A tab you leave stops speaking and closes its mic — a reply link opens a new
-	// tab, and two tabs talking over each other is the alternative (W72). A dictation is
+	// tab, and two tabs talking over each other is the alternative. A dictation is
 	// finished: the mic closes, and what was said still arrives in the box, unsent.
 	function endVoiceWhenHidden() {
 		if (voiceRecorder && document.visibilityState === 'hidden' && (conversationOn || spokenTurn || talk)) endConversation();
