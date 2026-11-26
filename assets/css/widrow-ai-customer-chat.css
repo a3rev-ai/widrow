@@ -942,9 +942,6 @@
 	fill: currentColor;
 }
 
-/* While a dictation records (11.6.2) the wave has the box: bars in the widget's own colour,
-   the newest at the right, each as loud as the mic heard it. The box's text waits under it.
-   The mic is a stop square. */
 .def-cc-dictation-wave {
 	display: none;
 }
@@ -1772,7 +1769,6 @@
 		transition: none;
 	}
 
-	/* The dictation wave is a still pattern. */
 	.def-cc-dictation-wave span {
 		transition: none;
 	}

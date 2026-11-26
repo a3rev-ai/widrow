@@ -832,9 +832,28 @@ window.DefVoice = (function () {
 		input.dispatchEvent(new Event('input', { bubbles: true }));
 	}
 
+	// The dictation wave (11.6.2): bars across a message box while a dictation records, each a
+	// level the mic heard, the newest at the right; with reduced motion a still pattern. It
+	// returns the function that takes a level (0 to 1).
+	function createWave(box) {
+		var still = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+		while (box.firstChild) box.removeChild(box.firstChild);
+		for (var i = 0; i < 32; i++) {
+			box.appendChild(document.createElement('span')).style.height =
+				(still ? 25 + Math.round(50 * Math.abs(Math.sin(i * 0.7))) : 10) + '%';
+		}
+		return function (level) {
+			if (still) return;
+			var bars = box.children;
+			for (var j = 0; j < bars.length - 1; j++) bars[j].style.height = bars[j + 1].style.height;
+			bars[bars.length - 1].style.height = (10 + Math.round(90 * level)) + '%';
+		};
+	}
+
 	return {
 		supported: supported,
 		insertAtCursor: insertAtCursor,
+		createWave: createWave,
 		micAllowedBySite: micAllowedBySite,
 		isStopPhrase: isStopPhrase,
 		createRecorder: createRecorder,

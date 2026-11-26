@@ -1303,7 +1303,7 @@ function t(key, fallback) {
 		var name = role === 'start' ? t('startVoice', 'Start voice') : role === 'end' ? t('endVoice', 'End voice')
 			: !stopTurn ? t('sendMessage', 'Send message') : stopTurn.stopping ? t('stopping', 'Stopping…') : t('stop', 'Stop');
 		if (sendBtn.getAttribute('aria-label') !== name) sendBtn.setAttribute('aria-label', name);
-		sendBtn.disabled = role === 'start' ? isLoading || isReadOnly || dictating : role === 'end' ? false
+		sendBtn.disabled = role === 'start' ? isLoading || isReadOnly : role === 'end' ? false
 			: stopTurn ? stopTurn.stopping
 			: (!composerInput.value.trim() && !hasActiveFiles() && !dictating) || isLoading || isReadOnly;
 		if (role) sendBtn.dataset.voice = role;
@@ -3059,7 +3059,7 @@ function t(key, fallback) {
 			onTick: dictationListening,
 			onAutoStop: finishDictation,
 			onIdle: finishDictation,
-			onLevel: waveLevel
+			onLevel: function (l) { waveLevel(l); }
 		});
 		voiceRecorder = DefVoice.createRecorder({
 			onTick: function (seconds) {
@@ -3353,8 +3353,7 @@ function t(key, fallback) {
 	var dictating = false;     // from the tap until the words are in the box
 	var dictationEpoch = 0;
 	var sendDictated = false;  // Send was tapped while dictating: what was said goes in the box, and the box is sent
-	var waveStill = false;     // reduced motion: the wave is a still pattern
-	var WAVE_BARS = 32;
+	var waveLevel = function () {};   // the wave's level while it shows (showWave)
 
 	async function dictateTap() {
 		if (talk || conversationOn) { micTap(); return; }   // the voice that is on keeps the mic's tap
@@ -3393,6 +3392,7 @@ function t(key, fallback) {
 
 	async function finishDictation() {
 		var epoch = dictationEpoch;
+		showWave(false);   // the mic is closing: the box and its text are back while the words come
 		setMicState('transcribing', t('transcribing', 'Transcribing…'));
 		var recording = await dictation.stop();
 		if (epoch !== dictationEpoch) return;
@@ -3448,33 +3448,21 @@ function t(key, fallback) {
 	}
 
 	// Send while dictating (11.6.2): the dictation finishes, and its words are sent with the box.
+	// The mic's own state decides, not the recorder's: the recorder stays recording until the
+	// browser's onstop, and a second stop() then would drop the words.
 	function sendDictation() {
-		if (!composerInput.closest('.composer').classList.contains('is-dictating')) return;   // still asking for the mic
+		var state = micBtn.dataset.state;
+		if (state !== 'listening' && state !== 'transcribing') return;   // still asking for the mic
 		sendDictated = true;
-		if (dictation.isRecording()) finishDictation();
+		if (state === 'listening') finishDictation();
 	}
 
-	// The wave has the box from the recording's start until its words are in: the box's text is
-	// kept under it. The bars start low (or as a still pattern) and each level the mic hears
-	// enters at the right.
+	// The wave has the box while the mic is open; the box's text waits under it.
 	function showWave(on) {
 		var wave = document.getElementById('dictationWave');
 		if (!wave) return;
 		composerInput.closest('.composer').classList.toggle('is-dictating', on);
-		if (!on) return;
-		waveStill = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
-		if (!wave.firstChild) for (var i = 0; i < WAVE_BARS; i++) wave.appendChild(document.createElement('span'));
-		Array.prototype.forEach.call(wave.children, function (bar, i) {
-			bar.style.height = (waveStill ? 25 + Math.round(50 * Math.abs(Math.sin(i * 0.7))) : 10) + '%';
-		});
-	}
-
-	function waveLevel(level) {
-		var wave = document.getElementById('dictationWave');
-		if (waveStill || !wave || !composerInput.closest('.composer').classList.contains('is-dictating')) return;
-		var bars = wave.children;
-		for (var i = 0; i < bars.length - 1; i++) bars[i].style.height = bars[i + 1].style.height;
-		bars[bars.length - 1].style.height = (10 + Math.round(90 * level)) + '%';
+		waveLevel = on ? DefVoice.createWave(wave) : function () {};
 	}
 	// ── end dictation
 

@@ -645,7 +645,6 @@
 		els.input = input;
 		form.appendChild(input);
 
-		// The wave that has the box while a dictation records (11.6.2): its bars are drawn at the tap.
 		els.wave = form.appendChild(el('div', 'def-cc-dictation-wave'));
 		els.wave.setAttribute('aria-hidden', 'true');
 		els.form = form;
@@ -2066,7 +2065,7 @@
 	function enableVoice() {
 		speaker = window.DefVoice.createSpeaker({});
 		// The mic's own recorder: it dictates, so no pause ends it (no onSilence), only the tap.
-		dictation = window.DefVoice.createRecorder({ onAutoStop: finishDictation, onIdle: finishDictation, onLevel: waveLevel });
+		dictation = window.DefVoice.createRecorder({ onAutoStop: finishDictation, onIdle: finishDictation, onLevel: function (l) { waveLevel(l); } });
 		voiceRecorder = window.DefVoice.createRecorder({
 			onAutoStop: finishRecording,
 			onSilence: finishRecording,
@@ -2294,8 +2293,7 @@
 	var dictating = false;     // from the tap until the words are in the box
 	var dictationEpoch = 0;    // a dictation ended early (the panel closed) drops its late words
 	var sendDictated = false;  // Send was tapped while dictating: what was said goes in the box, and the box is sent
-	var waveStill = false;     // reduced motion: the wave is a still pattern
-	var WAVE_BARS = 32;
+	var waveLevel = function () {};   // the wave's level while it shows (showWave)
 
 	function handleDictateClick() {
 		if (pressShown) { pressShown = false; return; }   // the click that ends a long press is not a tap
@@ -2324,6 +2322,7 @@
 
 	function finishDictation() {
 		var epoch = dictationEpoch;
+		showWave(false);   // the mic is closing: the box and its text are back while the words come
 		setMicState('transcribing', t('transcribing'));
 		dictation.stop().then(function (recording) {
 			if (epoch !== dictationEpoch) return;
@@ -2361,31 +2360,20 @@
 	}
 
 	// Send while dictating (11.6.2): the dictation finishes, and its words are sent with the box.
+	// The mic's own state decides, not the recorder's: the recorder stays recording until the
+	// browser's onstop, and a second stop() then would drop the words.
 	function sendDictation() {
-		if (!els.form.classList.contains('def-cc-composer-form--dictating')) return;   // still asking for the mic
+		var state = els.micBtn.dataset.state;
+		if (state !== 'listening' && state !== 'transcribing') return;   // still asking for the mic
 		sendDictated = true;
-		if (dictation.isRecording()) finishDictation();
+		if (state === 'listening') finishDictation();
 	}
 
-	// The wave has the box from the recording's start until its words are in: the box's text is
-	// kept under it. The bars start low (or as a still pattern) and each level the mic hears
-	// enters at the right.
+	// The wave has the box while the mic is open; the box's text waits under it.
 	function showWave(on) {
 		if (!els.form) return;
 		setState(els.form, 'def-cc-composer-form--dictating', on);
-		if (!on) return;
-		waveStill = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
-		if (!els.wave.firstChild) for (var i = 0; i < WAVE_BARS; i++) els.wave.appendChild(document.createElement('span'));
-		Array.prototype.forEach.call(els.wave.children, function (bar, i) {
-			bar.style.height = (waveStill ? 25 + Math.round(50 * Math.abs(Math.sin(i * 0.7))) : 10) + '%';
-		});
-	}
-
-	function waveLevel(level) {
-		if (waveStill || !els.form || !els.form.classList.contains('def-cc-composer-form--dictating')) return;
-		var bars = els.wave.children;
-		for (var i = 0; i < bars.length - 1; i++) bars[i].style.height = bars[i + 1].style.height;
-		bars[bars.length - 1].style.height = (10 + Math.round(90 * level)) + '%';
+		waveLevel = on ? window.DefVoice.createWave(els.wave) : function () {};
 	}
 
 	// A recording with no live words: the platform's transcribe request, straight on the stream
@@ -5400,7 +5388,7 @@
 		});
 		var role = talkButton();
 		var voice = role === 'start' || role === 'end';
-		els.sendBtn.disabled = voice ? role === 'start' && (isComposerDisabled || dictating) : isComposerDisabled || (!hasText && !hasFiles && !dictating);
+		els.sendBtn.disabled = voice ? role === 'start' && isComposerDisabled : isComposerDisabled || (!hasText && !hasFiles && !dictating);
 		// The mic dictates beside the button; a conversation holds the microphone, and the button ends it.
 		var micHidden = !!role && els.micBtn.dataset.state === 'conversation';
 		if (micHidden && root && root.activeElement === els.micBtn) (els.sendBtn.disabled ? els.input : els.sendBtn).focus();   // focus is not dropped to the page

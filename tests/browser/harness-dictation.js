@@ -54,8 +54,20 @@ function fakeRecorders() {
 	};
 }
 const VOICE_SRC = fs.readFileSync(extract.VOICE_PATH, 'utf8');
-// The shared module's own insert, taken from the SHIPPED widrow-ai-voice.js in each page.
-function realInsert(w) { w.eval(VOICE_SRC); const f = w.DefVoice.insertAtCursor; delete w.DefVoice; return f; }
+// The shared module's own insert and wave, taken from the SHIPPED widrow-ai-voice.js in each page.
+function realInsert(w) { w.eval(VOICE_SRC); const f = w.DefVoice.insertAtCursor; w.realWave = w.DefVoice.createWave; delete w.DefVoice; return f; }
+// A real recorder stays recording until the browser's onstop fires; a second stop() meanwhile finds it inactive and resolves null.
+function lagging(r) {
+	const stop = r.stop;
+	let asked = false;
+	r.stop = () => {
+		if (asked) { r.lateStops = (r.lateStops || 0) + 1; return Promise.resolve(null); }
+		asked = true;
+		const p = stop();
+		r.recording = true;
+		return p;
+	};
+}
 const SAID = { transcript: 'book a table for two', spoke: true, seconds: 2.4, mime: 'audio/webm', blob: {} };
 const CLIP = { spoke: true, seconds: 3.2, mime: 'audio/mp4', blob: {} };
 
@@ -125,7 +137,7 @@ async function bootWidget(opts) {
 	};
 	const insertAtCursor = realInsert(w);
 	w.DefVoice = {
-		supported: () => true, micAllowedBySite: () => true, isStopPhrase: () => false, insertAtCursor,
+		supported: () => true, micAllowedBySite: () => true, isStopPhrase: () => false, insertAtCursor, createWave: w.realWave,
 		createSpeaker: () => ({ stop() {}, unlock() {}, end() {}, speak() {}, discard() {}, whenIdle: () => Promise.resolve() }),
 		createRecorder: recs.create,
 		toBase64: () => Promise.resolve('QUFBQQ=='), log: () => [], note() {},
@@ -188,7 +200,7 @@ function bootConsole(opts) {
 	const insertAtCursor = realInsert(window);
 	const calls = [], sent = [];
 	window.DefVoice = {
-		supported: () => true, micAllowedBySite: () => true, log: () => [], note() {}, isStopPhrase: () => false, insertAtCursor,
+		supported: () => true, micAllowedBySite: () => true, log: () => [], note() {}, isStopPhrase: () => false, insertAtCursor, createWave: window.realWave,
 		createSpeaker: () => ({ mode: 'server', setMode(m) { this.mode = m; }, getMode() { return this.mode; }, unlock() {}, stop() {}, speak() {}, end() {}, whenIdle: () => Promise.resolve() }),
 		createRecorder: recs.create,
 		toBase64: () => Promise.resolve('QUFBQQ=='),
@@ -550,7 +562,6 @@ function bootConsole(opts) {
 				const t = bootConsole(o);
 				await sleep(5);
 				t.mic = () => t.$('micBtn');
-				t.recs = t.recs;
 				t.tapMic = () => t.$('micBtn').click();
 				t.tapSend = () => t.$('sendBtn').click();
 				t.micName = () => t.$('micBtn').getAttribute('aria-label');
@@ -585,6 +596,8 @@ function bootConsole(opts) {
 				show({ flat: flat.slice(-3), moved: moved.slice(-3) }));
 			h.tapMic();
 			await sleep(5);
+			check(name + ' — the stop tap: the wave comes down at once, the box and its text back while the words are transcribed',
+				!h.waveShown() && h.box().value === 'Note:', show({ wave: h.waveShown(), value: h.box().value }));
 			r.finish(SAID);
 			await sleep(30);
 			check(name + ' — the stop tap: the words in the box after its text, nothing sent, the wave gone, the mic "Dictate" again',
@@ -600,7 +613,7 @@ function bootConsole(opts) {
 			const r = h.recs.mic();
 			h.tapSend();
 			await sleep(5);
-			const stopped = r.stops === 1 && h.sentCount() === 0;
+			const stopped = r.stops === 1 && h.sentCount() === 0 && !h.waveShown();
 			r.finish(SAID);
 			await sleep(80);
 			const got = h.lastSent();
@@ -611,6 +624,26 @@ function bootConsole(opts) {
 			check(name + ' — after it the box is empty, the wave gone, and no recorder opens again',
 				(name === 'console' || h.box().value === '') && !h.waveShown() && r.starts.length === 1 && h.recs.handsFree().starts.length === 0,
 				show({ value: h.box().value, wave: h.waveShown(), starts: r.starts.length }));
+		});
+
+		await run(name + ': Send twice, or stop then Send', async () => {
+			for (const first of ['send', 'stop']) {
+				const h = await sc.boot();
+				h.type('Hello there', 5);
+				h.tapMic();
+				await sleep(10);
+				const r = h.recs.mic();
+				lagging(r);
+				if (first === 'send') h.tapSend(); else h.tapMic();
+				h.tapSend();
+				await sleep(5);
+				r.finish(SAID);
+				await sleep(80);
+				const got = h.lastSent();
+				check(name + ' — ' + first + ' then Send before the recording has finished: ONE stop, and ONE message with the words',
+					r.stops === 1 && !r.lateStops && h.sentCount() === 1 && got.text === 'Hello book a table for two there',
+					show({ stops: r.stops, late: r.lateStops, sent: h.sentCount(), got }));
+			}
 		});
 
 		const REFUSED = [

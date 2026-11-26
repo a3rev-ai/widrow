@@ -2253,9 +2253,6 @@ html {
 	line-height: 1;
 }
 
-/* While a dictation records (11.6.2) the wave has the box: bars in the recording red, the
-   newest at the right, each as loud as the mic heard it. The box's text waits under it.
-   The mic shows a stop square beside its time. */
 .dictation-wave,
 .mic-btn .mic-stop,
 .composer.is-dictating .composer-input,
@@ -2284,7 +2281,6 @@ html {
 }
 
 @media (prefers-reduced-motion: reduce) {
-	/* The dictation wave is a still pattern. */
 	.dictation-wave span {
 		transition: none;
 	}
@@ -2480,7 +2476,6 @@ html {
 		display: none;
 	}
 
-	/* A dictation keeps Send beside the pill (11.6.2): one tap finishes it and sends. */
 	.composer.is-dictating .composer-toolbar:has(.mic-btn[data-state]) > .send-btn {
 		display: flex;
 	}
