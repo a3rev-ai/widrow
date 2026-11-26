@@ -1303,9 +1303,9 @@ function t(key, fallback) {
 		var name = role === 'start' ? t('startVoice', 'Start voice') : role === 'end' ? t('endVoice', 'End voice')
 			: !stopTurn ? t('sendMessage', 'Send message') : stopTurn.stopping ? t('stopping', 'Stopping…') : t('stop', 'Stop');
 		if (sendBtn.getAttribute('aria-label') !== name) sendBtn.setAttribute('aria-label', name);
-		sendBtn.disabled = role === 'start' ? isLoading || isReadOnly || dictating : role === 'end' ? false
+		sendBtn.disabled = role === 'start' ? isLoading || isReadOnly : role === 'end' ? false
 			: stopTurn ? stopTurn.stopping
-			: (!composerInput.value.trim() && !hasActiveFiles()) || isLoading || isReadOnly;
+			: (!composerInput.value.trim() && !hasActiveFiles() && !dictating) || isLoading || isReadOnly;
 		if (role) sendBtn.dataset.voice = role;
 		else delete sendBtn.dataset.voice;
 		if (voice) sendBtn.title = name;
@@ -1371,6 +1371,7 @@ function t(key, fallback) {
 
 	sendBtn.addEventListener('click', function () {
 		if (sendBtn.dataset.voice === 'start' || sendBtn.dataset.voice === 'end') micTap(true);   // Start or End voice, in this tap
+		else if (dictating) sendDictation();
 		else if (stopTurn) requestStop();
 		else sendMessage();
 	});
@@ -3055,9 +3056,10 @@ function t(key, fallback) {
 		}
 		// The mic's own recorder: it dictates, so no pause ends it (no onSilence), only the tap.
 		dictation = DefVoice.createRecorder({
-			onTick: function (seconds) { setMicState('listening', Math.floor(seconds / 60) + ':' + String(seconds % 60).padStart(2, '0')); },
+			onTick: dictationListening,
 			onAutoStop: finishDictation,
-			onIdle: finishDictation
+			onIdle: finishDictation,
+			onLevel: function (l) { waveLevel(l); }
 		});
 		voiceRecorder = DefVoice.createRecorder({
 			onTick: function (seconds) {
@@ -3350,10 +3352,12 @@ function t(key, fallback) {
 	var dictation = null;      // the mic's own recorder (initVoice)
 	var dictating = false;     // from the tap until the words are in the box
 	var dictationEpoch = 0;
+	var sendDictated = false;  // Send was tapped while dictating: what was said goes in the box, and the box is sent
+	var waveLevel = function () {};   // the wave's level while it shows (showWave)
 
 	async function dictateTap() {
 		if (talk || conversationOn) { micTap(); return; }   // the voice that is on keeps the mic's tap
-		if (dictation.isRecording()) { finishDictation(); return; }
+		if (micBtn.dataset.state === 'listening') { finishDictation(); return; }   // the mic's state, not the recorder's (sendDictation)
 		if (dictating || isLoading || isReadOnly) return;
 		if (!DefVoice.micAllowedBySite()) {
 			showError(t('micBlockedBySite', "This site's security settings block the microphone for every visitor (Permissions-Policy). The site admin needs to allow it for this site."));
@@ -3376,11 +3380,19 @@ function t(key, fallback) {
 		if (epoch !== dictationEpoch) { dictation.release(); return; }
 		hideError();
 		hideInfo();
-		setMicState('listening', '0:00');
+		dictationListening(0);
+		showWave(true);
+	}
+
+	// The mic while a dictation records: the time, and a stop square named for what a tap does.
+	function dictationListening(seconds) {
+		setMicState('listening', Math.floor(seconds / 60) + ':' + String(seconds % 60).padStart(2, '0'));
+		micBtn.setAttribute('aria-label', t('micStop', 'Stop dictating'));
 	}
 
 	async function finishDictation() {
 		var epoch = dictationEpoch;
+		showWave(false);   // the mic is closing: the box and its text are back while the words come
 		setMicState('transcribing', t('transcribing', 'Transcribing…'));
 		var recording = await dictation.stop();
 		if (epoch !== dictationEpoch) return;
@@ -3417,18 +3429,40 @@ function t(key, fallback) {
 
 	// The words go in at the cursor, a space from the words around them; a refusal leaves the box as it was.
 	function endDictation(info, text, error) {
+		var send = sendDictated;
 		dictating = false;
+		sendDictated = false;
 		dictationEpoch++;
 		dictation.release();
+		showWave(false);
 		setMicState('idle');
 		if (info) showInfo(info);
 		if (error) showError(error);
-		if (!text) return;
+		if (!text || !text.trim()) return;   // nothing said: nothing goes in, nothing is sent
 		if (composerInput.classList.contains('staff-ai-suggestion-text')) {
 			composerInput.value = '';
 			composerInput.classList.remove('staff-ai-suggestion-text');
 		}
 		DefVoice.insertAtCursor(composerInput, text);
+		if (send) sendMessage();   // as a typed message
+	}
+
+	// Send while dictating (11.6.2): the dictation finishes, and its words are sent with the box.
+	// The mic's own state decides, not the recorder's: the recorder stays recording until the
+	// browser's onstop, and a second stop() then would drop the words.
+	function sendDictation() {
+		var state = micBtn.dataset.state;
+		if (state !== 'listening' && state !== 'transcribing') return;   // still asking for the mic
+		sendDictated = true;
+		if (state === 'listening') finishDictation();
+	}
+
+	// The wave has the box while the mic is open; the box's text waits under it.
+	function showWave(on) {
+		var wave = document.getElementById('dictationWave');
+		if (!wave) return;
+		composerInput.closest('.composer').classList.toggle('is-dictating', on);
+		waveLevel = on ? DefVoice.createWave(wave) : function () {};
 	}
 	// ── end dictation
 
@@ -3472,6 +3506,7 @@ function t(key, fallback) {
 	// '' is today's Send, and the mic ends a voice that is on.
 	function talkButton() {
 		if (!speaker) return '';
+		if (dictating) return 'send';   // Send finishes the dictation and sends it (11.6.2)
 		var talking = micBtn.dataset.state === 'conversation' || conversationOn;
 		if (stopTurn) return talking ? '' : 'send';   // a reply streaming: Stop, and in a conversation the mic ends it
 		var typed = composerInput.value.trim() && !composerInput.classList.contains('staff-ai-suggestion-text');   // a suggestion counts as empty

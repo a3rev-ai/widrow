@@ -2253,6 +2253,39 @@ html {
 	line-height: 1;
 }
 
+.dictation-wave,
+.mic-btn .mic-stop,
+.composer.is-dictating .composer-input,
+.composer.is-dictating .mic-btn[data-state="listening"] .mic-icon {
+	display: none;
+}
+
+.composer.is-dictating .dictation-wave {
+	display: flex;
+	align-items: center;
+	gap: 2px;
+	height: 32px;
+	overflow: hidden;
+}
+
+.dictation-wave span {
+	flex: 1;
+	min-width: 2px;
+	border-radius: 2px;
+	background: #d63638;
+	transition: height 0.1s linear;
+}
+
+.composer.is-dictating .mic-btn[data-state="listening"] .mic-stop {
+	display: block;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.dictation-wave span {
+		transition: none;
+	}
+}
+
 .voice-btn svg {
 	display: none;
 }
@@ -2441,6 +2474,10 @@ html {
 	/* Stop stays beside the answering pill: tapping the pill ends hands-free, not the reply. */
 	.composer-toolbar:has(.mic-btn:is([data-state="listening"], [data-state="transcribing"], [data-state="answering"])) > :not(.mic-btn):not(.send-btn.is-stop) {
 		display: none;
+	}
+
+	.composer.is-dictating .composer-toolbar:has(.mic-btn[data-state]) > .send-btn {
+		display: flex;
 	}
 
 	.composer-hint {

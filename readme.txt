@@ -4,7 +4,7 @@ Tags: ai, chat, digital employee, ai assistant, customer support
 Requires at least: 6.2
 Tested up to: 7.1
 Requires PHP: 8.0
-Stable tag: 11.6.1
+Stable tag: 11.6.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -118,6 +118,11 @@ Chat messages, user display name, session context, and the visitor's IP address 
 4. Admin Settings — Branding, Chat Settings, Escalation, and Connection tabs
 
 == Changelog ==
+
+= 11.6.2 - 2026-11-26 =
+* Tweak - While you dictate, a moving wave across the message box shows it is listening, the microphone becomes a stop button, and Send finishes the dictation and sends it in one tap. Tap stop instead to put the words in the box to edit first.
+* Tweak - If a dictation hears nothing or cannot be transcribed, a tap on Send sends nothing and the message box is left as it was.
+* Fix - Tapping the microphone twice quickly to stop a dictation no longer loses what was said.
 
 = 11.6.1 - 2026-11-26 =
 * Fix - A "translation loading was triggered too early" notice that WordPress 6.7 and later could show in debugging tools no longer appears.

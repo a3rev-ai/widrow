@@ -292,6 +292,21 @@ function check(n, label, cond, detail) {
 		check(3, 'a one-word answer (~450 ms, a plosive inside it) still registers as speech',
 			!!done && done.spoke === true, 'spoke=' + (done && done.spoke) + ' reads=' + t.reads());
 	}
+	// 58. the dictation wave's level (11.6.2): each read of the mic is handed on, 0 to 1
+	{
+		const t = boot(voicedWave);
+		const levels = [];
+		const rec = t.DefVoice.createRecorder({ onLevel: l => levels.push(l) });
+		await rec.start();
+		await wait(t.window, 350);
+		const spoken = levels.slice();
+		t.say(silentWave);
+		await wait(t.window, 250);
+		await rec.stop();
+		check(58, 'the recorder hands each read\'s level to onLevel: a voice above zero, silence zero, all within 0 to 1',
+			spoken.length >= 2 && spoken.every(l => l > 0 && l <= 1) && levels[levels.length - 1] === 0,
+			JSON.stringify(levels));
+	}
 	// 4. Steve's canary: typing after speaking must not hold the mic open
 	{
 		const t = boot(voicedWave);

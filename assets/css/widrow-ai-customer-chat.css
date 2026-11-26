@@ -942,6 +942,47 @@
 	fill: currentColor;
 }
 
+.def-cc-dictation-wave {
+	display: none;
+}
+
+.def-cc-composer-form--dictating .def-cc-composer-input {
+	display: none;
+}
+
+.def-cc-composer-form--dictating .def-cc-dictation-wave {
+	flex: 1;
+	display: flex;
+	align-items: center;
+	gap: 2px;
+	min-width: 0;
+	height: 44px;
+	padding: 0 14px;
+	box-sizing: border-box;
+	border: 1px solid var(--def-cc-primary);
+	border-radius: var(--def-cc-radius-sm);
+	background: var(--def-cc-input-bg);
+	overflow: hidden;
+}
+
+.def-cc-dictation-wave span {
+	flex: 1;
+	min-width: 2px;
+	max-height: 70%;
+	border-radius: 2px;
+	background: var(--def-cc-primary);
+	transition: height 0.1s linear;
+}
+
+.def-cc-composer-form--dictating .def-cc-composer-mic[data-state="listening"] .def-cc-mic-icon {
+	display: none;
+}
+
+.def-cc-composer-form--dictating .def-cc-composer-mic[data-state="listening"] .def-cc-mic-stop {
+	display: block;
+	fill: currentColor;
+}
+
 /* Conversation mode: the orb under the chat says whose turn it is. Grey while it
    connects, blue while it listens (moving with the visitor's voice), orange while the
    employee speaks (moving with hers), still when nobody speaks. */
@@ -1725,6 +1766,10 @@
 	/* The orb keeps its colours; it does not move. */
 	.def-cc-orb {
 		transform: none !important;
+		transition: none;
+	}
+
+	.def-cc-dictation-wave span {
 		transition: none;
 	}
 

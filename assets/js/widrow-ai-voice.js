@@ -158,7 +158,8 @@ window.DefVoice = (function () {
 	 * (the recorder itself failing), so a caller release()s on rejection. stop()
 	 * resolves {blob, mime, seconds, spoke} or null. release() drops the mic (the
 	 * page's context stays). handlers: onTick(seconds), onAutoStop (the two-minute
-	 * stop), onSilence (a pause after speech), onIdle (no speech at all).
+	 * stop), onSilence (a pause after speech), onIdle (no speech at all), onLevel(0 to 1)
+	 * the mic's loudness at each read (the dictation wave).
 	 *
 	 * start(live), live = {url, token, thread, context, turn}: the recording also streams
 	 * to DEF over one socket as it is spoken, and stop() waits up to LIVE_FINAL_WAIT_MS
@@ -322,6 +323,8 @@ window.DefVoice = (function () {
 				if (v > peak) peak = v; else if (-v > peak) peak = -v;
 			}
 			var rms = Math.sqrt(sum / samples.length);
+			// Scaled for the eye, not a rule: speech starts at SPEECH_RMS, and a loud voice tops the wave.
+			if (handlers.onLevel) handlers.onLevel(Math.min(1, rms * 8));
 			return rms > SPEECH_RMS && peak < rms * SPEECH_CREST_MAX;
 		}
 
@@ -829,9 +832,28 @@ window.DefVoice = (function () {
 		input.dispatchEvent(new Event('input', { bubbles: true }));
 	}
 
+	// The dictation wave (11.6.2): bars across a message box while a dictation records, each a
+	// level the mic heard, the newest at the right; with reduced motion a still pattern. It
+	// returns the function that takes a level (0 to 1).
+	function createWave(box) {
+		var still = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+		while (box.firstChild) box.removeChild(box.firstChild);
+		for (var i = 0; i < 32; i++) {
+			box.appendChild(document.createElement('span')).style.height =
+				(still ? 25 + Math.round(50 * Math.abs(Math.sin(i * 0.7))) : 10) + '%';
+		}
+		return function (level) {
+			if (still) return;
+			var bars = box.children;
+			for (var j = 0; j < bars.length - 1; j++) bars[j].style.height = bars[j + 1].style.height;
+			bars[bars.length - 1].style.height = (10 + Math.round(90 * level)) + '%';
+		};
+	}
+
 	return {
 		supported: supported,
 		insertAtCursor: insertAtCursor,
+		createWave: createWave,
 		micAllowedBySite: micAllowedBySite,
 		isStopPhrase: isStopPhrase,
 		createRecorder: createRecorder,
