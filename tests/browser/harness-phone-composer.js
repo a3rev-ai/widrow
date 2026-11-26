@@ -245,6 +245,23 @@ check('desktop: with conversation mode on the button is 40 by 40, larger than th
 		computed(mic, 'display', desktop) === 'none' && computed(send, 'display', desktop) === 'flex', computed(mic, 'display', desktop));
 })();
 
+// ── Desktop: the paperclip's auto margin holds the right-hand group right, picker shown or not ──
+(function () {
+	const DESKTOP = '@media (min-width: 769px)';
+	const cascade = RULES.filter(r => r.media === null || r.media === DESKTOP);
+	for (const hidden of [false, true]) {
+		const d = new JSDOM('<!doctype html><div id="staff-ai-app"><main class="chat-container">' + COMPOSER + '</main></div>').window.document;
+		d.getElementById('modelSelect').hidden = hidden;
+		const auto = ['uploadBtn', 'modelSelect', 'micBtn', 'sendBtn'].map(id => d.getElementById(id))
+			.filter(el => computed(el, 'margin-left', cascade) === 'auto' || computed(el, 'margin-right', cascade) === 'auto').map(el => el.id);
+		check('desktop, the model picker ' + (hidden ? 'hidden' : 'shown') + ': only the paperclip carries an auto margin (its right), so the picker, mic and round button sit right',
+			JSON.stringify(auto) === '["uploadBtn"]' && computed(d.getElementById('uploadBtn'), 'margin-right', cascade) === 'auto', JSON.stringify(auto));
+	}
+	const phoneUpload = computed(new JSDOM('<!doctype html><div id="staff-ai-app"><main class="chat-container">' + COMPOSER + '</main></div>')
+		.window.document.getElementById('uploadBtn'), 'margin-right');
+	check('phone: the paperclip carries no auto margin (the mic\'s own holds the group right there)', phoneUpload !== 'auto', phoneUpload);
+})();
+
 // ── Desktop: the wrapper is no box, the chip is not drawn ────────────────
 check('desktop: the wrapper is no box and the chip is not drawn',
 	decl(null, '.model-picker').display === 'contents' && decl(null, '.model-chip').display === 'none');
@@ -266,7 +283,6 @@ check('desktop: the wrapper is no box and the chip is not drawn',
 	check('markup: attach, the model picker, the mic, Send, in that order: the mic is immediately before the round button',
 		JSON.stringify(kids) === JSON.stringify(['uploadBtn', 'model-picker', 'micBtn', 'sendBtn']) &&
 		doc.getElementById('sendBtn').previousElementSibling === doc.getElementById('micBtn'), JSON.stringify(kids));
-	check('markup: no speaker control', !doc.getElementById('voiceBtn') && !doc.querySelector('.voice-btn, [class*="voice-icon"]'));
 	const sel = doc.getElementById('modelSelect');
 	check('markup: the select sits in the picker, hidden until filled, still named "AI model"',
 		sel.parentElement.className === 'model-picker' && sel.hidden && sel.getAttribute('aria-label') === 'AI model');

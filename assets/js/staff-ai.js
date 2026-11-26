@@ -3010,7 +3010,6 @@ function t(key, fallback) {
 	}
 
 	function initVoice() {
-		try { localStorage.removeItem('def_staff_ai_voice_mode'); } catch (e) { /* storage blocked */ }   // the old speaker icon's choice
 		if (!micBtn) return;
 		var host = window.StaffAIConfig && window.StaffAIConfig.host;
 		if (!window.DefVoice || !DefVoice.supported() || (host && host.voice !== true)) {

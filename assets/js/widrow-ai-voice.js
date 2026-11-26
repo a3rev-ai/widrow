@@ -737,47 +737,6 @@ window.DefVoice = (function () {
 		};
 	}
 
-	// Markdown → speakable prose (the device-voice path; DEF applies the same rules
-	// server-side for the employee's voice).
-	function plain(text) {
-		return String(text || '')
-			.replace(/```[\s\S]*?```/g, ' ')
-			.replace(/`([^`]*)`/g, '$1')
-			.replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
-			.replace(/[*_#>|]+/g, '')
-			.replace(/^\s*(?:[-*+]|\d+[.)])\s+/gm, '')
-			.replace(/\s+/g, ' ')
-			.trim();
-	}
-
-	// The opening sentence — the first prefix of at least three words that ends at
-	// a sentence boundary — or null while it is still arriving. The boundary needs
-	// the whitespace AFTER it: a chunk ending "costs 3." is not a sentence until
-	// the next chunk says whether "5 million" follows. Callers holding the
-	// finished text append a space.
-	function firstSentence(buffer) {
-		var text = String(buffer || '');
-		var boundary = /[.!?](?=\s)/g;
-		var match;
-		while ((match = boundary.exec(text))) {
-			var sentence = plain(text.slice(0, match.index + 1));
-			if (sentence.split(' ').length >= 3) return sentence;
-		}
-		return null;
-	}
-
-	// Index just past the sentence boundary that produced `opening` in the raw
-	// (markdown) text — the first boundary at which the plain text so far equals
-	// it — so the device voice can cut the opening out and read on from there.
-	function boundaryEnd(text, opening) {
-		var raw = String(text || '');
-		var boundary = /[.!?](?=\s)/g, match;
-		while ((match = boundary.exec(raw))) {
-			if (plain(raw.slice(0, match.index + 1)) === opening) return match.index + 1;
-		}
-		return raw.length;
-	}
-
 	// Bare words: what was said, without the case and punctuation the transcriber
 	// chose. An apostrophe holds a word together (however it was typed), anything
 	// else separates — so "That's all." and "thats all" reduce to the same thing.
@@ -856,9 +815,6 @@ window.DefVoice = (function () {
 		createRecorder: createRecorder,
 		createSpeaker: createSpeaker,
 		toBase64: toBase64,
-		plain: plain,
-		firstSentence: firstSentence,
-		boundaryEnd: boundaryEnd,
 		log: function () { return voiceLog.slice(); },
 		// A widget's own line on the same log: each chat stream's send → headers time (W74).
 		note: log,

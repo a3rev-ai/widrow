@@ -1247,10 +1247,8 @@ body {
 	padding-top: 8px;
 }
 
-/* Model switcher (B) — margin-left:auto keeps upload on the left and groups the
-   model dropdown with the send button on the right. */
+/* Model switcher (B), grouped with the mic and the send button on the right. */
 .model-select {
-	margin-left: auto;
 	margin-right: 8px;
 	max-width: 220px;
 	/* On a narrow phone the switcher gives way before the buttons do (they don't
@@ -2152,6 +2150,13 @@ html {
 	flex-shrink: 0;
 }
 
+/* Above the phone query the paperclip's auto margin holds the rest right, the model picker shown or not. */
+@media (min-width: 769px) {
+	.composer-toolbar .upload-btn {
+		margin-right: auto;
+	}
+}
+
 /* `hidden` loses to the buttons' own display:flex. */
 .composer-toolbar .mic-btn[hidden] {
 	display: none;
@@ -2169,7 +2174,7 @@ html {
 	height: 18px;
 }
 
-/* Voice (7.7.1): the mic beside the round button (it shares the attach button's
+/* Voice: the mic beside the round button (it shares the attach button's
    rules above) grows into a pill while it listens, transcribes or waits for the
    answer. */
 .mic-btn[data-state="listening"],

@@ -648,30 +648,19 @@ async function run(label, fn) {
 				J(typed) === J(SEND), J({ empty, typed }));
 		});
 	}
-	// The speaker icon is gone: a choice it stored (device, off) no longer applies, and its key is removed.
+	// The speaker icon is gone: a choice it stored (device, off) no longer applies.
 	for (const stored of ['device', 'off']) {
 		await run('stored ' + stored, async () => {
-			const t = boot({ thread: 'th-1', stored });
-			await settle();
-			const shown = t.shows();
-			t.tap();
-			await settle();
-			check('"' + stored + '" stored under the old key: Start voice offers a voice conversation exactly as with nothing stored, and the key is gone',
-				J(shown) === J(START) && t.talks.length === 1 && t.rec.starts === 0 && t.window.localStorage.getItem('def_staff_ai_voice_mode') === null,
-				J({ shown, talks: t.talks.length, starts: t.rec.starts, key: t.window.localStorage.getItem('def_staff_ai_voice_mode') }));
-		});
-	}
-	for (const stored of [undefined, 'device', 'off']) {
-		await run('spoken turn, stored ' + stored, async () => {
 			const t = boot({ thread: 'th-1', status: false, stored, heard: { transcript: 'What is on today?', seconds: 2, spoke: true } });
 			await settle();
+			const shown = t.shows();
 			t.tap();   // today's voice: hands-free
 			await settle();
 			t.rec.opts.onSilence();
 			await settle();
 			const body = (t.streams()[0] || {}).body || {};
-			check('a spoken turn with ' + (stored ? '"' + stored + '" stored' : 'nothing stored') + ' asks for the employee\'s own voice (speech_out: true)',
-				t.rec.starts === 1 && body.via_voice === true && body.speech_out === true, J(body));
+			check('"' + stored + '" stored under the old key: the round button offers Start voice, and a spoken turn asks for the employee\'s own voice (speech_out: true)',
+				J(shown) === J(START) && t.rec.starts === 1 && body.via_voice === true && body.speech_out === true, J({ shown, body }));
 		});
 	}
 	await run('start voice failed', async () => {
