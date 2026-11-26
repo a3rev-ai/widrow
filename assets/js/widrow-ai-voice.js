@@ -441,8 +441,9 @@ window.DefVoice = (function () {
 	/**
 	 * Readback in the employee's own voice (audio frames the chat stream carries).
 	 * speak(text, audio) queues one line: its audio when it came, the device voice
-	 * otherwise (a line whose synthesis failed still gets read). Lines play in order; whenIdle() resolves once nothing is left —
-	 * hands-free listens again on that. unlock() must run inside the user's
+	 * otherwise (a line whose synthesis failed still gets read). Lines play in
+	 * order; whenIdle() resolves once nothing is left — hands-free listens again
+	 * on that. unlock() must run inside the user's
 	 * gesture — the mic tap — because iOS starts audio only from one.
 	 * handlers.onError(e) hears every line that failed to play (the browser's
 	 * own error), so a consumer can put the reason on screen.
