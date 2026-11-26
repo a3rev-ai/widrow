@@ -646,6 +646,23 @@ function bootConsole(opts) {
 			}
 		});
 
+		await run(name + ': stop tapped twice', async () => {
+			const h = await sc.boot();
+			h.type('Hello there', 5);
+			h.tapMic();
+			await sleep(10);
+			const r = h.recs.mic();
+			lagging(r);
+			h.tapMic();
+			h.tapMic();
+			await sleep(5);
+			r.finish(SAID);
+			await sleep(80);
+			check(name + ' — stop tapped twice before the recording has finished: ONE stop, the words in the box, nothing sent',
+				r.stops === 1 && !r.lateStops && h.box().value === 'Hello book a table for two there' && h.sentCount() === 0,
+				show({ stops: r.stops, late: r.lateStops, value: h.box().value, sent: h.sentCount() }));
+		});
+
 		const REFUSED = [
 			['nothing heard', null, { spoke: false, seconds: 3, mime: 'audio/webm', blob: {} }, 'Nothing was heard. Try again a little closer to the microphone.'],
 			['voice refused live', null, { spoke: true, seconds: 3, unavailable: true, mime: 'audio/webm', blob: {} }, "Voice isn't available right now. You can type your message below instead."],

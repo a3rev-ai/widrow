@@ -3357,7 +3357,7 @@ function t(key, fallback) {
 
 	async function dictateTap() {
 		if (talk || conversationOn) { micTap(); return; }   // the voice that is on keeps the mic's tap
-		if (dictation.isRecording()) { finishDictation(); return; }
+		if (micBtn.dataset.state === 'listening') { finishDictation(); return; }   // the mic's state, not the recorder's (sendDictation)
 		if (dictating || isLoading || isReadOnly) return;
 		if (!DefVoice.micAllowedBySite()) {
 			showError(t('micBlockedBySite', "This site's security settings block the microphone for every visitor (Permissions-Policy). The site admin needs to allow it for this site."));

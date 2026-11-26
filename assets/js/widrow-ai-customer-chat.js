@@ -2299,7 +2299,7 @@
 		if (pressShown) { pressShown = false; return; }   // the click that ends a long press is not a tap
 		if (!dictation || destroyed) return;
 		if (conversationOn || talk) { handleMicClick(); return; }   // the voice that is on keeps the mic's tap
-		if (dictation.isRecording()) { finishDictation(); return; }
+		if (els.micBtn.dataset.state === 'listening') { finishDictation(); return; }   // the mic's state, not the recorder's (sendDictation)
 		if (dictating || isComposerDisabled) return;
 		if (!window.DefVoice.micAllowedBySite()) {
 			appendMessage('assistant', t('micBlockedBySite'));
