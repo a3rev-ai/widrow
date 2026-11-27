@@ -31,9 +31,18 @@
  *
  *  4. The list says it is loading (W82, 9.6.1): the shipped placeholder reads
  *     "Loading conversations…" with a spinner, and "No conversations yet" shows only
- *     once the fetch has ended with an empty list — or failed, beside the error.
+ *     once the fetch has ended with an empty list.
+ *  5. The list is honest when it fails (11.6.5): a failed load says the conversations
+ *     could not be loaded, with Retry, and never "No conversations yet"; Retry and a
+ *     return to the front load it again; and only the newest of two overlapping loads
+ *     is drawn, so an older answer landing last cannot empty a list that loaded.
  *
- * 16 checks.
+ * Bite check for 5 — the load and the redraw as they stand on origin/main:
+ *   git show origin/main:assets/js/staff-ai.js | sed -n '/^	async function loadConversations() {/,/^	function renderConversationList() {/p' | sed '$d' > /tmp/old-load.js
+ *   git show origin/main:assets/js/staff-ai.js | sed -n '/^	function renderConversationList/,/Chat Options: the row/p' | sed '$d' > /tmp/old-list.js
+ *   CONVERSATION_LOAD=/tmp/old-load.js CONVERSATION_LIST=/tmp/old-list.js node tests/browser/harness-conversation-list.js
+ *
+ * 23 checks.
  */
 const { JSDOM } = require('jsdom');
 const extract = require('./extract');
@@ -99,13 +108,13 @@ function boot(conversations, currentConversationId) {
 	// currentConversationId is a parameter, and a parameter is a binding the
 	// returned setter can write: that is how a check taps a row and redraws.
 	const api = new window.Function(
-		'window', 'document', 'conversationList', 'conversationPlaceholder', 'conversationsLoaded',
+		'window', 'document', 'conversationList', 'conversationPlaceholder', 'conversationsLoaded', 'conversationsFailed',
 		'conversations', 'currentConversationId', 'closeChatMenu', 't', 'formatTime',
 		'loadConversation', 'openChatMenu',
 		BLOCK + '\nreturn { render: renderConversationList,'
 		+ ' open: function (id) { currentConversationId = id; } };'
 	)(
-		window, document, list, document.getElementById('conversationPlaceholder'), true,
+		window, document, list, document.getElementById('conversationPlaceholder'), true, false,
 		conversations, currentConversationId, function () {},
 		function (key, def) { return def; },
 		function (at) { return String(at || ''); },
@@ -268,21 +277,33 @@ const history = () => Array.from({ length: 12 }, (_, i) => ({
 		const document = dom.window.document;
 		const list = document.getElementById('conversationList');
 		const ph = document.getElementById('conversationPlaceholder');
-		let error = '';
+		let error = '', restores = 0, asks = 0;
+		const ask = function () { asks++; return answer.apply(null, arguments); };
 		const api = new dom.window.Function(
 			'window', 'document', 'conversationList', 'conversationPlaceholder', 'apiRequest',
 			'closeChatMenu', 't', 'formatTime', 'loadConversation', 'openChatMenu', 'hideError', 'showError', 'console',
-			'let conversations = [], currentConversationId = null, conversationsLoaded = false;\n' + LOAD + '\n' + BLOCK +
+			'restoreConversation',
+			'let conversations = [], currentConversationId = null, conversationsLoaded = false, conversationsFailed = false, listLoad = 0;\n' + LOAD + '\n' + BLOCK +
 			'\nreturn { load: loadConversations, render: renderConversationList };'
-		)(dom.window, document, list, ph, answer, function () {}, function (k, d) { return d; },
+		)(dom.window, document, list, ph, ask, function () {}, function (k, d) { return d; },
 			function () { return ''; }, function () {}, function () {},
-			function () { error = ''; }, function (m) { error = m; }, { error() {} });
+			function () { error = ''; }, function (m) { error = m; }, { error() {} }, function () { restores++; });
 		return {
-			api, error: () => error,
+			api, error: () => error, asks: () => asks, restores: () => restores,
+			set: fn => { answer = fn; },
 			text: () => ph.textContent.trim(), spinning: () => !!ph.querySelector('.share-loading-spinner'),
 			shown: () => ph.style.display !== 'none',
+			rows: () => list.querySelectorAll('.conversation-item').length,
+			retry: () => Array.from(ph.querySelectorAll('a')).find(a => a.textContent === 'Retry') || null,
+			click: el => el.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true, cancelable: true })),
+			front: () => {
+				Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true });
+				document.dispatchEvent(new dom.window.Event('visibilitychange'));
+			},
 		};
 	}
+	const settle = () => new Promise(r => setTimeout(r, 5));
+	const one = [{ id: 'c1', title: 'One', updated_at: '' }];
 
 	let release;
 	const t = bootLoad(() => new Promise(r => { release = r; }));
@@ -299,11 +320,51 @@ const history = () => Array.from({ length: 12 }, (_, i) => ({
 	await rows.api.load();
 	check('a loaded list with rows hides the placeholder', !rows.shown());
 
+	// ---- 5. the list is honest when it fails -------------------------------
 	const failed = bootLoad(async () => { throw new Error('Backend down.'); });
 	await failed.api.load();
-	check('a failed fetch ends on the empty text, not a spinner, with the error showing',
-		failed.text() === 'No conversations yet' && !failed.spinning() && failed.error().indexOf('Backend down.') === 0,
-		failed.text() + ' | ' + failed.error());
+	check('a failed fetch says the conversations could not be loaded, never "No conversations yet", with the error showing',
+		failed.text() === 'Your conversations could not be loaded. Retry' && !failed.spinning() && failed.shown()
+		&& failed.error().indexOf('Backend down.') === 0, failed.text() + ' | ' + failed.error());
+	check('and it offers Retry', !!failed.retry());
+	failed.api.render();   // a redraw while it is still failed (a chat opened) keeps saying so
+	check('a redraw while the list is still failed keeps the could-not-load text', failed.text().indexOf('could not be loaded') !== -1, failed.text());
+	failed.set(async () => ({ conversations: one }));
+	if (failed.retry()) failed.click(failed.retry());
+	await settle();
+	check('Retry loads the list again, and the chat the tab had open is restored from it',
+		failed.asks() === 2 && failed.rows() === 1 && !failed.shown() && failed.restores() === 1,
+		'asks=' + failed.asks() + ' rows=' + failed.rows() + ' restores=' + failed.restores());
+
+	const away = bootLoad(async () => { throw new Error('Backend down.'); });
+	await away.api.load();
+	away.set(async () => ({ conversations: one }));
+	away.front();
+	await settle();
+	check('back at the front after a failed load, the list loads again by itself',
+		away.asks() === 2 && away.rows() === 1 && away.restores() === 1, 'asks=' + away.asks() + ' rows=' + away.rows());
+	away.front();
+	await settle();
+	check('and a return to the front after a load that worked asks for nothing', away.asks() === 2, 'asks=' + away.asks());
+
+	// Two loads overlap (a start, then a turn finishing): the older answers LAST.
+	let holdOld;
+	const race = bootLoad(() => new Promise((ok, no) => { holdOld = no; }));
+	const older = race.api.load();
+	race.set(async () => ({ conversations: one }));
+	await race.api.load();
+	holdOld(new Error('Load failed'));
+	await older;
+	check('an older load failing after a newer one loaded does not empty the list',
+		race.rows() === 1 && !race.shown() && race.error() === '', 'rows=' + race.rows() + ' text=' + race.text());
+	let holdStale;
+	const stale = bootLoad(() => new Promise(ok => { holdStale = ok; }));
+	const first = stale.api.load();
+	stale.set(async () => ({ conversations: one }));
+	await stale.api.load();
+	holdStale({ conversations: [] });
+	await first;
+	check('nor does an older answer that came back empty', stale.rows() === 1 && !stale.shown(), 'rows=' + stale.rows() + ' text=' + stale.text());
 })().then(function () {
 	console.log('harness-conversation-list: ' + pass + ' passed, ' + fail + ' failed');
 	results.forEach(r => console.log(r));

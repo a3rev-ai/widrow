@@ -4,7 +4,7 @@ Tags: ai, chat, digital employee, ai assistant, customer support
 Requires at least: 6.2
 Tested up to: 7.1
 Requires PHP: 8.0
-Stable tag: 11.6.3
+Stable tag: 11.6.5
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -118,6 +118,10 @@ Chat messages, user display name, session context, and the visitor's IP address 
 4. Admin Settings — Branding, Chat Settings, Escalation, and Connection tabs
 
 == Changelog ==
+
+= 11.6.5 - 2026-11-27 =
+* Fix - If a document, picture or artifact crashes or freezes the Staff AI console, the console no longer reopens it every time it restarts. It opens on the chat instead, with a line offering Download and Open again.
+* Fix - When the Staff AI console cannot load your conversations, the list now says so and offers Retry, instead of "No conversations yet". It also tries again by itself when you come back to the app.
 
 = 11.6.3 - 2026-11-26 =
 * Tweak - In the Staff AI console the microphone now sits beside the Start voice / Send button on every screen size.
