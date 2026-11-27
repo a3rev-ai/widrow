@@ -134,6 +134,23 @@
 
 		shadowRoot = host.attachShadow({ mode: 'open' });
 
+		// A caching plugin that holds scripts until the first touch cancels that
+		// tap's click and has a script click the host in its place. Pass such an
+		// untrusted click at the host on to the button under its point, so the
+		// first tap is not lost. A browser's own click at the host (a mouse
+		// pressed on one part of the widget and released on another) does nothing,
+		// as before.
+		host.addEventListener('click', function (e) {
+			if (e.isTrusted || e.composedPath()[0] !== host) {
+				return;
+			}
+			var hit = shadowRoot.elementFromPoint(e.clientX, e.clientY);
+			var button = hit && hit.closest('button');
+			if (button && button.getRootNode() === shadowRoot) {
+				button.click();
+			}
+		});
+
 		// Brand the whole widget from the tenant's button colour, not just the
 		// launcher. Injected as --def-cc-brand rather than --def-cc-primary: an
 		// inline custom property beats every stylesheet rule, so writing primary

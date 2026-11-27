@@ -4,6 +4,9 @@
 * Fix - If a document, picture or artifact crashes or freezes the Staff AI console, the console no longer reopens it every time it restarts. It opens on the chat instead, with a line offering Download and Open again.
 * Fix - When the Staff AI console cannot load your conversations, the list now says so and offers Retry, instead of "No conversations yet". It also tries again by itself when you come back to the app.
 
+= 11.6.4 - 2026/11/27 =
+* Fix - The chat button opens on the first tap on sites whose caching plugin delays scripts until the first touch. The same for the greeting bubble beside it.
+
 = 11.6.3 - 2026/11/26 =
 * Tweak - In the Staff AI console the microphone now sits beside the Start voice / Send button on every screen size.
 * Tweak - The speaker icon is removed from the Staff AI console: spoken replies are always read in the assistant's own voice.
