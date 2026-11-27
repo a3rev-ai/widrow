@@ -17,7 +17,7 @@
  * the same localStorage. No document here runs a script: the crash is the absence
  * of a normal end, not a loop.
  *
- * Bite check: put the viewer block as it stands on origin/main back —
+ * 24 checks. Bite check: put the viewer block as it stands on origin/main back —
  *   git show origin/main:assets/js/staff-ai.js | sed -n '/^\t(function initDocumentViewer() {/,/^\t(function initDocuments() {/p' | sed '$d' > /tmp/old-viewer.js
  *   DOCVIEWER=/tmp/old-viewer.js node tests/browser/harness-document-way-out.js
  */
@@ -138,26 +138,33 @@ async function crashedOn(id, local, session, opts) {
 }
 
 (async function () {
-	// ── 1. A start after a visit that did not end normally, for every kind ─────
+	// ── 1. A start after a visit that did not end normally ─────────────────
+	// The way out does not branch on the kind; per kind, only what is that kind's:
+	// nothing of it is requested or framed, and Download is its own link.
 	for (const id of Object.keys(KINDS)) {
 		const local = store(), session = store();
 		await crashedOn(id, local, session);
 		const t = boot('https://e.test/staff-ai/#document/' + id, local, session.copy());   // the phone's reload
 		await tick();
-		check(id + ': the start shows the chat, not the document', t.chatShows() && t.api.open() === null);
-		check(id + ': the address no longer names the document', t.window.location.hash === '', t.window.location.href);
 		check(id + ': its content is not requested and no frame is set', t.requests.length === 0 && !t.frameSet(), JSON.stringify(t.requests));
-		check(id + ': one line names it, with Download and Open again',
-			t.banner().indexOf('"Title of ' + id + '" could not be opened.') === 0 && !!t.link('Download') && !!t.link('Open again'), t.banner());
-		check(id + ': Download is the document page\'s own link', t.link('Download') && t.link('Download').href === docFor(id).download_url,
-			t.link('Download') && t.link('Download').href);
+		check(id + ': the line names it, and Download is that document\'s own link',
+			t.banner().indexOf('"Title of ' + id + '" could not be opened.') === 0 && !!t.link('Download') && t.link('Download').href === docFor(id).download_url,
+			t.banner());
+	}
+	{
+		const local = store(), session = store();
+		await crashedOn('art-1', local, session);
+		const t = boot('https://e.test/staff-ai/#document/art-1', local, session.copy());
+		await tick();
+		check('the start shows the chat, not the document', t.chatShows() && t.api.open() === null);
+		check('the address no longer names the document', t.window.location.hash === '', t.window.location.href);
+		check('the line offers Open again', !!t.link('Open again'), t.banner());
 		if (t.link('Open again')) t.click(t.link('Open again'));
 		await tick();
-		check(id + ': Open again opens the document as usual', t.onDocument() && t.window.location.hash === '#document/' + id
-			&& t.requests[0] === '/documents/' + id + '/content' && !t.banner(), t.window.location.hash + ' ' + JSON.stringify(t.requests));
-		// It crashes again: the same way out on the next start.
-		const again = boot('https://e.test/staff-ai/#document/' + id, local, session.copy());
-		check(id + ': and if it crashes again, the next start is the way out again', again.chatShows() && again.requests.length === 0 && !!again.banner());
+		check('Open again opens the document as usual', t.onDocument() && t.window.location.hash === '#document/art-1'
+			&& t.requests[0] === '/documents/art-1/content' && !t.banner(), t.window.location.hash + ' ' + JSON.stringify(t.requests));
+		const again = boot('https://e.test/staff-ai/#document/art-1', local, session.copy());
+		check('and if it crashes again, the next start is the way out again', again.chatShows() && again.requests.length === 0 && !!again.banner());
 	}
 
 	// The installed app closed and opened again: a new sessionStorage, the same localStorage.
@@ -186,6 +193,15 @@ async function crashedOn(id, local, session, opts) {
 		const t = boot('https://e.test/staff-ai/#document/doc-1', local, session.copy());
 		check('a visit that never got its answer: the line names no title', t.banner().indexOf('That item could not be opened.') === 0 && !!t.link('Open again'), t.banner());
 		first.release();
+	}
+
+	// A corrupt stored value beside the good note: skipped, and the scan goes on.
+	{
+		const local = store({ 'def:documentVisit:aaa': '{not json' });
+		await crashedOn('doc-1', local, store());
+		local.setItem('def:documentVisit:zzz', '{not json');
+		const t = boot('https://e.test/staff-ai/#document/doc-1', local, store());
+		check('a corrupt note beside the good one: the way out still applies', t.chatShows() && t.requests.length === 0 && !!t.banner(), t.banner());
 	}
 
 	// A note is stored data: its link is validated again where it is drawn.

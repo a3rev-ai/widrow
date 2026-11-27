@@ -5883,17 +5883,11 @@ function t(key, fallback) {
 		// reload, or a link — has no opener, and the load supplies the title.
 		let pendingTitle = '';
 
-		// The way out (11.6.5). A document can freeze or crash the whole page (an
-		// artifact whose script never ends, a picture the phone cannot show), and the
-		// phone reloads the page on the same address — which used to open the same
-		// document again, for ever. So the visit is written down while it is open and
-		// rubbed out when it ends normally: the person leaves the document, or the page
-		// is hidden or unloaded while it can still run a handler. A frozen or killed
-		// page runs none, so the note outlives it, and the next start shows the chat
-		// instead (skipCrashedDocument, at the end of this file). localStorage, because
-		// closing the installed app ends sessionStorage and the phone reopens the app on
-		// the last address. One key per tab, the tab named in sessionStorage, so another
-		// window's visits are its own.
+		// The way out (11.6.5): a note of the open document, so a page that froze or
+		// crashed on it is not reopened on it (skipCrashedDocument). Removed when the
+		// visit ends normally — leaving it, or the page hidden or unloaded; a frozen or
+		// killed page runs no handler. localStorage, because the installed app reopens on
+		// the last address with sessionStorage gone; keyed by tab, so windows keep their own.
 		const VISIT_KEY = 'def:documentVisit:';
 		let visit = null;   // { id, title, href } of the document open now
 		let visitTab = '';
@@ -6090,14 +6084,16 @@ function t(key, fallback) {
 			try { docId = decodeURIComponent(hash.slice('#document/'.length)); } catch (e) { return; }
 			var note = mine && mine.id === docId ? mine : null;
 			if (!note && freshTab) {
-				try {
-					for (var i = window.localStorage.length - 1; i >= 0; i--) {
+				var count = 0;
+				try { count = window.localStorage.length; } catch (e) {}
+				for (var i = count - 1; i >= 0; i--) {
+					try {
 						var key = window.localStorage.key(i);
-						if (key.indexOf(VISIT_KEY) !== 0) continue;
+						if (!key || key.indexOf(VISIT_KEY) !== 0) continue;
 						var other = JSON.parse(window.localStorage.getItem(key));
 						if (other && other.id === docId) { note = other; window.localStorage.removeItem(key); }
-					}
-				} catch (e) {}
+					} catch (e) { /* a corrupt note is skipped */ }
+				}
 			}
 			if (!note) return;
 			window.history.replaceState(null, document.title, window.location.pathname + window.location.search);

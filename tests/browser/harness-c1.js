@@ -581,7 +581,7 @@ function check(n, label, cond, detail) {
   {
     // 11.6.5: a list that FAILED to load is no proof the stored chat was deleted.
     const t = await bootChat(null, 'c2', [], true);
-    check(51, 'W88: a failed list keeps the stored chat for the Retry, rather than forgetting it',
+    check(51, 'a failed list keeps the stored chat for the Retry, rather than forgetting it',
       t.api.conversation() === null && t.stored() === 'c2', 'stored=' + t.stored());
   }
 
