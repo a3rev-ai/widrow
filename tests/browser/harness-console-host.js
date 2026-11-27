@@ -396,6 +396,9 @@ function click(window, el) {
 		const requests = [], pages = [];
 		const t = (k, d) => d;
 		const frame = new window.Function('document', 't', FRAME + '\nreturn { ARTIFACT_TYPE, artifactDocument };')(document, t);
+		// jsdom loads every inserted frame as about:blank and fires load for it; a browser
+		// fires one load, for the address the frame was given. The checks fire that one.
+		document.addEventListener('load', (e) => { if (e.isTrusted && e.target.tagName === 'IFRAME') e.stopImmediatePropagation(); }, true);
 		async function apiRequest(url) {
 			requests.push(url);
 			const id = url.split('/')[2], doc = DOCS[id], second = /offset=/.test(url);
@@ -410,14 +413,20 @@ function click(window, el) {
 			window, document, pages, showPage, t, apiRequest, DOOR, (u) => u, null, () => false, () => {},
 			frame.ARTIFACT_TYPE, frame.artifactDocument, 'https://defho.test');
 		const el = (id) => document.getElementById(id);
-		const iframe = el('documentViewerFrame');
+		// 11.6.5: a frame exists only while an artifact is open, made new each time. With
+		// none, `iframe` reads as a hidden frame with no address, which is what was checked.
+		const none = document.createElement('iframe');
+		none.style.display = 'none';
 		const srcdocWrites = [];
-		new window.MutationObserver((rs) => rs.forEach((r) => { if (r.attributeName === 'srcdoc' && iframe.hasAttribute('srcdoc')) srcdocWrites.push(r); }))
-			.observe(iframe, { attributes: true, attributeFilter: ['srcdoc'] });
-		return { window, frame, requests, srcdocWrites, open: viewer, iframe,
+		new window.MutationObserver((rs) => rs.forEach((r) => Array.from(r.addedNodes).forEach((n) => {
+			if (n.tagName === 'IFRAME' && n.hasAttribute('srcdoc')) srcdocWrites.push(n);
+		}))).observe(document.body, { childList: true, subtree: true });
+		const v = { window, frame, requests, srcdocWrites, open: viewer,
 			status: () => el('documentViewerStatus'), title: () => el('documentPageTitle').textContent,
 			download: () => el('documentViewerDownload'), text: () => el('documentViewerText'),
-			load: () => iframe.dispatchEvent(new window.Event('load')) };
+			load: () => v.iframe.dispatchEvent(new window.Event('load')) };
+		Object.defineProperty(v, 'iframe', { get: () => el('documentViewerFrame') || none });
+		return v;
 	}
 	function urlHost() {
 		const asked = [], pending = {};

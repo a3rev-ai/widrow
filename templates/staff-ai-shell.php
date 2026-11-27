@@ -391,8 +391,11 @@ if ( ! defined( 'ABSPATH' ) ) {
 				     grants scripts and nothing else — no allow-same-origin, so the page
 				     inside has an opaque origin: no cookies, no WordPress session, no reach
 				     into this console. Its srcdoc is set by JS from the content route's text
-				     with the CSP meta in front; the download proxy is never its source. -->
-				<iframe class="document-viewer-frame" id="documentViewerFrame" sandbox="allow-scripts" referrerpolicy="no-referrer" title="<?php echo esc_attr__( 'Artifact', 'widrow-ai' ); ?>" style="display:none;"></iframe>
+				     with the CSP meta in front; the download proxy is never its source.
+				     It waits in a <template>: the viewer makes a frame from it for each open
+				     artifact and removes it when the visit ends, so the page's own HTML holds
+				     no frame for the browser to restore an address into after a crash. -->
+				<template id="documentViewerFrameTemplate"><iframe class="document-viewer-frame" id="documentViewerFrame" sandbox="allow-scripts" referrerpolicy="no-referrer" title="<?php echo esc_attr__( 'Artifact', 'widrow-ai' ); ?>" style="display:none;"></iframe></template>
 				<pre class="document-viewer-text" id="documentViewerText"></pre>
 				<button type="button" class="modal-btn modal-btn-secondary" id="documentViewerMore" style="display:none;"><?php echo esc_html__( 'Show more', 'widrow-ai' ); ?></button>
 			</section>
@@ -968,6 +971,8 @@ if ( ! defined( 'ABSPATH' ) ) {
 			stopFailed: <?php echo wp_json_encode( __( "Couldn't stop the reply. Try again.", 'widrow-ai' ) ); ?>,
 			stopped: <?php echo wp_json_encode( __( 'Stopped', 'widrow-ai' ) ); ?>,
 			noConversations: <?php echo wp_json_encode( __( 'No conversations yet', 'widrow-ai' ) ); ?>,
+			conversationsFailed: <?php echo wp_json_encode( __( 'Your conversations could not be loaded.', 'widrow-ai' ) ); ?>,
+			retry: <?php echo wp_json_encode( __( 'Retry', 'widrow-ai' ) ); ?>,
 			assistantStopped: <?php echo wp_json_encode( __( 'The assistant stopped before finishing. Please try again.', 'widrow-ai' ) ); ?>,
 			micStart: <?php echo wp_json_encode( __( 'Dictate', 'widrow-ai' ) ); ?>,
 			micStop: <?php echo wp_json_encode( __( 'Stop dictating', 'widrow-ai' ) ); ?>,
@@ -1241,6 +1246,10 @@ if ( ! defined( 'ABSPATH' ) ) {
 			artifactsAskNamed: <?php echo wp_json_encode( __( 'Ask %s to make an artifact', 'widrow-ai' ) ); ?>,
 			artifactsAskPrompt: <?php echo wp_json_encode( __( 'Make me an artifact — ask me what it is for (a mock-up of a screen, a style kit, a one-pager, a dashboard), then build it as a page and save it to my documents.', 'widrow-ai' ) ); ?>,
 			documentViewerArtifactClosed: <?php echo wp_json_encode( __( 'This artifact tried to open another page and was closed.', 'widrow-ai' ) ); ?>,
+			<?php /* translators: %s: the title of the document that could not be opened. */ ?>
+			documentCrashedNamed: <?php echo wp_json_encode( __( '"%s" could not be opened.', 'widrow-ai' ) ); ?>,
+			documentCrashed: <?php echo wp_json_encode( __( 'That item could not be opened.', 'widrow-ai' ) ); ?>,
+			documentOpenAgain: <?php echo wp_json_encode( __( 'Open again', 'widrow-ai' ) ); ?>,
 			documentsSharedMark: <?php echo wp_json_encode( __( 'Shared by link', 'widrow-ai' ) ); ?>,
 			documentsNotSharedMark: <?php echo wp_json_encode( __( 'Not shared', 'widrow-ai' ) ); ?>,
 			documentShareFailed: <?php echo wp_json_encode( __( 'Could not change sharing for this artifact.', 'widrow-ai' ) ); ?>,

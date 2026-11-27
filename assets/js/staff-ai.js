@@ -336,6 +336,8 @@ function t(key, fallback) {
 	// State
 	let conversations = [];
 	let conversationsLoaded = false;   // the sidebar says it is loading until the first fetch ends
+	let conversationsFailed = false;   // the last load failed: the sidebar says so and offers Retry
+	let listLoad = 0;                  // which load of the list is the newest (loadConversations)
 	let currentConversationId = null;
 	let messages = [];
 	let isLoading = false;
@@ -605,18 +607,25 @@ function t(key, fallback) {
 		});
 	}
 
-	// Load conversations from backend
+	// Load conversations from backend. Only the newest load is drawn: loads overlap
+	// (a start, a finished turn, a return to the front), and an older answer landing
+	// last — a failure above all — would otherwise replace the newer list.
 	async function loadConversations() {
+		const asked = ++listLoad;
 		try {
 			const result = await apiRequest('/conversations');
+			if (asked !== listLoad) return;
 			conversations = result.conversations || [];
 			conversationsLoaded = true;
+			conversationsFailed = false;
 			renderConversationList();
 			hideError();
 		} catch (err) {
+			if (asked !== listLoad) return;
 			console.error('Failed to load conversations:', err);
 			conversations = [];
-			conversationsLoaded = true;   // a failed fetch ends on the empty text, beside the error
+			conversationsLoaded = true;
+			conversationsFailed = true;   // the list says it could not load, with Retry — never "No conversations yet"
 			renderConversationList();
 			// Show detailed error with troubleshooting hint
 			let errorMsg = err.message || t('failedToConnect', 'Failed to connect to backend service.');
@@ -624,6 +633,11 @@ function t(key, fallback) {
 			showError(errorMsg);
 		}
 	}
+
+	// Back at the front after a failed load: it loads again by itself.
+	document.addEventListener('visibilitychange', function () {
+		if (document.visibilityState === 'visible' && conversationsFailed) loadConversations().then(restoreConversation);
+	});
 
 	// Render conversation list
 	function renderConversationList() {
@@ -645,7 +659,17 @@ function t(key, fallback) {
 		closeChatMenu();
 
 		if (conversations.length === 0) {
-			if (conversationsLoaded) conversationPlaceholder.textContent = t('noConversations', 'No conversations yet');
+			if (conversationsFailed) {
+				conversationPlaceholder.textContent = t('conversationsFailed', 'Your conversations could not be loaded.') + ' ';
+				const retry = document.createElement('a');
+				retry.href = '#';
+				retry.textContent = t('retry', 'Retry');
+				retry.addEventListener('click', function (e) {
+					e.preventDefault();
+					loadConversations().then(restoreConversation);
+				});
+				conversationPlaceholder.appendChild(retry);
+			} else if (conversationsLoaded) conversationPlaceholder.textContent = t('noConversations', 'No conversations yet');
 			conversationPlaceholder.style.display = 'block';
 			return;   // no rows left to hold an offset: the scroller is 0 either way
 		}
@@ -896,7 +920,7 @@ function t(key, fallback) {
 	function restoreConversation() {
 		var id = null;
 		try { id = sessionStorage.getItem('def:conversation'); } catch (e) {}
-		if (!id || currentConversationId || messages.length) return;
+		if (!id || currentConversationId || messages.length || conversationsFailed) return;   // a list that failed is no proof the chat is gone
 		var conv = conversations.find(function (c) { return c.id === id; });
 		if (conv) loadConversation(conv.id, conv.is_shared);
 		else rememberConversation(null);   // deleted elsewhere
@@ -5634,6 +5658,8 @@ function t(key, fallback) {
 	// P-D3: the viewer, published by initDocumentViewer for the Documents rows
 	// and the Projects panel's slot lines alike.
 	let openDocumentViewer = null;
+	// The way out of a document that crashed the page, run once at start (11.6.5).
+	let skipCrashedDocument = null;
 	// What the viewer can show. The rule is one-directional: this must never claim a
 	// format DEF cannot read — it may hold back one DEF can. `pptx` was missing here
 	// while the server could read it all along, which is the first kind of mistake.
@@ -5749,7 +5775,12 @@ function t(key, fallback) {
 		const moreBtn = document.getElementById('documentViewerMore');
 		const dlLink = document.getElementById('documentViewerDownload');
 		const imgEl = document.getElementById('documentViewerImage');
-		const frameEl = document.getElementById('documentViewerFrame');
+		// The artifact frame is not in the page until an artifact is open (11.6.5): its
+		// markup waits in a <template>, and each opening makes a new frame from it. A
+		// frame in the page's own HTML is one the browser restores its last address into
+		// when it reloads a page that crashed — the artifact that crashed it.
+		const frameTpl = document.getElementById('documentViewerFrameTemplate');
+		let frameEl = null;
 		// A-3 (D-A7): the share controls. `shareToggle` and not `shareBtn` — the
 		// chat's own Share button already holds that name in the outer scope.
 		const shareToggle = document.getElementById('documentViewerShare');
@@ -5762,15 +5793,31 @@ function t(key, fallback) {
 		// means the page inside navigated (frame-src refuses the request, and a refused
 		// navigation still loads an error page): the artifact is closed and the reader is told.
 		let frameLoadsExpected = 0;
-		frameEl.addEventListener('load', function () {
-			if (frameLoadsExpected > 0) { frameLoadsExpected -= 1; return; }
-			if (!frameEl.getAttribute('srcdoc') && !frameEl.getAttribute('src')) return;
-			frameEl.removeAttribute('srcdoc');
-			frameEl.removeAttribute('src');
-			frameEl.style.display = 'none';
-			statusEl.textContent = t('documentViewerArtifactClosed', 'This artifact tried to open another page and was closed.');
-			statusEl.className = 'console-page-desc documents-status documents-status-error';
-		});
+		function closeFrame() {
+			if (frameEl) frameEl.remove();
+			frameEl = null;
+			frameLoadsExpected = 0;
+		}
+		// `fill` gives the new frame its document before it joins the page, so its first
+		// load is the artifact. The name is new each time: a browser restoring a page's
+		// history matches a frame by name, or by position when it has none.
+		function openFrame(fill) {
+			closeFrame();
+			var frame = frameTpl.content.firstElementChild.cloneNode(true);
+			frame.name = 'artifact-' + Date.now() + '-' + String(Math.random()).slice(2);
+			frame.addEventListener('load', function () {
+				if (frame !== frameEl) return;
+				if (frameLoadsExpected > 0) { frameLoadsExpected -= 1; return; }
+				closeFrame();
+				statusEl.textContent = t('documentViewerArtifactClosed', 'This artifact tried to open another page and was closed.');
+				statusEl.className = 'console-page-desc documents-status documents-status-error';
+			});
+			frameEl = frame;
+			frameLoadsExpected = 1;
+			fill();
+			frame.style.display = '';
+			frameTpl.parentNode.insertBefore(frame, frameTpl);
+		}
 		// The hand-off the Documents menu makes: installed on iOS the link lands on
 		// the document-preview sheet (row 8 canary, 2026-09-14), so the share sheet
 		// takes the file instead. Everywhere else the link is the browser's.
@@ -5857,6 +5904,39 @@ function t(key, fallback) {
 		// reload, or a link — has no opener, and the load supplies the title.
 		let pendingTitle = '';
 
+		// The way out (11.6.5): a note of the open document, so a page that froze or
+		// crashed on it is not reopened on it (skipCrashedDocument). Removed when the
+		// visit ends normally — leaving it, or the page hidden or unloaded; a frozen or
+		// killed page runs no handler. localStorage, because the installed app reopens on
+		// the last address with sessionStorage gone; keyed by tab, so windows keep their own.
+		const VISIT_KEY = 'def:documentVisit:';
+		let visit = null;   // { id, title, href } of the document open now
+		let visitTab = '';
+		try { visitTab = window.sessionStorage.getItem('def:tab') || ''; } catch (e) {}
+		// A new tab — or the installed app opened again — has no note of its own yet.
+		const freshTab = !visitTab;
+		if (freshTab) {
+			visitTab = String(Date.now()) + String(Math.random()).slice(2);
+			try { window.sessionStorage.setItem('def:tab', visitTab); } catch (e) {}
+		}
+		function keepVisit() {
+			try { window.localStorage.setItem(VISIT_KEY + visitTab, JSON.stringify(visit)); } catch (e) {}
+		}
+		function dropVisit() {
+			try { window.localStorage.removeItem(VISIT_KEY + visitTab); } catch (e) {}
+		}
+		function takeNote(key) {
+			var note = null;
+			try { note = JSON.parse(window.localStorage.getItem(key)); window.localStorage.removeItem(key); } catch (e) {}
+			return note;
+		}
+		document.addEventListener('visibilitychange', function () {
+			if (!visit) return;
+			if (document.visibilityState === 'hidden') dropVisit(); else keepVisit();
+		});
+		window.addEventListener('pagehide', function () { if (visit) dropVisit(); });
+		window.addEventListener('pageshow', function (e) { if (visit && e.persisted) keepVisit(); });
+
 		// C4: one page, a family of routes (`param: true`) — the id rides the
 		// address. `onLeave` drops `current` on the way out to the chat; it is
 		// NOT what keeps two documents apart (viewer → viewer never fires it —
@@ -5866,8 +5946,12 @@ function t(key, fallback) {
 			param: true,
 			el: pane,
 			title: titleEl,
-			onEnter: function (docId) { load(docId); },
-			onLeave: function () { current = null; }
+			onEnter: function (docId) {
+				visit = docId ? { id: docId, title: pendingTitle, href: '' } : null;
+				if (visit) keepVisit(); else dropVisit();
+				load(docId);
+			},
+			onLeave: function () { current = null; visit = null; dropVisit(); closeFrame(); }
 		});
 
 		async function fetchChunk(offset) {
@@ -5910,6 +5994,9 @@ function t(key, fallback) {
 			if (host) dlLink.setAttribute('data-host-file', '');
 			if (href) { dlLink.href = href; dlLink.style.display = ''; }
 			else { dlLink.style.display = 'none'; }
+			// Before anything is shown: the way out's line names the document and offers
+			// its Download with no request of its own.
+			if (visit && visit.id === asked) { visit.title = doc.title || visit.title; visit.href = href; keepVisit(); }
 			// A picture (8.1.0, images runsheet I-4): DEF answers it with its document and
 			// no text, and the page shows it from the address Download carries, less the
 			// save flag so the proxy serves it inline. Nothing to read on, so no Show more.
@@ -5929,11 +6016,9 @@ function t(key, fallback) {
 					if (current && current.id === asked) throw e;
 				});
 				if (!current || current.id !== asked) return;
-				frameLoadsExpected = 1;
-				frameEl.removeAttribute('srcdoc');
-				frameEl.src = src;
-			} else if (artifact) { frameLoadsExpected = 1; frameEl.srcdoc = artifactDocument(current.html); }
-			frameEl.style.display = artifact ? '' : 'none';
+				openFrame(function () { frameEl.src = src; });
+			} else if (artifact) { openFrame(function () { frameEl.srcdoc = artifactDocument(current.html); }); }
+			else { closeFrame(); }
 			// A-3: the page opens on the share state DEF just reported for THIS row.
 			renderShare(doc.share, artifact);
 			textEl.style.display = picture || artifact ? 'none' : '';
@@ -5961,9 +6046,7 @@ function t(key, fallback) {
 				titleEl.textContent = t('documentViewerTitle', 'Document');
 				textEl.textContent = '';
 				imgEl.style.display = 'none';
-				frameEl.removeAttribute('srcdoc');
-				frameEl.removeAttribute('src');
-				frameEl.style.display = 'none';
+				closeFrame();
 				moreBtn.style.display = 'none';
 				dlLink.style.display = 'none';
 				renderShare(null, false);
@@ -5980,9 +6063,7 @@ function t(key, fallback) {
 			imgEl.removeAttribute('src');
 			// The last artifact's page must not sit in the frame while the next document
 			// loads — and an md document never shows a frame at all.
-			frameEl.removeAttribute('srcdoc');
-			frameEl.removeAttribute('src');
-			frameEl.style.display = 'none';
+			closeFrame();
 			moreBtn.style.display = 'none';
 			dlLink.style.display = 'none';
 			// The last artifact's link must not sit on the page while the next
@@ -6003,6 +6084,64 @@ function t(key, fallback) {
 		openDocumentViewer = function (docId, title) {
 			pendingTitle = title || '';
 			showPage('document/' + encodeURIComponent(docId));
+		};
+
+		// At start, before the address is applied. This tab's own note is from a visit
+		// that never ended; a fresh tab takes up any note naming the document in its
+		// address — the app the phone killed, opened again. When the address names that
+		// document, it is not reopened: the address goes, the chat shows, and one line
+		// offers its Download and Open again.
+		skipCrashedDocument = function () {
+			var mine = takeNote(VISIT_KEY + visitTab);
+			var hash = window.location.hash || '';
+			if (hash.indexOf('#document/') !== 0) return;
+			var docId = '';
+			try { docId = decodeURIComponent(hash.slice('#document/'.length)); } catch (e) { return; }
+			var note = mine && mine.id === docId ? mine : null;
+			if (!note && freshTab) {
+				var count = 0;
+				try { count = window.localStorage.length; } catch (e) {}
+				for (var i = count - 1; i >= 0; i--) {
+					try {
+						var key = window.localStorage.key(i);
+						if (!key || key.indexOf(VISIT_KEY) !== 0) continue;
+						var other = JSON.parse(window.localStorage.getItem(key));
+						if (other && other.id === docId) { note = other; window.localStorage.removeItem(key); }
+					} catch (e) { /* a corrupt note is skipped */ }
+				}
+			}
+			if (!note) return;
+			// Nothing can load the document's frame at this start: there is none.
+			closeFrame();
+			Array.prototype.forEach.call(pane.querySelectorAll('iframe'), function (f) { f.remove(); });
+			window.history.replaceState(null, document.title, window.location.pathname + window.location.search);
+			showInfo(note.title
+				? t('documentCrashedNamed', '"%s" could not be opened.').replace('%s', function () { return String(note.title); })
+				: t('documentCrashed', 'That item could not be opened.'));
+			// Stored, so validated at the sink again, as every href the console renders.
+			var href = safeHttpHref(note.href || '');
+			if (href) {
+				// The document page's own Download: the same link, the same hand-offs.
+				var dl = document.createElement('a');
+				dl.href = href;
+				dl.textContent = t('download', 'Download');
+				if (window.StaffAIConfig && window.StaffAIConfig.host) dl.setAttribute('data-host-file', '');
+				dl.addEventListener('click', function (ev) {
+					if (!isIOS() || !navigator.share) return;
+					ev.preventDefault();
+					shareFile(dl.href);
+				});
+				infoBanner.append(' ', dl);
+			}
+			var again = document.createElement('a');
+			again.href = '#';
+			again.textContent = t('documentOpenAgain', 'Open again');
+			again.addEventListener('click', function (ev) {
+				ev.preventDefault();
+				hideInfo();
+				openDocumentViewer(docId, note.title);
+			});
+			infoBanner.append(' ', again);
 		};
 	})();
 
@@ -8725,5 +8864,6 @@ function t(key, fallback) {
 	// The address decides what the console opens on (D-C4), and it runs last so
 	// every page has registered — and after the composer's focus, so a reload on
 	// a page leaves focus on that page's title rather than the hidden composer.
+	if (skipCrashedDocument) skipCrashedDocument();
 	applyRoute();
 })();

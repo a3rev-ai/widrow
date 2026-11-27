@@ -66,7 +66,7 @@ function boot(startUrl) {
 
 // The console booting with a stored chat: the page shell, then (as at boot) the list
 // resolves after applyRoute has run and restoreConversation reads the tab's storage.
-async function bootChat(startUrl, stored, ids) {
+async function bootChat(startUrl, stored, ids, failed) {
   const dom = new JSDOM(HTML, { url: startUrl || 'https://e.test/staff-ai/', pretendToBeVisual: true });
   const window = dom.window, document = window.document;
   if (stored) window.sessionStorage.setItem('def:conversation', stored);
@@ -87,7 +87,7 @@ async function bootChat(startUrl, stored, ids) {
   const names = Object.keys(deps);
   const api = new window.Function(...names,
     'var currentConversationId = null, messages = [], isReadOnly = false, conversationOn = false, dictating = false, talk = null, talkTyped = false,' +
-    ' spokenTurn = false, _streamAbort = null, turnReleased = false, stopTurn = null;\n' +
+    ' spokenTurn = false, _streamAbort = null, turnReleased = false, stopTurn = null, conversationsFailed = ' + !!failed + ';\n' +
     BLOCK + '\n' + W88 + '\n' + NEW_CHAT + REG.replace('return {', 'return { restore: restoreConversation,' +
       ' reset: resetToNewChat, load: loadConversation, conversation: function () { return currentConversationId; },')
   )(...names.map(k => deps[k]));
@@ -577,6 +577,12 @@ function check(n, label, cond, detail) {
       t.api.open() === 'documents' && !t.document.getElementById('documentsPane').hidden && !t.chatVisible() &&
       t.api.conversation() === 'c2' && t.fetched.join() === '/conversations/c2',
       'open=' + t.api.open() + ' conv=' + t.api.conversation() + ' fetched=' + t.fetched);
+  }
+  {
+    // 11.6.5: a list that FAILED to load is no proof the stored chat was deleted.
+    const t = await bootChat(null, 'c2', [], true);
+    check(51, 'a failed list keeps the stored chat for the Retry, rather than forgetting it',
+      t.api.conversation() === null && t.stored() === 'c2', 'stored=' + t.stored());
   }
 
   console.log(results.join('\n'));

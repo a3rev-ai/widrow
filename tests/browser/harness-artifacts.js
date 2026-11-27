@@ -15,7 +15,7 @@
  * own card — the one a tool result renders in the conversation — over the SHIPPED
  * createToolOutputCard and the same viewer.
  *
- * 31 checks.
+ * 33 checks.
  */
 const { JSDOM } = require('jsdom');
 const extract = require('./extract');
@@ -57,10 +57,10 @@ const DOWNLOAD = (id, ext) => 'https://e.test/staff-ai-download/tenant-1/' + id 
 // The artifact's two halves: the split lands INSIDE a <style> block, which is why a
 // half page must never reach the frame (an unclosed style swallows the body).
 const PAGE_HEAD = '<!doctype html>\n<html lang="en"><head><meta charset="utf-8"><title>Kit</title><style>body{margin:0;';
-const PAGE_TAIL = 'color:#123}</style></head><body><h1>Smith Lane</h1><script>document.title="x"</script></body></html>';
+const PAGE_TAIL = 'color:#123}</style></head><body><h1>Style kit</h1><script>document.title="x"</script></body></html>';
 const DOCS = [
-	{ document_id: 'art-1', title: 'Smith Lane style kit', file_type: 'html', version: 2, size_bytes: 9000,
-		created_at: '2026-09-15T09:00:00Z', project_id: 'p1', project_name: 'Smith Lane', download_url: DOWNLOAD('art-1', 'html') },
+	{ document_id: 'art-1', title: 'Style kit', file_type: 'html', version: 2, size_bytes: 9000,
+		created_at: '2026-09-15T09:00:00Z', project_id: 'p1', project_name: 'Brand refresh', download_url: DOWNLOAD('art-1', 'html') },
 	{ document_id: 'doc-1', title: 'Runsheet', file_type: 'md', version: 3, size_bytes: 1200,
 		created_at: '2026-09-15T08:00:00Z', download_url: DOWNLOAD('doc-1', 'md') },
 	{ document_id: 'art-2', title: 'User Access mock-up', file_type: 'html', version: 1, size_bytes: 14000,
@@ -71,6 +71,10 @@ function boot(opts) {
 	opts = opts || {};
 	const dom = new JSDOM(HTML, { url: 'https://e.test/staff-ai/', pretendToBeVisual: true });
 	const window = dom.window, document = window.document, location = window.location;
+	// jsdom loads every inserted frame as about:blank and fires load for it; a browser
+	// fires one load, for the srcdoc or address the frame was given. The harness fires
+	// that one itself, so jsdom's own is held back.
+	document.addEventListener('load', (e) => { if (e.isTrusted && e.target.tagName === 'IFRAME') e.stopImmediatePropagation(); }, true);
 	const requests = [];
 
 	const api = new window.Function('window', 'document', 'location',
@@ -156,7 +160,8 @@ function boot(opts) {
 		window, document, api, frame, requests, opened, filtered, toolCard,
 		open: viewer.open,
 		iframe: () => $('documentViewerFrame'),
-		srcdoc: () => $('documentViewerFrame').getAttribute('srcdoc'),
+		// 11.6.5: the frame exists only while an artifact is open; none is null.
+		srcdoc: () => ($('documentViewerFrame') ? $('documentViewerFrame').getAttribute('srcdoc') : null),
 		text: () => $('documentViewerText'),
 		status: () => $('documentViewerStatus').textContent,
 		more: () => $('documentViewerMore'),
@@ -225,7 +230,7 @@ function check(label, ok, detail) {
 	{
 		const t = boot();
 		t.api.showPage('documents');
-		t.open('art-1', 'Smith Lane style kit');
+		t.open('art-1', 'Style kit');
 		await settle(t.window);
 		const src = t.srcdoc() || '';
 		check('the artifact is read to the END before the frame sees it: both halves joined, then framed, one page',
@@ -238,17 +243,27 @@ function check(label, ok, detail) {
 			t.text().textContent === '' && t.text().style.display === 'none'
 			&& t.iframe().style.display === '' && t.more().style.display === 'none');
 		check('the status names it an artifact, not an HTML file', /^ARTIFACT/.test(t.status()), t.status());
+		const inserted = t.iframe();
+		check('the frame in the page carries exactly sandbox="allow-scripts" and referrerpolicy="no-referrer"',
+			!!inserted && inserted.getAttribute('sandbox') === 'allow-scripts' && inserted.getAttribute('referrerpolicy') === 'no-referrer',
+			inserted ? inserted.outerHTML.slice(0, 160) : 'no frame');
 
 		// The watchdog: a load the viewer did not ask for is the page inside navigating.
 		t.iframe().dispatchEvent(new t.window.Event('load'));
+		check('the artifact\'s own first load leaves it open',
+			t.iframe() === inserted && !!t.srcdoc() && t.iframe().style.display === '' && !/closed/.test(t.status()), t.status());
 		t.iframe().dispatchEvent(new t.window.Event('load'));
-		check('a second load of the frame closes the artifact and says so',
-			t.srcdoc() === null && t.iframe().style.display === 'none' && /closed/.test(t.status()), t.status());
+		check('a second load of the frame closes the artifact and says so: the frame is gone',
+			!t.iframe() && /closed/.test(t.status()), t.status());
 
 		t.open('doc-1', 'Runsheet');
 		await settle(t.window);
-		check('an md document after it: the frame is put away with its srcdoc, the text well shows the text',
-			t.iframe().style.display === 'none' && t.srcdoc() === null
+		t.open('art-1', 'Style kit');
+		await settle(t.window);
+		t.open('doc-1', 'Runsheet');
+		await settle(t.window);
+		check('an md document after an artifact: the frame is gone, the text well shows the text',
+			!t.iframe()
 			&& t.text().style.display === '' && /Body of doc-1/.test(t.text().textContent));
 	}
 
@@ -260,8 +275,8 @@ function check(label, ok, detail) {
 		const cards = t.cards('artifactsGrid');
 		check('the Artifacts page lists html documents only, by day, opening the artifact',
 			cards.length === 2 && t.headings('artifactsGrid').length === 2
-			&& cards[0].querySelector('.document-name').textContent === 'Smith Lane style kit'
-			&& cards[0].querySelector('.document-project-chip').textContent === 'Smith Lane'
+			&& cards[0].querySelector('.document-name').textContent === 'Style kit'
+			&& cards[0].querySelector('.document-project-chip').textContent === 'Brand refresh'
 			&& cards[0].querySelector('.document-view-btn').textContent === 'Open',
 			cards.length + ' card(s), ' + t.headings('artifactsGrid').length + ' heading(s)');
 		check('the card carries the time of day (the day is the heading)',
@@ -279,7 +294,7 @@ function check(label, ok, detail) {
 		await settle(t.window);
 		const docs = t.cards('documentsGrid');
 		const byName = (n) => docs.find(c => c.querySelector('.document-name').textContent === n);
-		const art = byName('Smith Lane style kit'), md = byName('Runsheet');
+		const art = byName('Style kit'), md = byName('Runsheet');
 		check('on Documents the artifact says ARTIFACT where the type is named and its action is Open; the rest still View',
 			!!art && /^ARTIFACT/.test(art.querySelector('.document-meta').textContent)
 			&& art.querySelector('.document-view-btn').textContent === 'Open'
