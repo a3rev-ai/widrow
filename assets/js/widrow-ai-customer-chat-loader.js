@@ -134,6 +134,22 @@
 
 		shadowRoot = host.attachShadow({ mode: 'open' });
 
+		// A browser's own click starts at the button under the pointer, inside
+		// this shadow root. A click that starts at the host itself was sent by a
+		// script: a caching plugin that holds scripts until the first touch
+		// cancels that tap's click and clicks the host in its place. Pass it on
+		// to the button under its point, so the first tap is not lost.
+		host.addEventListener('click', function (e) {
+			if (e.composedPath()[0] !== host) {
+				return;
+			}
+			var hit = shadowRoot.elementFromPoint(e.clientX, e.clientY);
+			var button = hit && hit.closest('button');
+			if (button && button.getRootNode() === shadowRoot) {
+				button.click();
+			}
+		});
+
 		// Brand the whole widget from the tenant's button colour, not just the
 		// launcher. Injected as --def-cc-brand rather than --def-cc-primary: an
 		// inline custom property beats every stylesheet rule, so writing primary
@@ -491,7 +507,6 @@
 		shadowRoot.appendChild(trigger);
 
 		// Event listeners
-		onTap(trigger, togglePanel);
 		trigger.addEventListener('click', togglePanel);
 
 		// Hover preload (V1.2 spec §4.1)
@@ -499,30 +514,6 @@
 		trigger.addEventListener('touchstart', preloadModule, {
 			once: true,
 			passive: true,
-		});
-	}
-
-	// A caching plugin that delays scripts until the first touch can cancel that
-	// tap's click and send its own to the shadow host, which the button inside
-	// never hears. So a finger acts on its pointerup, released over the button,
-	// and cancels its touchend so the browser sends no click for the same tap.
-	// A mouse, a key or a screen reader still arrives as the caller's click.
-	function onTap(el, act) {
-		var tapped = false;
-		el.addEventListener('pointerup', function (e) {
-			var box = el.getBoundingClientRect();
-			if (e.pointerType !== 'touch' || e.clientX < box.left || e.clientX > box.right ||
-				e.clientY < box.top || e.clientY > box.bottom) {
-				return;
-			}
-			tapped = true;
-			act();
-		});
-		el.addEventListener('touchend', function (e) {
-			if (tapped) {
-				tapped = false;
-				e.preventDefault();
-			}
 		});
 	}
 
@@ -1254,7 +1245,6 @@
 		openBtn.type = 'button';
 		openBtn.setAttribute('aria-label', 'Open chat');
 		bubble.appendChild(openBtn);
-		onTap(openBtn, openPanel);
 
 		// Scroll wrapper: logo + text live here so a long greeting scrolls
 		// without the bubble's overhanging x being clipped by the scrollbox.
