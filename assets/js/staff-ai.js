@@ -5775,7 +5775,12 @@ function t(key, fallback) {
 		const moreBtn = document.getElementById('documentViewerMore');
 		const dlLink = document.getElementById('documentViewerDownload');
 		const imgEl = document.getElementById('documentViewerImage');
-		const frameEl = document.getElementById('documentViewerFrame');
+		// The artifact frame is not in the page until an artifact is open (11.6.5): its
+		// markup waits in a <template>, and each opening makes a new frame from it. A
+		// frame in the page's own HTML is one the browser restores its last address into
+		// when it reloads a page that crashed — the artifact that crashed it.
+		const frameTpl = document.getElementById('documentViewerFrameTemplate');
+		let frameEl = null;
 		// A-3 (D-A7): the share controls. `shareToggle` and not `shareBtn` — the
 		// chat's own Share button already holds that name in the outer scope.
 		const shareToggle = document.getElementById('documentViewerShare');
@@ -5788,15 +5793,31 @@ function t(key, fallback) {
 		// means the page inside navigated (frame-src refuses the request, and a refused
 		// navigation still loads an error page): the artifact is closed and the reader is told.
 		let frameLoadsExpected = 0;
-		frameEl.addEventListener('load', function () {
-			if (frameLoadsExpected > 0) { frameLoadsExpected -= 1; return; }
-			if (!frameEl.getAttribute('srcdoc') && !frameEl.getAttribute('src')) return;
-			frameEl.removeAttribute('srcdoc');
-			frameEl.removeAttribute('src');
-			frameEl.style.display = 'none';
-			statusEl.textContent = t('documentViewerArtifactClosed', 'This artifact tried to open another page and was closed.');
-			statusEl.className = 'console-page-desc documents-status documents-status-error';
-		});
+		function closeFrame() {
+			if (frameEl) frameEl.remove();
+			frameEl = null;
+			frameLoadsExpected = 0;
+		}
+		// `fill` gives the new frame its document before it joins the page, so its first
+		// load is the artifact. The name is new each time: a browser restoring a page's
+		// history matches a frame by name, or by position when it has none.
+		function openFrame(fill) {
+			closeFrame();
+			var frame = frameTpl.content.firstElementChild.cloneNode(true);
+			frame.name = 'artifact-' + Date.now() + '-' + String(Math.random()).slice(2);
+			frame.addEventListener('load', function () {
+				if (frame !== frameEl) return;
+				if (frameLoadsExpected > 0) { frameLoadsExpected -= 1; return; }
+				closeFrame();
+				statusEl.textContent = t('documentViewerArtifactClosed', 'This artifact tried to open another page and was closed.');
+				statusEl.className = 'console-page-desc documents-status documents-status-error';
+			});
+			frameEl = frame;
+			frameLoadsExpected = 1;
+			fill();
+			frame.style.display = '';
+			frameTpl.parentNode.insertBefore(frame, frameTpl);
+		}
 		// The hand-off the Documents menu makes: installed on iOS the link lands on
 		// the document-preview sheet (row 8 canary, 2026-09-14), so the share sheet
 		// takes the file instead. Everywhere else the link is the browser's.
@@ -5930,7 +5951,7 @@ function t(key, fallback) {
 				if (visit) keepVisit(); else dropVisit();
 				load(docId);
 			},
-			onLeave: function () { current = null; visit = null; dropVisit(); }
+			onLeave: function () { current = null; visit = null; dropVisit(); closeFrame(); }
 		});
 
 		async function fetchChunk(offset) {
@@ -5995,11 +6016,9 @@ function t(key, fallback) {
 					if (current && current.id === asked) throw e;
 				});
 				if (!current || current.id !== asked) return;
-				frameLoadsExpected = 1;
-				frameEl.removeAttribute('srcdoc');
-				frameEl.src = src;
-			} else if (artifact) { frameLoadsExpected = 1; frameEl.srcdoc = artifactDocument(current.html); }
-			frameEl.style.display = artifact ? '' : 'none';
+				openFrame(function () { frameEl.src = src; });
+			} else if (artifact) { openFrame(function () { frameEl.srcdoc = artifactDocument(current.html); }); }
+			else { closeFrame(); }
 			// A-3: the page opens on the share state DEF just reported for THIS row.
 			renderShare(doc.share, artifact);
 			textEl.style.display = picture || artifact ? 'none' : '';
@@ -6027,9 +6046,7 @@ function t(key, fallback) {
 				titleEl.textContent = t('documentViewerTitle', 'Document');
 				textEl.textContent = '';
 				imgEl.style.display = 'none';
-				frameEl.removeAttribute('srcdoc');
-				frameEl.removeAttribute('src');
-				frameEl.style.display = 'none';
+				closeFrame();
 				moreBtn.style.display = 'none';
 				dlLink.style.display = 'none';
 				renderShare(null, false);
@@ -6046,9 +6063,7 @@ function t(key, fallback) {
 			imgEl.removeAttribute('src');
 			// The last artifact's page must not sit in the frame while the next document
 			// loads — and an md document never shows a frame at all.
-			frameEl.removeAttribute('srcdoc');
-			frameEl.removeAttribute('src');
-			frameEl.style.display = 'none';
+			closeFrame();
 			moreBtn.style.display = 'none';
 			dlLink.style.display = 'none';
 			// The last artifact's link must not sit on the page while the next
@@ -6096,6 +6111,9 @@ function t(key, fallback) {
 				}
 			}
 			if (!note) return;
+			// Nothing can load the document's frame at this start: there is none.
+			closeFrame();
+			Array.prototype.forEach.call(pane.querySelectorAll('iframe'), function (f) { f.remove(); });
 			window.history.replaceState(null, document.title, window.location.pathname + window.location.search);
 			showInfo(note.title
 				? t('documentCrashedNamed', '"%s" could not be opened.').replace('%s', function () { return String(note.title); })

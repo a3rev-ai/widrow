@@ -71,6 +71,10 @@ function boot(opts) {
 	opts = opts || {};
 	const dom = new JSDOM(HTML, { url: 'https://e.test/staff-ai/', pretendToBeVisual: true });
 	const window = dom.window, document = window.document, location = window.location;
+	// jsdom loads every inserted frame as about:blank and fires load for it; a browser
+	// fires one load, for the srcdoc or address the frame was given. The harness fires
+	// that one itself, so jsdom's own is held back.
+	document.addEventListener('load', (e) => { if (e.isTrusted && e.target.tagName === 'IFRAME') e.stopImmediatePropagation(); }, true);
 	const requests = [];
 
 	const api = new window.Function('window', 'document', 'location',
@@ -156,7 +160,8 @@ function boot(opts) {
 		window, document, api, frame, requests, opened, filtered, toolCard,
 		open: viewer.open,
 		iframe: () => $('documentViewerFrame'),
-		srcdoc: () => $('documentViewerFrame').getAttribute('srcdoc'),
+		// 11.6.5: the frame exists only while an artifact is open; none is null.
+		srcdoc: () => ($('documentViewerFrame') ? $('documentViewerFrame').getAttribute('srcdoc') : null),
 		text: () => $('documentViewerText'),
 		status: () => $('documentViewerStatus').textContent,
 		more: () => $('documentViewerMore'),
@@ -242,13 +247,17 @@ function check(label, ok, detail) {
 		// The watchdog: a load the viewer did not ask for is the page inside navigating.
 		t.iframe().dispatchEvent(new t.window.Event('load'));
 		t.iframe().dispatchEvent(new t.window.Event('load'));
-		check('a second load of the frame closes the artifact and says so',
-			t.srcdoc() === null && t.iframe().style.display === 'none' && /closed/.test(t.status()), t.status());
+		check('a second load of the frame closes the artifact and says so: the frame is gone',
+			!t.iframe() && /closed/.test(t.status()), t.status());
 
 		t.open('doc-1', 'Runsheet');
 		await settle(t.window);
-		check('an md document after it: the frame is put away with its srcdoc, the text well shows the text',
-			t.iframe().style.display === 'none' && t.srcdoc() === null
+		t.open('art-1', 'Smith Lane style kit');
+		await settle(t.window);
+		t.open('doc-1', 'Runsheet');
+		await settle(t.window);
+		check('an md document after an artifact: the frame is gone, the text well shows the text',
+			!t.iframe()
 			&& t.text().style.display === '' && /Body of doc-1/.test(t.text().textContent));
 	}
 

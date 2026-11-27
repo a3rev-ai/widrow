@@ -497,7 +497,8 @@ function creator() {
 const TEMPLATE_PATH = path.join(REPO, 'templates/staff-ai-shell.php');
 
 function templateSource() {
-	return fs.readFileSync(TEMPLATE_PATH, 'utf8');
+	// TEMPLATE names an older shell for a bite check, as the block env vars do.
+	return fs.readFileSync(process.env.TEMPLATE ? path.resolve(process.env.TEMPLATE) : TEMPLATE_PATH, 'utf8');
 }
 
 // The two WordPress escapers the console's markup uses, so a sliced string

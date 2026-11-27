@@ -391,8 +391,11 @@ if ( ! defined( 'ABSPATH' ) ) {
 				     grants scripts and nothing else — no allow-same-origin, so the page
 				     inside has an opaque origin: no cookies, no WordPress session, no reach
 				     into this console. Its srcdoc is set by JS from the content route's text
-				     with the CSP meta in front; the download proxy is never its source. -->
-				<iframe class="document-viewer-frame" id="documentViewerFrame" sandbox="allow-scripts" referrerpolicy="no-referrer" title="<?php echo esc_attr__( 'Artifact', 'widrow-ai' ); ?>" style="display:none;"></iframe>
+				     with the CSP meta in front; the download proxy is never its source.
+				     It waits in a <template>: the viewer makes a frame from it for each open
+				     artifact and removes it when the visit ends, so the page's own HTML holds
+				     no frame for the browser to restore an address into after a crash. -->
+				<template id="documentViewerFrameTemplate"><iframe class="document-viewer-frame" id="documentViewerFrame" sandbox="allow-scripts" referrerpolicy="no-referrer" title="<?php echo esc_attr__( 'Artifact', 'widrow-ai' ); ?>" style="display:none;"></iframe></template>
 				<pre class="document-viewer-text" id="documentViewerText"></pre>
 				<button type="button" class="modal-btn modal-btn-secondary" id="documentViewerMore" style="display:none;"><?php echo esc_html__( 'Show more', 'widrow-ai' ); ?></button>
 			</section>

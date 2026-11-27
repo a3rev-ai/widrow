@@ -17,7 +17,7 @@
  * the same localStorage. No document here runs a script: the crash is the absence
  * of a normal end, not a loop.
  *
- * 24 checks. Bite check: put the viewer block as it stands on origin/main back —
+ * 32 checks. Bite check: put the viewer block as it stands on origin/main back —
  *   git show origin/main:assets/js/staff-ai.js | sed -n '/^\t(function initDocumentViewer() {/,/^\t(function initDocuments() {/p' | sed '$d' > /tmp/old-viewer.js
  *   DOCVIEWER=/tmp/old-viewer.js node tests/browser/harness-document-way-out.js
  */
@@ -58,6 +58,7 @@ const KINDS = {
 	'pic-1': { file_type: 'png', kind: 'image' },
 	'art-1': { file_type: 'html', content: '<!doctype html><p>a page</p>' },
 };
+KINDS['art-2'] = { file_type: 'html', content: '<!doctype html><p>another page</p>' };   // only the frame checks open it
 const docFor = id => ({ document_id: id, title: 'Title of ' + id, file_type: KINDS[id].file_type, version: 2,
 	download_url: 'https://e.test/staff-ai-download/tenant-1/' + id + '?staff_ai_save=1' });
 
@@ -65,6 +66,10 @@ function boot(url, local, session, opts) {
 	opts = opts || {};
 	const dom = new JSDOM(HTML, { url: url || 'https://e.test/staff-ai/', pretendToBeVisual: true });
 	const window = dom.window, document = window.document;
+	// jsdom loads every inserted frame as about:blank and fires load for it; a browser
+	// fires one load, for the srcdoc or address the frame was given. The harness fires
+	// that one itself, so jsdom's own is held back.
+	document.addEventListener('load', (e) => { if (e.isTrusted && e.target.tagName === 'IFRAME') e.stopImmediatePropagation(); }, true);
 	Object.defineProperty(window, 'localStorage', { value: local, configurable: true });
 	Object.defineProperty(window, 'sessionStorage', { value: session, configurable: true });
 	const frames = [];
@@ -107,7 +112,9 @@ function boot(url, local, session, opts) {
 		release: () => held.splice(0).forEach(f => f()),
 		onDocument: () => !$('documentPage').hidden,
 		chatShows: () => $('documentPage').hidden && $('messagesContainer').style.display === '',
-		frameSet: () => !!($('documentViewerFrame').getAttribute('srcdoc') || $('documentViewerFrame').getAttribute('src')),
+		frames_in_page: () => document.querySelectorAll('#documentPage iframe').length,
+		frame: () => $('documentViewerFrame'),
+		frameSet: () => !!$('documentViewerFrame'),
 		click: el => el.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })),
 		hide: () => { Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true }); document.dispatchEvent(new window.Event('visibilitychange')); },
 		show: () => { Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true }); document.dispatchEvent(new window.Event('visibilitychange')); },
@@ -138,10 +145,56 @@ async function crashedOn(id, local, session, opts) {
 }
 
 (async function () {
+	// ── 0. The artifact frame exists only while an artifact is open ─────────
+	// A frame in the page's own HTML is one the browser can restore its last address
+	// into when it reloads a page that crashed; one with the name or place of the
+	// last one can be matched to it. So: none at start, a new name each time.
+	{
+		const t = boot(null, store(), store());
+		check('an ordinary start has no frame anywhere in the page', t.document.querySelectorAll('iframe').length === 0,
+			String(t.document.querySelectorAll('iframe').length));
+		t.viewer.open('art-1', 'Kit');
+		await tick(); await tick();
+		const first = t.frame();
+		check('opening an artifact makes exactly one frame, named', t.frames_in_page() === 1 && !!first && !!first.name,
+			t.frames_in_page() + ' ' + (first && first.name));
+		t.api.showChat();
+		await until(t.window, () => t.window.location.hash === '');
+		await tick();
+		check('leaving the artifact removes its frame', t.document.querySelectorAll('iframe').length === 0);
+		t.viewer.open('art-1', 'Kit');
+		await tick(); await tick();
+		const second = t.frame();
+		check('opening it again makes one new frame, with a name the last one did not have',
+			t.frames_in_page() === 1 && !!second && second !== first && !!second.name && second.name !== (first && first.name),
+			(first && first.name) + ' / ' + (second && second.name));
+		t.viewer.open('art-2', 'Other');
+		await tick(); await tick();
+		check('one artifact to another: still exactly one frame, and a new one', t.frames_in_page() === 1 && t.frame() !== second);
+		t.viewer.open('doc-1', 'Text');
+		await tick(); await tick();
+		check('a text document after an artifact has no frame', t.frames_in_page() === 0);
+	}
+	{
+		// The way out on the host that gives the frame an address: no frame, no address
+		// asked; Open again makes one and asks for its address.
+		const local = store(), session = store();
+		await crashedOn('art-1', local, session, { hosted: true });
+		const t = boot('https://e.test/staff-ai/#document/art-1', local, session.copy(), { hosted: true });
+		await tick();
+		check('a start where the way out applies has no frame in the page and asks for nothing',
+			t.document.querySelectorAll('iframe').length === 0 && t.frames.length === 0 && t.requests.length === 0);
+		if (t.link('Open again')) t.click(t.link('Open again'));
+		await tick(); await tick(); await tick();
+		check('Open again makes one frame and asks for its address',
+			t.frames.join() === 'art-1' && t.frames_in_page() === 1 && t.frame().getAttribute('src') === 'https://e.test/frame/art-1',
+			JSON.stringify(t.frames) + ' ' + t.frames_in_page());
+	}
+
 	// ── 1. A start after a visit that did not end normally ─────────────────
 	// The way out does not branch on the kind; per kind, only what is that kind's:
 	// nothing of it is requested or framed, and Download is its own link.
-	for (const id of Object.keys(KINDS)) {
+	for (const id of ['doc-1', 'pic-1', 'art-1']) {
 		const local = store(), session = store();
 		await crashedOn(id, local, session);
 		const t = boot('https://e.test/staff-ai/#document/' + id, local, session.copy());   // the phone's reload
