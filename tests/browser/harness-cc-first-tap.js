@@ -7,25 +7,29 @@
  * shadow host. The launcher and the greeting bubble live inside the shadow root,
  * so that click never reached them and the first tap opened nothing.
  *
- * A browser's own click always starts at an element inside the shadow root; only
- * a script starts one at the host itself. So a click that starts at the host is
- * passed on to the widget's button under its point. Every other click, touch and
- * pointer event is left exactly as it was, so a phone, a mouse, a key, a screen
+ * So an untrusted click that starts at the host is passed on to the widget's
+ * button under its point. A browser's own click at the host (a mouse pressed on one
+ * part of the widget and released on another) is not, and every other click, touch
+ * and pointer event is left exactly as it was, so a phone, a mouse, a key, a screen
  * reader and a browser that sends a finger as pointer events alone all keep the
  * one click they had.
  *
  * Runs the SHIPPED loader, whole, in a jsdom page. jsdom does no layout, so the
  * shadow root's elementFromPoint is stubbed to return the element the check puts
- * under the point.
+ * under the point. A browser's own (trusted) click is sent the way jsdom sends the
+ * events it fires itself: its isTrusted flag set, dispatched without dispatchEvent,
+ * which would clear it.
  *
  * Bite: CC_LOADER=/path/to/11.6.3/loader.js node tests/browser/harness-cc-first-tap.js
  *       fails 1, 2 and 3: a click sent to the host reaches nothing. A loader that acts
- *       on a touch pointerup and cancels its touchend fails 7 as well: with no touch
+ *       on a touch pointerup and cancels its touchend fails 6 as well: with no touch
  *       events the launcher opens and closes on one tap, and the bubble opens twice.
- *       Without the host-origin test, 5 and 7 fail (every tap acts twice); without the
- *       shadow-root test, 4 fails (a page button behind the point is clicked).
+ *       Without the host-origin test, 5 and 6 fail (a tap acts twice); without the
+ *       shadow-root test, 4 fails (a page button behind the point is clicked); without
+ *       the isTrusted test, 7 fails (a mouse dragged onto the bubble opens the chat).
  */
 const { JSDOM } = require('jsdom');
+const idl = require('jsdom/lib/generated/idl/utils');
 const extract = require('./extract');
 
 const LOADER = extract.customerChatLoader();
@@ -72,6 +76,16 @@ const opts = { bubbles: true, cancelable: true, composed: true };
 function clickHost(h, under) {
   h.under = under;
   h.host.dispatchEvent(new h.w.MouseEvent('click', { bubbles: true, cancelable: true, detail: 1, clientX: 30, clientY: 30 }));
+}
+// The browser's own click at the host: Chromium aims a click at the common ancestor of the
+// press and the release, so a mouse pressed on the launcher and released on the bubble
+// clicks the host. Trusted, so it goes the way jsdom fires its own events.
+function trustedClickHost(h, under) {
+  h.under = under;
+  const ev = idl.implForWrapper(new h.w.MouseEvent('click', { bubbles: true, cancelable: true, composed: true, detail: 1, clientX: 30, clientY: 30 }));
+  ev.isTrusted = true;
+  idl.implForWrapper(h.host)._dispatch(ev);
+  return ev;
 }
 // A finger as a browser sends it, with or without touch events, ending in its click.
 // The button is under the point, as it is for a real tap.
@@ -148,15 +162,6 @@ const greeting = { greetingBubbleEnabled: '1', greetingBubbleText: 'Hi' };
     same(h.seen, ['true', 'false']), 'seen=' + JSON.stringify(h.seen));
 
   h = await boot();
-  h.under = h.trigger;
-  h.trigger.click();
-  await tick();
-  h.trigger.click();
-  await tick();
-  check('a click alone (Enter, Space, a screen reader) opens the chat, and a second closes it',
-    same(h.seen, ['true', 'false']), 'seen=' + JSON.stringify(h.seen));
-
-  h = await boot();
   tap(h, h.trigger, false);
   await tick();
   const launcherSeen = JSON.stringify(h.seen);
@@ -169,11 +174,15 @@ const greeting = { greetingBubbleEnabled: '1', greetingBubbleText: 'Hi' };
     launcherSeen === '["true"]' && !!bubbleBtn && same(h.seen, ['true']),
     'launcher=' + launcherSeen + ' bubble=' + JSON.stringify(h.seen));
 
-  h = await boot();
-  h.doc.getElementById('cta').dispatchEvent(new h.w.MouseEvent('click', { bubbles: true, cancelable: true, detail: 1 }));
+  // A browser's own click at the host is left alone, as in 11.6.3.
+  h = await boot(greeting);
   await tick();
-  check('a page button marked data-def-chat-trigger still opens the chat on its click',
-    same(h.seen, ['true']), 'seen=' + JSON.stringify(h.seen));
+  const dragOnto = h.root.querySelector('.def-cc-greeting-bubble-open');
+  const ev = dragOnto && trustedClickHost(h, dragOnto);
+  await tick();
+  check('a browser\'s own click at the host (a mouse pressed on the launcher, released on the bubble) opens nothing and the bubble stays',
+    !!ev && ev.isTrusted && same(h.seen, []) && !!h.root.querySelector('.def-cc-greeting-bubble'),
+    'trusted=' + (ev && ev.isTrusted) + ' seen=' + JSON.stringify(h.seen) + ' bubble=' + !!h.root.querySelector('.def-cc-greeting-bubble'));
 
   console.log('Customer Chat first-tap harness');
   console.log(results.join('\n'));

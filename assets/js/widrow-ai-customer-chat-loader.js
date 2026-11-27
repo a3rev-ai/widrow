@@ -134,13 +134,14 @@
 
 		shadowRoot = host.attachShadow({ mode: 'open' });
 
-		// A browser's own click starts at the button under the pointer, inside
-		// this shadow root. A click that starts at the host itself was sent by a
-		// script: a caching plugin that holds scripts until the first touch
-		// cancels that tap's click and clicks the host in its place. Pass it on
-		// to the button under its point, so the first tap is not lost.
+		// A caching plugin that holds scripts until the first touch cancels that
+		// tap's click and has a script click the host in its place. Pass such an
+		// untrusted click at the host on to the button under its point, so the
+		// first tap is not lost. A browser's own click at the host (a mouse
+		// pressed on one part of the widget and released on another) does nothing,
+		// as before.
 		host.addEventListener('click', function (e) {
-			if (e.composedPath()[0] !== host) {
+			if (e.isTrusted || e.composedPath()[0] !== host) {
 				return;
 			}
 			var hit = shadowRoot.elementFromPoint(e.clientX, e.clientY);
