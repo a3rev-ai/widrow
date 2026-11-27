@@ -93,7 +93,8 @@ function boot(url, local, session, opts) {
 	const viewer = new window.Function(...names, 'var openDocumentViewer = null, skipCrashedDocument = null;\n' + VIEWER +
 		'\nreturn { open: openDocumentViewer, skip: skipCrashedDocument };')(
 		window, document, window.navigator, api.consolePages, api.showPage, (k, d) => d, apiRequest, '/wp-json/a3-ai/v1/staff-ai',
-		u => u, () => false, () => {}, 'html', h => h, '', () => {}, infoBanner,
+		u => { try { const p = new window.URL(u, 'https://e.test').protocol; return p === 'http:' || p === 'https:' ? u : ''; } catch (e) { return ''; } },
+		() => false, () => {}, 'html', h => h, '', () => {}, infoBanner,
 		m => { infoBanner.textContent = m; infoBanner.classList.add('visible'); },
 		() => { infoBanner.classList.remove('visible'); });
 	// What the console's own boot does, in its order: the way out, then the address.
@@ -185,6 +186,14 @@ async function crashedOn(id, local, session, opts) {
 		const t = boot('https://e.test/staff-ai/#document/doc-1', local, session.copy());
 		check('a visit that never got its answer: the line names no title', t.banner().indexOf('That item could not be opened.') === 0 && !!t.link('Open again'), t.banner());
 		first.release();
+	}
+
+	// A note is stored data: its link is validated again where it is drawn.
+	{
+		const session = store({ 'def:tab': 'tab-x' });
+		const local = store({ 'def:documentVisit:tab-x': JSON.stringify({ id: 'doc-1', title: 'T', href: 'javascript:alert(1)' }) });
+		const t = boot('https://e.test/staff-ai/#document/doc-1', local, session);
+		check('a stored link that is not http(s) is refused: no Download, Open again still offered', !t.link('Download') && !!t.link('Open again'), t.banner());
 	}
 
 	// ── 2. A visit that ended normally reopens with no line ─────────────────

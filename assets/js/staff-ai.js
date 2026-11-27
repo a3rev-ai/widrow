@@ -6102,12 +6102,14 @@ function t(key, fallback) {
 			if (!note) return;
 			window.history.replaceState(null, document.title, window.location.pathname + window.location.search);
 			showInfo(note.title
-				? t('documentCrashedNamed', '"%s" could not be opened.').replace('%s', note.title)
+				? t('documentCrashedNamed', '"%s" could not be opened.').replace('%s', function () { return String(note.title); })
 				: t('documentCrashed', 'That item could not be opened.'));
-			if (note.href) {
+			// Stored, so validated at the sink again, as every href the console renders.
+			var href = safeHttpHref(note.href || '');
+			if (href) {
 				// The document page's own Download: the same link, the same hand-offs.
 				var dl = document.createElement('a');
-				dl.href = note.href;
+				dl.href = href;
 				dl.textContent = t('download', 'Download');
 				if (window.StaffAIConfig && window.StaffAIConfig.host) dl.setAttribute('data-host-file', '');
 				dl.addEventListener('click', function (ev) {
