@@ -1,5 +1,8 @@
 *** Widrow AI Changelog ***
 
+= 11.6.4 - 2026/11/27 =
+* Fix - The chat button opens on the first tap on sites whose caching plugin delays scripts until the first touch. The same for the greeting bubble beside it.
+
 = 11.6.3 - 2026/11/26 =
 * Tweak - In the Staff AI console the microphone now sits beside the Start voice / Send button on every screen size.
 * Tweak - The speaker icon is removed from the Staff AI console: spoken replies are always read in the assistant's own voice.

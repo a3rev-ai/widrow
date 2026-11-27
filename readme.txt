@@ -4,7 +4,7 @@ Tags: ai, chat, digital employee, ai assistant, customer support
 Requires at least: 6.2
 Tested up to: 7.1
 Requires PHP: 8.0
-Stable tag: 11.6.3
+Stable tag: 11.6.4
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -118,6 +118,9 @@ Chat messages, user display name, session context, and the visitor's IP address 
 4. Admin Settings — Branding, Chat Settings, Escalation, and Connection tabs
 
 == Changelog ==
+
+= 11.6.4 - 2026-11-27 =
+* Fix - The chat button opens on the first tap on sites whose caching plugin delays scripts until the first touch. The same for the greeting bubble beside it.
 
 = 11.6.3 - 2026-11-26 =
 * Tweak - In the Staff AI console the microphone now sits beside the Start voice / Send button on every screen size.
